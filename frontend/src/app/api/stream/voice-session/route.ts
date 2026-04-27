@@ -62,21 +62,21 @@ export async function POST(request: Request) {
 
     // 5. Trigger the Python backend to start the Agent
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_WS_URL 
-        ? process.env.NEXT_PUBLIC_BACKEND_WS_URL.replace('ws://', 'http://').replace('wss://', 'https://')
-        : 'http://localhost:8000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
         
       console.log(`[Nexus API] Triggering Python Agent to join call: ${callType}:${sessionId}`);
-      const agentRes = await fetch(`${backendUrl}/api/agent/start`, {
+      // Framework-native endpoint: POST /calls/{call_type}/{call_id}/sessions
+      const agentRes = await fetch(`${backendUrl}/calls/${callType}/${sessionId}/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ call_id: sessionId, call_type: callType }),
+        body: JSON.stringify({}), // Runner expects JSON, can be empty
       });
       
       if (!agentRes.ok) {
         console.warn('[Nexus API] Python Agent failed to start:', await agentRes.text());
       } else {
-        console.log('[Nexus API] Python Agent start triggered successfully.');
+        const sessionData = await agentRes.json();
+        console.log('[Nexus API] Python Agent session started:', sessionData.id);
       }
     } catch (e: any) {
       console.warn('[Nexus API] Could not reach Python Agent Backend:', e.message);

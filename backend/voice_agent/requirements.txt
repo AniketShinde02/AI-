@@ -1,9 +1,15 @@
 fastapi
-uvicorn
+uvicorn>=0.30.0
 python-dotenv
 getstream
+vision-agents==0.5.4
+vision-agents-plugins-getstream==0.5.4
+vision-agents-plugins-deepgram==0.5.4
+vision-agents-plugins-elevenlabs==0.5.4
 deepgram-sdk
 groq
 elevenlabs
-cartesia
+redis
 python-multipart
+pydantic-settings
+aiortc
