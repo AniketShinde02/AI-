@@ -14,6 +14,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) + Semant
 
 ---
 
+## [0.2.1] — 2026-04-27 — Voice Agent: Core Call Manager Implementation
+
+### Added
+- **`backend/voice_agent/core/call_manager.py`**: Fully implemented the production-grade streaming pipeline.
+  - Replaced the placeholder loop with a functional `vision_agents.Agent` lifecycle.
+  - Integrated `GroqLLM`, `DeepgramSTT`, and `ElevenLabsTTS` via the `vision-agents` event-bus.
+  - Implemented the `async with agent.join(call)` pattern for robust WebRTC session management.
+  - Added comprehensive environment variable validation for all required API keys.
+  - Configured `streaming_tts=True` for sub-second latency in voice responses.
+  - Added support for custom instructions/system prompts passed from the launcher.
+
+### Changed
+- Refined the `Agent` configuration to use the `Iridescent Assistant` identity (id: `production-agent-001`).
+- Improved error handling and graceful shutdown logging in the core call manager.
+
+---
+
 ## [0.2.0] — 2026-04-27 — Voice Agent: Production Pipeline Complete
 
 ### Overview
