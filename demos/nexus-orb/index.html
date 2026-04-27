@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Orb - Voice First AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon"></div>
+                    <span>Nexus AI</span>
+                </div>
+                <button class="icon-btn" id="sidebar-toggle">
+                    <i data-lucide="panel-left"></i>
+                </button>
+            </div>
+            
+            <div class="sidebar-search">
+                <div class="search-box">
+                    <i data-lucide="search"></i>
+                    <input type="text" placeholder="Search chats...">
+                    <span class="shortcut">⌘K</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <label>Today</label>
+                    <a href="#" class="nav-item active">What's something you've le...</a>
+                    <a href="#" class="nav-item">Best travel experience</a>
+                    <a href="#" class="nav-item">Favorite book</a>
+                </div>
+                <div class="nav-section">
+                    <label>Yesterday</label>
+                    <a href="#" class="nav-item">If you could teleport anywhe...</a>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="#" class="nav-item"><i data-lucide="compass"></i> Explore</a>
+                <a href="#" class="nav-item"><i data-lucide="library"></i> Library</a>
+                <a href="#" class="nav-item"><i data-lucide="history"></i> History</a>
+                <a href="#" class="nav-item upgrade"><i data-lucide="zap"></i> Upgrade</a>
+                <button class="new-chat-btn">
+                    <i data-lucide="plus"></i> New Chat
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="breadcrumb">
+                    <button class="icon-btn mobile-menu-btn" id="mobile-menu-btn">
+                        <i data-lucide="menu"></i>
+                    </button>
+                    <i data-lucide="layout" class="desktop-only"></i>
+                </div>
+                <div class="top-actions">
+                    <span class="pro-badge">Get Pro</span>
+                    <button class="icon-btn"><i data-lucide="bell"></i></button>
+                    <button class="icon-btn"><i data-lucide="sun"></i></button>
+                    <button class="icon-btn"><i data-lucide="settings"></i></button>
+                    <div class="user-avatar">
+                        <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User">
+                    </div>
+                </div>
+            </header>
+
+            <section class="orb-section">
+                <div id="orb-container"></div>
+                
+                <div class="greeting-container">
+                    <h1>Good Morning, Toby</h1>
+                    <h2>How Can I <span class="gradient-text">Assist You Today?</span></h2>
+                </div>
+            </section>
+
+            <footer class="input-area">
+                <div class="input-container">
+                    <div class="input-header">
+                        <span>Use our faster AI on Pro Plan • <a href="#">Upgrade</a></span>
+                    </div>
+                    <div class="input-box">
+                        <textarea placeholder="Ask me anything..." rows="1"></textarea>
+                        <div class="input-actions">
+                            <button class="icon-btn attachment-btn"><i data-lucide="paperclip"></i></button>
+                            <div class="model-selector">
+                                <i data-lucide="globe"></i>
+                                <span>Claude 3.5 sonnet</span>
+                                <i data-lucide="chevron-down"></i>
+                            </div>
+                            <div class="spacer"></div>
+                            <button class="mic-btn" id="mic-btn">
+                                <i data-lucide="mic"></i>
+                            </button>
+                            <button class="send-btn">
+                                <i data-lucide="arrow-up"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="quick-actions">
+                        <button class="chip"><i data-lucide="file-text"></i> Summary</button>
+                        <button class="chip"><i data-lucide="code"></i> Code</button>
+                        <button class="chip"><i data-lucide="palette"></i> Design</button>
+                        <button class="chip"><i data-lucide="search"></i> Research</button>
+                    </div>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Audio Permission Overlay -->
+    <div id="permission-overlay" class="overlay">
+        <div class="overlay-content">
+            <h3>Enable Audio Reactivity</h3>
+            <p>Click anywhere to start the interactive voice orb experience.</p>
+            <button id="start-btn" class="primary-btn">Start Experience</button>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script type="module" src="script.js"></script>
+</body>
+</html>

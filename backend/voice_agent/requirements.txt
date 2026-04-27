@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-dotenv
+getstream
+deepgram-sdk
+groq
+elevenlabs
+cartesia
+python-multipart

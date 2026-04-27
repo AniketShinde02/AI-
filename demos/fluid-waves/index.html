@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluid Waves - Assistant UI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <header class="top-bar">
+            <div class="user-info">
+                <div class="avatar"></div>
+                <div class="text">
+                    <span class="name">Toby</span>
+                    <span class="status">Online</span>
+                </div>
+            </div>
+            <button class="menu-btn"><i data-lucide="more-vertical"></i></button>
+        </header>
+
+        <main class="interaction-area">
+            <div class="chat-display" id="chat-display">
+                <div class="message assistant">
+                    <p>Hello! I'm Nexus. How can I help you today?</p>
+                </div>
+            </div>
+
+            <div class="visualizer-container">
+                <canvas id="waves-canvas"></canvas>
+                <div class="wave-glow"></div>
+            </div>
+        </main>
+
+        <footer class="controls">
+            <div class="action-buttons">
+                <button class="circle-btn"><i data-lucide="keyboard"></i></button>
+                <div class="mic-container">
+                    <button class="main-mic-btn" id="mic-btn">
+                        <i data-lucide="mic"></i>
+                    </button>
+                    <div class="mic-rings">
+                        <div class="ring"></div>
+                        <div class="ring"></div>
+                    </div>
+                </div>
+                <button class="circle-btn"><i data-lucide="settings"></i></button>
+            </div>
+            <div class="hint">Tap the mic to start speaking</div>
+        </footer>
+    </div>
+
+    <!-- Audio Permission Overlay -->
+    <div id="permission-overlay" class="overlay">
+        <div class="overlay-content">
+            <div class="pulsing-logo"></div>
+            <h3>Fluid Assistant</h3>
+            <p>Ready to experience organic voice visualization?</p>
+            <button id="start-btn" class="primary-btn">Start Demo</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

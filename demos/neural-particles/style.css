@@ -1,0 +1,201 @@
+:root {
+    --neon-blue: #00f2ff;
+    --neon-purple: #bc00ff;
+    --bg-black: #020205;
+    --text-color: #e0e0ff;
+    --faint-border: rgba(0, 242, 255, 0.2);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'JetBrains Mono', monospace;
+    background-color: var(--bg-black);
+    color: var(--text-color);
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    background-image: 
+        radial-gradient(circle at 50% 50%, rgba(20, 20, 40, 0.5) 0%, transparent 100%),
+        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    background-size: 100% 100%, 100% 2px, 3px 100%;
+}
+
+/* HUD elements */
+.hud-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+    padding: 40px;
+}
+
+.top-corner, .bottom-corner {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.top-corner.left { top: 40px; left: 40px; }
+.top-corner.right { top: 40px; right: 40px; align-items: flex-end; }
+.bottom-corner.left { bottom: 40px; left: 40px; }
+.bottom-corner.right { bottom: 40px; right: 40px; align-items: flex-end; }
+
+.label {
+    font-size: 0.7rem;
+    opacity: 0.5;
+    letter-spacing: 0.2em;
+}
+
+.value {
+    font-size: 0.9rem;
+    color: var(--neon-blue);
+    text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+}
+
+.scanline {
+    width: 100px;
+    height: 1px;
+    background: var(--neon-blue);
+    opacity: 0.3;
+    margin-top: 8px;
+}
+
+/* Visualizer */
+.main-viz {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+#particle-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.core-glow {
+    position: absolute;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(188, 0, 255, 0.1) 0%, transparent 70%);
+    filter: blur(40px);
+    pointer-events: none;
+}
+
+/* Interaction HUD */
+.interaction-hud {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    z-index: 20;
+}
+
+.voice-status {
+    text-align: center;
+}
+
+.status-indicator {
+    font-size: 1.2rem;
+    color: var(--text-color);
+    margin-top: 4px;
+    letter-spacing: 0.1em;
+}
+
+.action-btn {
+    width: 100px;
+    height: 100px;
+    background: none;
+    border: none;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--neon-blue);
+}
+
+.btn-inner {
+    width: 60px;
+    height: 60px;
+    border: 1px solid var(--faint-border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    background: rgba(0, 242, 255, 0.05);
+}
+
+.action-btn:hover .btn-inner {
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 20px rgba(0, 242, 255, 0.2);
+}
+
+.progress-ring {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: rotate(-90deg);
+}
+
+.ring-circle {
+    fill: none;
+    stroke: var(--neon-blue);
+    stroke-width: 2;
+    stroke-dasharray: 283;
+    stroke-dashoffset: 283;
+    transition: stroke-dashoffset 0.1s;
+    opacity: 0.3;
+}
+
+/* Overlay */
+.overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: #000;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+}
+
+.overlay.hidden { display: none; }
+
+.glitch-text {
+    font-size: 2rem;
+    font-weight: bold;
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.hud-btn {
+    background: none;
+    border: 1px solid var(--neon-blue);
+    color: var(--neon-blue);
+    padding: 12px 24px;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 20px;
+    transition: all 0.2s;
+}
+
+.hud-btn:hover {
+    background: var(--neon-blue);
+    color: #000;
+    box-shadow: 0 0 20px var(--neon-blue);
+}

@@ -1,0 +1,310 @@
+# ============================================
+# MONOREPO .gitignore - Secure by Default
+# High-scale Python/FastAPI + Next.js + Voice Agent
+# ============================================
+
+# --------------------------------------------
+# 1. GLOBAL OS & SYSTEM FILES
+# --------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# --------------------------------------------
+# 2. SECRET MANAGEMENT (CRITICAL)
+# --------------------------------------------
+# Environment files - ALL variations
+.env
+.env.*
+!.env.example
+!.env.template
+!.env.schema
+*.env
+
+# Secrets & credentials
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.cer
+*.der
+secrets/
+secrets.*
+credentials*
+credential*
+token*
+auth*
+*.token
+
+# Certificate directories
+certs/
+cert/
+ssl/
+ssl-*
+
+# Cloud provider secrets
+.aws/
+.aws/credentials
+.aws/config
+.gcp/
+.gcp/credentials
+.pulumi/
+.azure/
+secrets.yaml
+secrets.yml
+secrets.json
+
+# --------------------------------------------
+# 3. NODE.JS ECOSYSTEM (Monorepo-wide)
+# --------------------------------------------
+# Dependencies - applies to ALL subdirectories
+**/node_modules/
+node_modules/
+!node_modules/.cache/
+.pnpm-store/
+.pnpm-workspace.yaml
+
+# Next.js build artifacts
+**/.next/
+.next/
+**/out/
+out/
+**/.vercel/
+.vercel/
+
+# Build outputs
+**/dist/
+dist/
+**/build/
+build/
+**/.turbo/
+.turbo/
+
+# Package manager caches & logs
+.npm
+.yarn
+.yarn-cache
+.yarn/install-state.gz
+.pnp*
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Testing
+coverage/
+.nyc_output
+**/coverage/
+**/.nyc_output/
+
+# --------------------------------------------
+# 4. PYTHON ECOSYSTEM (Monorepo-wide)
+# --------------------------------------------
+# Byte-compiled / optimized / cached Python files
+**/__pycache__/
+__pycache__/
+**/.pyc
+*.py[cod]
+
+# C extensions
+**/*.so
+
+# Distribution / packaging
+**/build/
+build/
+**/dist/
+dist/
+**/*.egg-info/
+*.egg-info/
+
+# Test & coverage
+**/.pytest_cache/
+.pytest_cache/
+**/.mypy_cache/
+.mypy_cache/
+**/.tox/
+.tox/
+**/htmlcov/
+htmlcov/
+.coverage
+.coverage.*
+**/.coverage
+.python-version
+
+# Virtual environments - ALL naming patterns
+**/venv/
+venv/
+**/.venv/
+.venv/
+**/env/
+env/
+**/virtualenv/
+virtualenv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Poetry
+.poetry/
+poetry.lock
+
+# Pipenv
+Pipfile.lock
+
+# --------------------------------------------
+# 5. MONOREPO-SPECIFIC STRUCTURES
+# --------------------------------------------
+# Workspace tooling
+**/.task/
+task/
+**/.markserv/
+**/.cache/
+.cache/
+
+# Turborepo / Nx
+**/.nx/
+.nx/
+
+# Package manager workspaces
+**/packages/*/node_modules/
+**/apps/*/node_modules/
+
+# --------------------------------------------
+# 6. DOCUMENTATION & TOOLING
+# --------------------------------------------
+# Documentation builds
+**/docs/_build/
+docs/_build/
+**/_site/
+_site/
+**/site/
+site/
+
+# IDE & Editor (all major IDEs)
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+*.code-workspace
+*.project
+*.classpath
+*.settings
+*.vscode-test
+.nova/
+.atom/
+
+# Editor swap files
+*.swp
+*.swo
+*~
+# Emacs
+**/.#*
+**/#*#
+# Vim
+**/.vimrc
+**/.viminfo
+
+# --------------------------------------------
+# 7. LOCAL DEVELOPMENT & CI/CD CACHES
+# --------------------------------------------
+# Docker
+**/.dockerignore
+Dockerfile.local
+docker-compose.override.yml
+
+# Terraform
+**/.terraform/
+.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfvars
+terraform.tfvars
+
+# Local server data
+**/.tmp/
+.tmp/
+**/tmp/
+tmp/
+**/temp/
+temp/
+
+#----------------------------------------------
+# 8. MEDIA & ASSETS (source files excluded from repo)
+# --------------------------------------------
+# Design files
+**/*.psd
+**/*.ai
+**/*.sketch
+**/*.fig
+
+# Audio/video source
+**/*.wav
+**/*.mp3
+**/*.mp4
+**/*.mov
+**/*.avi
+**/*.m4a
+**/*.flac
+
+#----------------------------------------------
+# 9. ADDITIONAL PLATFORM-SPECIFIC
+# --------------------------------------------
+# macOS Finder缓存
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+
+# Windows thumbnail cache
+$RECYCLE.BIN/
+
+#----------------------------------------------
+# 10. FINAL SAFEGUARDS (do not track)
+# --------------------------------------------------
+# Large binary blobs (git-lfs placeholders tracked separately)
+*.psd
+*.ai
+*.sketch
+*.mov
+*.mp4
+*.avi
+
+# Planning & graphify output (auto-generated)
+graphify-out/
+.planning/codebase/graphify-out
+
+#----------------------------------------------
+# END: Place this file at repository root
+# Path: /.gitignore
+# Optimize with: git add --renormalize .
+# --------------------------------------------------
