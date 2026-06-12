@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Spatial | UI Sample</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: radial-gradient(circle at 50% 50%, #0a0a1a 0%, #000000 100%);
+            color: #ffffff;
+            overflow: hidden;
+            height: 100vh;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(24px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+        .floating {
+            animation: float 6s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+        .orb-outer-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .dock-item {
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .dock-item:hover {
+            transform: scale(1.2) translateY(-10px);
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .pulse-border {
+            position: relative;
+        }
+        .pulse-border::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: inherit;
+            border: 2px solid rgba(139, 92, 246, 0.4);
+            animation: pulse-border 2s infinite;
+        }
+        @keyframes pulse-border {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.1); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="relative flex flex-col items-center justify-center">
+
+    <div class="orb-outer-glow"></div>
+    
+    <!-- Background Canvas -->
+    <div id="orb-canvas" class="absolute inset-0 z-0"></div>
+
+    <!-- Floating UI Cards -->
+    <div class="absolute inset-0 z-10 pointer-events-none p-8 flex flex-col justify-between">
+        <!-- Top Section -->
+        <div class="flex justify-between items-start">
+            <div class="glass p-6 w-72 pointer-events-auto floating" style="animation-delay: 0s">
+                <div class="flex items-center gap-3 mb-4">
+                    <i data-lucide="activity" class="text-purple-400"></i>
+                    <h3 class="text-sm font-bold uppercase tracking-widest text-zinc-400">System Vitality</h3>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-zinc-500">Neural Load</span>
+                        <span class="text-purple-400 font-bold">34%</span>
+                    </div>
+                    <div class="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                        <div class="h-full bg-purple-500 w-[34%]"></div>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span class="text-zinc-500">Latency (RRT)</span>
+                        <span class="text-green-400 font-bold">18ms</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass p-6 w-72 pointer-events-auto floating" style="animation-delay: 1s">
+                <div class="flex items-center gap-3 mb-4">
+                    <i data-lucide="layers" class="text-blue-400"></i>
+                    <h3 class="text-sm font-bold uppercase tracking-widest text-zinc-400">Context Mesh</h3>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                            <i data-lucide="globe" size="16"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="text-[10px] text-zinc-500 font-bold">BROWSER</div>
+                            <div class="text-xs truncate">github.com/trending</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                            <i data-lucide="folder" size="16"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="text-[10px] text-zinc-500 font-bold">PROJECT</div>
+                            <div class="text-xs truncate">/nexus-v2/core</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Message / Feedback -->
+        <div class="flex flex-col items-center gap-4">
+            <div class="glass px-8 py-3 pointer-events-auto flex items-center gap-4">
+                <div class="w-2 h-2 bg-purple-500 rounded-full animate-ping"></div>
+                <span class="text-sm font-medium tracking-wide">"Nexus, summarize my recent browser actions"</span>
+            </div>
+        </div>
+
+        <!-- Bottom Section -->
+        <div class="flex justify-between items-end">
+            <div class="glass p-6 w-80 pointer-events-auto floating" style="animation-delay: 2s">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-bold text-zinc-300">Intelligent Log</h3>
+                    <span class="text-[10px] bg-white/10 px-2 py-0.5 rounded uppercase font-bold">v3.1</span>
+                </div>
+                <div class="font-mono text-[10px] space-y-2 text-zinc-400 max-h-32 overflow-hidden">
+                    <div class="flex gap-2"><span class="text-purple-500">>></span> Extracting page metadata...</div>
+                    <div class="flex gap-2"><span class="text-purple-500">>></span> Cross-referencing with project context...</div>
+                    <div class="flex gap-2"><span class="text-purple-500">>></span> Summarizing 12 recent commits...</div>
+                    <div class="flex gap-2"><span class="text-purple-500">>></span> Generation complete. Awaiting user...</div>
+                </div>
+            </div>
+
+            <!-- News / Feed -->
+            <div class="glass p-6 w-80 pointer-events-auto floating" style="animation-delay: 0.5s">
+                <h3 class="text-sm font-bold text-zinc-300 mb-4">Nexus News</h3>
+                <div class="space-y-4">
+                    <div class="flex gap-3">
+                        <div class="w-1 bg-blue-500/50 rounded-full"></div>
+                        <div>
+                            <div class="text-xs font-semibold leading-tight">GPT-5 Training clusters confirmed at 50k+ H100s.</div>
+                            <div class="text-[9px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter">AI News • 2m ago</div>
+                        </div>
+                    </div>
+                    <div class="flex gap-3">
+                        <div class="w-1 bg-purple-500/50 rounded-full"></div>
+                        <div>
+                            <div class="text-xs font-semibold leading-tight">New Rust 1.78 optimization cuts async overhead by 15%.</div>
+                            <div class="text-[9px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter">Dev News • 1h ago</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interaction Dock -->
+    <div class="fixed bottom-12 z-50 glass px-6 py-4 flex items-center gap-8 shadow-2xl">
+        <button class="dock-item p-4 rounded-2xl text-zinc-400">
+            <i data-lucide="message-circle" size="28"></i>
+        </button>
+        <button class="dock-item w-20 h-20 bg-gradient-to-tr from-purple-600 to-blue-600 rounded-3xl flex items-center justify-center shadow-lg shadow-purple-500/40 relative group">
+            <div class="absolute inset-0 rounded-3xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <i data-lucide="mic" class="text-white" size="36"></i>
+        </button>
+        <button class="dock-item p-4 rounded-2xl text-zinc-400">
+            <i data-lucide="layout-grid" size="28"></i>
+        </button>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // Spatial Orb Animation
+        let scene, camera, renderer, globe;
+        const container = document.getElementById('orb-canvas');
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            // Group for the orb
+            globe = new THREE.Group();
+            scene.add(globe);
+
+            // Inner Core
+            const coreGeo = new THREE.SphereGeometry(1, 32, 32);
+            const coreMat = new THREE.MeshPhongMaterial({
+                color: 0x8b5cf6,
+                emissive: 0x8b5cf6,
+                emissiveIntensity: 0.5,
+                shininess: 100,
+                transparent: true,
+                opacity: 0.8
+            });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            globe.add(core);
+
+            // Glow Ring
+            const ringGeo = new THREE.TorusGeometry(1.5, 0.01, 16, 100);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.3 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            globe.add(ring);
+
+            const ring2 = ring.clone();
+            ring2.rotation.x = Math.PI / 2;
+            globe.add(ring2);
+
+            // Particle Field
+            const particlesGeo = new THREE.BufferGeometry();
+            const particlesCount = 1000;
+            const posArray = new Float32Array(particlesCount * 3);
+            for(let i = 0; i < particlesCount * 3; i++) {
+                posArray[i] = (Math.random() - 0.5) * 20;
+            }
+            particlesGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const particlesMat = new THREE.PointsMaterial({ size: 0.005, color: 0xffffff });
+            const particlesMesh = new THREE.Points(particlesGeo, particlesMat);
+            scene.add(particlesMesh);
+
+            // Lights
+            const light = new THREE.PointLight(0x8b5cf6, 2, 10);
+            light.position.set(2, 2, 5);
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.1));
+
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            globe.rotation.y += 0.002;
+            globe.rotation.x += 0.001;
+            
+            const time = Date.now() * 0.001;
+            globe.position.y = Math.sin(time) * 0.1;
+            
+            renderer.render(scene, camera);
+        }
+
+        init();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

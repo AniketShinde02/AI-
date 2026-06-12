@@ -308,3 +308,10 @@ graphify-out/
 # Path: /.gitignore
 # Optimize with: git add --renormalize .
 # --------------------------------------------------
+.agents
+.playwright-mcp
+.windsurf
+temp_venv
+*.onnx
+
+backend/studio-*.json

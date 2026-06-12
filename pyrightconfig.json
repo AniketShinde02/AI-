@@ -1,0 +1,20 @@
+{
+    "venvPath": "d:/AI/backend",
+    "venv": "venv",
+    "include": [
+        "backend",
+        "backend/voice_agent"
+    ],
+    "extraPaths": [
+        "d:/AI/backend",
+        "d:/AI/backend/voice_agent"
+    ],
+    "typeCheckingMode": "basic",
+    "useLibraryCodeForTypes": true,
+    "pythonVersion": "3.10",
+    "exclude": [
+        "**/node_modules",
+        "**/__pycache__",
+        "**/venv"
+    ]
+}

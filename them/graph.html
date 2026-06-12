@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Code Review Graph</title>
+    <script src="https://unpkg.com/force-graph"></script>
+    <style>
+        body { margin: 0; background: #070708; color: #fff; font-family: 'Inter', sans-serif; overflow: hidden; }
+        #graph { width: 100vw; height: 100vh; }
+        .controls { 
+            position: absolute; top: 20px; left: 20px; z-index: 100;
+            background: rgba(255,255,255,0.05); backdrop-filter: blur(10px);
+            padding: 15px; border-radius: 12px; border: 1px border rgba(255,255,255,0.1);
+        }
+        h1 { margin: 0; font-size: 18px; letter-spacing: 1px; color: #6366f1; }
+        .status { font-size: 12px; color: #aaa; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h1>NEXUS GRAPH ENGINE</h1>
+        <div class="status">CODEBASE TOPOLOGY V2.0</div>
+    </div>
+    <div id="graph"></div>
+
+    <script>
+        fetch('graph.json')
+            .then(res => res.json())
+            .then(data => {
+                const Graph = ForceGraph()
+                    (document.getElementById('graph'))
+                    .graphData(data)
+                    .nodeLabel('id')
+                    .nodeAutoColorBy('group')
+                    .nodeCanvasObject((node, ctx, globalScale) => {
+                        const label = node.label;
+                        const fontSize = 12/globalScale;
+                        ctx.font = `${fontSize}px Sans-Serif`;
+                        const textWidth = ctx.measureText(label).width;
+                        const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2); 
+
+                        ctx.fillStyle = 'rgba(7, 7, 8, 0.8)';
+                        ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions);
+
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = node.color;
+                        ctx.fillText(label, node.x, node.y);
+
+                        node.__bckgDimensions = bckgDimensions; 
+                    })
+                    .onNodeClick(node => {
+                        // In a real IDE, we'd open the file here
+                        console.log("Opening:", node.id);
+                    });
+
+                Graph.d3Force('charge').strength(-100);
+            });
+    </script>
+</body>
+</html>

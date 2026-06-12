@@ -1,0 +1,71 @@
+appId: com.harshpandey.iris
+productName: IRIS AI
+directories:
+  buildResources: build
+
+# 🔴 FIX 1: Set compression to "store" to prevent the 32-bit mmap memory crash
+compression: store
+
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,credentials.json}'
+  # 🔴 FIX 2: Explicitly block massive local databases and AI model folders
+  - '!models/**/*'
+  - '!vectordb/**/*'
+  - '!lancedb/**/*'
+  - '!userData/**/*'
+
+asarUnpack:
+  - resources/**
+
+win:
+  executableName: iris-ai
+  icon: build/icon.ico
+  target:
+    - target: nsis
+
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  runAfterFinish: true
+
+mac:
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  notarize: false
+
+dmg:
+  artifactName: ${name}-${version}.${ext}
+
+linux:
+  target:
+    - AppImage
+    - snap
+    - deb
+  maintainer: Harsh Pandey
+  category: Utility
+
+appImage:
+  artifactName: ${name}-${version}.${ext}
+
+npmRebuild: false
+publish:
+  provider: github
+  owner: 201Harsh
+  repo: IRIS-AI

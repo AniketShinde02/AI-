@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus 2.0 | Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #050505;
+            color: #e5e7eb;
+            overflow: hidden;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+        }
+        .glass-dark {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .orb-glow {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .stat-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .stat-card:hover {
+            background: rgba(255, 255, 255, 0.06);
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        .scroll-mask {
+            mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+        }
+    </style>
+</head>
+<body class="h-screen flex p-4 gap-4">
+
+    <!-- Sidebar -->
+    <aside class="w-20 glass flex flex-col items-center py-8 gap-8 shrink-0">
+        <div class="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <i data-lucide="zap" class="text-white"></i>
+        </div>
+        <nav class="flex flex-col gap-6 flex-1">
+            <button class="p-3 rounded-xl hover:bg-white/10 transition-colors text-indigo-400">
+                <i data-lucide="message-square"></i>
+            </button>
+            <button class="p-3 rounded-xl hover:bg-white/10 transition-colors text-zinc-400">
+                <i data-lucide="terminal"></i>
+            </button>
+            <button class="p-3 rounded-xl hover:bg-white/10 transition-colors text-zinc-400">
+                <i data-lucide="file-text"></i>
+            </button>
+            <button class="p-3 rounded-xl hover:bg-white/10 transition-colors text-zinc-400">
+                <i data-lucide="check-square"></i>
+            </button>
+        </nav>
+        <button class="p-3 rounded-xl hover:bg-white/10 transition-colors text-zinc-400">
+            <i data-lucide="settings"></i>
+        </button>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col gap-4">
+        <!-- Top Stats Bar -->
+        <header class="h-20 flex gap-4">
+            <div class="flex-1 glass flex items-center px-6 gap-8">
+                <div class="flex items-center gap-3">
+                    <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span class="text-sm font-medium text-zinc-400 tracking-wider">SYSTEM ONLINE</span>
+                </div>
+                <div class="h-8 w-px bg-white/5"></div>
+                <div class="flex flex-col">
+                    <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">CPU</span>
+                    <span class="text-sm font-semibold">12%</span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">RAM</span>
+                    <span class="text-sm font-semibold">4.2 GB</span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Latency</span>
+                    <span class="text-sm font-semibold text-indigo-400">12ms</span>
+                </div>
+                <div class="flex-1"></div>
+                <div class="flex items-center gap-4">
+                    <div class="text-right">
+                        <div class="text-xs font-medium">Aniket Shinde</div>
+                        <div class="text-[10px] text-zinc-500">Pro Tier</div>
+                    </div>
+                    <div class="w-10 h-10 rounded-full bg-zinc-800 border border-white/10 overflow-hidden">
+                        <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Aniket" alt="Avatar">
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Grid Layout -->
+        <div class="flex-1 grid grid-cols-12 gap-4">
+            
+            <!-- Center: The Orb Experience -->
+            <div class="col-span-8 flex flex-col gap-4">
+                <div class="flex-1 glass relative flex items-center justify-center overflow-hidden">
+                    <div class="orb-glow"></div>
+                    <div id="orb-container" class="w-[500px] h-[500px]"></div>
+                    
+                    <!-- Floating Controls -->
+                    <div class="absolute bottom-12 flex items-center gap-6">
+                        <button class="w-14 h-14 rounded-full glass flex items-center justify-center hover:bg-white/10 transition-all">
+                            <i data-lucide="mic-off"></i>
+                        </button>
+                        <button class="w-20 h-20 rounded-full bg-indigo-600 flex items-center justify-center shadow-2xl shadow-indigo-500/40 hover:scale-105 active:scale-95 transition-all">
+                            <i data-lucide="play" class="fill-white text-white ml-1" size="32"></i>
+                        </button>
+                        <button class="w-14 h-14 rounded-full glass flex items-center justify-center hover:bg-white/10 transition-all">
+                            <i data-lucide="more-horizontal"></i>
+                        </button>
+                    </div>
+
+                    <!-- Thinking Indicator -->
+                    <div class="absolute top-8 left-8 flex items-center gap-3 glass px-4 py-2">
+                        <div class="flex gap-1">
+                            <div class="w-1 h-1 bg-indigo-400 rounded-full animate-bounce"></div>
+                            <div class="w-1 h-1 bg-indigo-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                            <div class="w-1 h-1 bg-indigo-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                        </div>
+                        <span class="text-xs font-medium text-zinc-300 tracking-wide uppercase">Nexus is thinking...</span>
+                    </div>
+                </div>
+
+                <!-- Bottom: Browser / Thinking Feed -->
+                <div class="h-48 glass p-4 flex flex-col gap-2">
+                    <div class="flex justify-between items-center px-2">
+                        <h3 class="text-xs font-bold text-zinc-500 uppercase tracking-widest">Cognitive Thread</h3>
+                        <span class="text-[10px] text-green-400 bg-green-400/10 px-2 py-0.5 rounded">Real-time</span>
+                    </div>
+                    <div class="flex-1 overflow-y-auto scroll-mask font-mono text-xs text-zinc-400 space-y-1 pr-2">
+                        <div class="flex gap-2"><span class="text-indigo-400">[0.02s]</span> Initializing vision-agent pipeline...</div>
+                        <div class="flex gap-2"><span class="text-indigo-400">[0.05s]</span> Attaching to WebRTC stream (0x7f22)...</div>
+                        <div class="flex gap-2"><span class="text-indigo-400">[0.12s]</span> Detected user speech: "Open the project dashboard"</div>
+                        <div class="flex gap-2"><span class="text-indigo-400">[0.21s]</span> Tool: browser_control.navigate("http://localhost:3000")</div>
+                        <div class="flex gap-2"><span class="text-indigo-400">[0.35s]</span> Reasoning: User wants to see the current state of development...</div>
+                        <div class="flex gap-2"><span class="text-indigo-400">[0.42s]</span> Generating response via Llama 3.3...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Intelligence & Media -->
+            <div class="col-span-4 flex flex-col gap-4">
+                <!-- Live Cam / Feed -->
+                <div class="h-64 glass overflow-hidden relative group">
+                    <div class="absolute inset-0 bg-zinc-900 flex items-center justify-center">
+                        <i data-lucide="video-off" class="text-zinc-700" size="48"></i>
+                    </div>
+                    <!-- Mock Video Overlay -->
+                    <div class="absolute top-4 left-4 glass-dark px-2 py-1 text-[10px] font-bold text-red-500 flex items-center gap-2">
+                        <div class="w-1.5 h-1.5 rounded-full bg-red-500"></div>
+                        LIVE FEED
+                    </div>
+                    <div class="absolute bottom-4 left-4 text-xs font-medium drop-shadow-md">Nexus Cam 01</div>
+                </div>
+
+                <!-- News / Data Feed -->
+                <div class="flex-1 glass p-5 flex flex-col gap-4 overflow-hidden">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-zinc-300 tracking-tight">Intelligence Brief</h3>
+                        <i data-lucide="refresh-cw" class="text-zinc-500 w-4 h-4 cursor-pointer hover:text-white transition-colors"></i>
+                    </div>
+                    <div class="space-y-4 overflow-y-auto pr-1">
+                        <div class="group cursor-pointer">
+                            <div class="text-[10px] text-indigo-400 font-bold mb-1 uppercase">Tech News</div>
+                            <h4 class="text-xs font-semibold leading-relaxed group-hover:text-indigo-300 transition-colors">Llama 3.3 70B released with significant performance gains in agentic reasoning.</h4>
+                            <div class="text-[9px] text-zinc-500 mt-1">2 hours ago</div>
+                        </div>
+                        <div class="h-px bg-white/5"></div>
+                        <div class="group cursor-pointer">
+                            <div class="text-[10px] text-green-400 font-bold mb-1 uppercase">Market</div>
+                            <h4 class="text-xs font-semibold leading-relaxed group-hover:text-green-300 transition-colors">NVIDIA hits record high as demand for H200 chips exceeds supply forecasts.</h4>
+                            <div class="text-[9px] text-zinc-500 mt-1">4 hours ago</div>
+                        </div>
+                        <div class="h-px bg-white/5"></div>
+                        <div class="group cursor-pointer">
+                            <div class="text-[10px] text-purple-400 font-bold mb-1 uppercase">Security</div>
+                            <h4 class="text-xs font-semibold leading-relaxed group-hover:text-purple-300 transition-colors">Zero-day vulnerability patched in popular WebRTC implementation.</h4>
+                            <div class="text-[9px] text-zinc-500 mt-1">Yesterday</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Task Quick Look -->
+                <div class="h-40 glass p-5 flex flex-col gap-3">
+                    <h3 class="text-xs font-bold text-zinc-500 uppercase tracking-widest">Active Sprint</h3>
+                    <div class="flex-1 flex flex-col gap-2">
+                        <div class="flex items-center gap-3">
+                            <div class="w-4 h-4 rounded border border-indigo-500/50 flex items-center justify-center">
+                                <div class="w-2 h-2 bg-indigo-500 rounded-sm"></div>
+                            </div>
+                            <span class="text-xs text-zinc-300">Implement WebRTC audio pipe</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-4 h-4 rounded border border-white/10"></div>
+                            <span class="text-xs text-zinc-400 line-through">Fix memory leak in Orb</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-4 h-4 rounded border border-white/10"></div>
+                            <span class="text-xs text-zinc-300">Design dashboard v3</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // --- Nexus Orb Simulation (Three.js) ---
+        let scene, camera, renderer, group;
+        const container = document.getElementById('orb-container');
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+            camera.position.z = 3.5;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            group = new THREE.Group();
+            scene.add(group);
+
+            // Core Sphere
+            const geometry = new THREE.IcosahedronGeometry(1.0, 15);
+            const material = new THREE.MeshPhongMaterial({
+                color: 0x6366f1,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.3,
+            });
+            const core = new THREE.Mesh(geometry, material);
+            group.add(core);
+
+            // Outer Shell
+            const shellGeo = new THREE.IcosahedronGeometry(1.2, 5);
+            const shellMat = new THREE.MeshBasicMaterial({
+                color: 0x4f46e5,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.1,
+            });
+            const shell = new THREE.Mesh(shellGeo, shellMat);
+            group.add(shell);
+
+            // Lights
+            const light = new THREE.PointLight(0x6366f1, 1, 10);
+            light.position.set(2, 2, 2);
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            group.rotation.y += 0.005;
+            group.rotation.x += 0.002;
+            
+            // Pulsing effect
+            const time = Date.now() * 0.001;
+            group.scale.set(
+                1 + Math.sin(time * 2) * 0.03,
+                1 + Math.sin(time * 2) * 0.03,
+                1 + Math.sin(time * 2) * 0.03
+            );
+            
+            renderer.render(scene, camera);
+        }
+
+        init();
+
+        // Responsive handling
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+    </script>
+</body>
+</html>

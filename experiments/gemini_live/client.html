@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gemini Live — Nexus Experiment</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #0d0d0f;
+    color: #e8e8e8;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  h1 { font-size: 1.8rem; font-weight: 700; color: #60a5fa; margin-bottom: 6px; }
+  .subtitle { color: #6b7280; font-size: 0.9rem; margin-bottom: 32px; }
+  .card {
+    background: #1a1a1f;
+    border: 1px solid #2d2d35;
+    border-radius: 16px;
+    padding: 24px;
+    width: 100%;
+    max-width: 720px;
+    margin-bottom: 20px;
+  }
+  .card h2 { font-size: 1rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+  .status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #374151; flex-shrink: 0; }
+  .dot.green { background: #22c55e; box-shadow: 0 0 8px #22c55e88; }
+  .dot.red { background: #ef4444; box-shadow: 0 0 8px #ef444488; }
+  .dot.yellow { background: #f59e0b; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .metric {
+    background: #111115;
+    border: 1px solid #2d2d35;
+    border-radius: 10px;
+    padding: 12px 16px;
+  }
+  .metric-label { font-size: 0.75rem; color: #6b7280; margin-bottom: 4px; }
+  .metric-value { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #e8e8e8; }
+  .metric-value.highlight { color: #60a5fa; }
+  .btn-row { display: flex; gap: 12px; margin-top: 20px; }
+  button {
+    flex: 1;
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  #startBtn { background: #2563eb; color: #fff; }
+  #startBtn:hover { background: #1d4ed8; }
+  #stopBtn { background: #374151; color: #9ca3af; }
+  #stopBtn:hover { background: #4b5563; color: #e8e8e8; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .log-box {
+    background: #111115;
+    border: 1px solid #1e1e28;
+    border-radius: 10px;
+    padding: 14px;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.78rem;
+    color: #86efac;
+    height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  .log-box .ts { color: #4b5563; }
+  .log-box .warn { color: #fbbf24; }
+  .log-box .err { color: #f87171; }
+  .transcript-box {
+    background: #111115;
+    border: 1px solid #1e1e28;
+    border-radius: 10px;
+    padding: 14px;
+    min-height: 80px;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: #c4b5fd;
+  }
+</style>
+</head>
+<body>
+<h1>🧪 Gemini Live — Nexus Experiment</h1>
+<p class="subtitle">Branch: nexus-gemini-live-test · Port 8001 · Isolated from Nexus production</p>
+
+<div class="card">
+  <h2>Connection</h2>
+  <div class="status-row">
+    <div class="dot" id="wsDot"></div>
+    <span id="wsStatus">Disconnected</span>
+  </div>
+  <div class="btn-row">
+    <button id="startBtn" onclick="startSession()">🎙️ Start Gemini Live</button>
+    <button id="stopBtn" onclick="stopSession()" disabled>⏹ Stop</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Latency Measurements</h2>
+  <div class="metric-grid">
+    <div class="metric"><div class="metric-label">Connection Time</div><div class="metric-value highlight" id="connectMs">—</div></div>
+    <div class="metric"><div class="metric-label">First Audio (TTFA)</div><div class="metric-value highlight" id="ttfaMs">—</div></div>
+    <div class="metric"><div class="metric-label">Last Response Duration</div><div class="metric-value" id="audioDur">—</div></div>
+    <div class="metric"><div class="metric-label">Interruptions</div><div class="metric-value" id="interruptCount">0</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Gemini Transcript</h2>
+  <div class="transcript-box" id="transcriptBox">Gemini will speak here...</div>
+</div>
+
+<div class="card">
+  <h2>Debug Log</h2>
+  <div class="log-box" id="logBox"></div>
+</div>
+
+<script>
+const WS_URL = "ws://localhost:8001/ws/gemini";
+const SAMPLE_RATE_IN = 16000;
+const SAMPLE_RATE_OUT = 24000; // Gemini outputs 24kHz
+
+let ws = null;
+let audioCtx = null;
+let micStream = null;
+let micProcessor = null;
+let audioQueue = [];
+let isPlaying = false;
+let nextPlayTime = 0;
+let interruptCount = 0;
+let turnStartTime = 0;
+
+function log(msg, cls = "") {
+  const box = document.getElementById("logBox");
+  const ts = new Date().toLocaleTimeString("en-US", {hour12: false, hour:"2-digit", minute:"2-digit", second:"2-digit"});
+  box.innerHTML += `<span class="ts">[${ts}]</span> <span class="${cls}">${msg}</span>\n`;
+  box.scrollTop = box.scrollHeight;
+}
+
+function setDot(id, state) {
+  const d = document.getElementById(id);
+  d.className = "dot " + state;
+}
+
+async function startSession() {
+  document.getElementById("startBtn").disabled = true;
+  log("Requesting microphone access...");
+
+  try {
+    audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE_IN });
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: SAMPLE_RATE_IN, channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+    log("✅ Microphone acquired", "");
+
+    ws = new WebSocket(WS_URL);
+    setDot("wsDot", "yellow");
+    document.getElementById("wsStatus").textContent = "Connecting...";
+
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen = () => {
+      setDot("wsDot", "green");
+      document.getElementById("wsStatus").textContent = "Connected to Gemini Live Bridge";
+      document.getElementById("stopBtn").disabled = false;
+      log("✅ WebSocket connected to server.py");
+      startMicCapture();
+    };
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      handleServerMessage(msg);
+    };
+
+    ws.onclose = () => {
+      setDot("wsDot", "red");
+      document.getElementById("wsStatus").textContent = "Disconnected";
+      log("🔌 WebSocket closed", "warn");
+      stopSession();
+    };
+
+    ws.onerror = (e) => {
+      log(`❌ WebSocket error: ${e.message || "see console"}`, "err");
+    };
+
+  } catch (err) {
+    log(`❌ ${err.message}`, "err");
+    document.getElementById("startBtn").disabled = false;
+  }
+}
+
+function handleServerMessage(msg) {
+  if (msg.type === "connected") {
+    document.getElementById("connectMs").textContent = msg.connect_ms + "ms";
+    log(`✅ Gemini Live session ready (connect: ${msg.connect_ms}ms)`);
+    // Signal turn start
+    turnStartTime = performance.now();
+    ws.send(JSON.stringify({ type: "turn_start" }));
+  }
+  if (msg.type === "ttfa") {
+    document.getElementById("ttfaMs").textContent = msg.ttfa_ms + "ms";
+    log(`⚡ TTFA: ${msg.ttfa_ms}ms`);
+  }
+  if (msg.type === "audio_chunk") {
+    const pcm = base64ToInt16(msg.data);
+    enqueueAudio(pcm, msg.sample_rate || SAMPLE_RATE_OUT);
+  }
+  if (msg.type === "transcript") {
+    const box = document.getElementById("transcriptBox");
+    box.textContent += msg.text + " ";
+    box.scrollTop = box.scrollHeight;
+    log(`💬 Transcript: ${msg.text}`);
+  }
+  if (msg.type === "turn_complete") {
+    document.getElementById("audioDur").textContent = msg.duration_s.toFixed(2) + "s";
+    log(`🏁 Turn complete. Audio: ${msg.duration_s.toFixed(2)}s (${msg.total_audio_bytes} bytes)`);
+  }
+  if (msg.type === "interrupted") {
+    interruptCount++;
+    document.getElementById("interruptCount").textContent = interruptCount;
+    log("⚡ Barge-in — Gemini interrupted", "warn");
+  }
+  if (msg.type === "error") {
+    log(`❌ Server error: ${msg.message}`, "err");
+  }
+  if (msg.type === "pong") {}
+}
+
+function base64ToInt16(b64) {
+  const bin = atob(b64);
+  const buf = new ArrayBuffer(bin.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < bin.length; i++) view[i] = bin.charCodeAt(i);
+  return new Int16Array(buf);
+}
+
+function enqueueAudio(int16Samples, sampleRate) {
+  const float32 = new Float32Array(int16Samples.length);
+  for (let i = 0; i < int16Samples.length; i++) float32[i] = int16Samples[i] / 32768;
+  audioQueue.push({ float32, sampleRate });
+  if (!isPlaying) playNext();
+}
+
+function playNext() {
+  if (audioQueue.length === 0) { isPlaying = false; return; }
+  isPlaying = true;
+  const { float32, sampleRate } = audioQueue.shift();
+  const buf = audioCtx.createBuffer(1, float32.length, sampleRate);
+  buf.copyToChannel(float32, 0);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioCtx.destination);
+  const now = audioCtx.currentTime;
+  const startAt = Math.max(now, nextPlayTime);
+  src.start(startAt);
+  nextPlayTime = startAt + buf.duration;
+  src.onended = () => playNext();
+}
+
+function startMicCapture() {
+  const source = audioCtx.createMediaStreamSource(micStream);
+  micProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+  micProcessor.onaudioprocess = (e) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const float32 = e.inputBuffer.getChannelData(0);
+    const int16 = new Int16Array(float32.length);
+    for (let i = 0; i < float32.length; i++) {
+      int16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
+    }
+    ws.send(int16.buffer);
+  };
+  source.connect(micProcessor);
+  micProcessor.connect(audioCtx.destination);
+  log("🎙️ Mic capture started — speak now");
+}
+
+function stopSession() {
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  if (micProcessor) { micProcessor.disconnect(); micProcessor = null; }
+  if (ws) { ws.close(); ws = null; }
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  audioQueue = [];
+  isPlaying = false;
+  nextPlayTime = 0;
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
+  setDot("wsDot", "red");
+  document.getElementById("wsStatus").textContent = "Disconnected";
+  log("⏹ Session stopped");
+}
+</script>
+</body>
+</html>

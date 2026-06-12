@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Pro | Split Command</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --accent: #00f2ff;
+            --bg: #030303;
+            --panel: #0a0a0a;
+            --border: rgba(255, 255, 255, 0.05);
+        }
+        body {
+            background-color: var(--bg);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        .panel {
+            background-color: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .neon-text { text-shadow: 0 0 10px var(--accent); }
+        .neon-border { border-color: var(--accent); box-shadow: 0 0 15px rgba(0, 242, 255, 0.2); }
+        .scroll-hide::-webkit-scrollbar { display: none; }
+        .btn-action {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
+        }
+        .btn-action:hover {
+            background: rgba(0, 242, 255, 0.1);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        @keyframes scan {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .scanline {
+            height: 100px;
+            background: linear-gradient(to bottom, transparent, rgba(0, 242, 255, 0.05), transparent);
+            animation: scan 4s linear infinite;
+        }
+    </style>
+</head>
+<body class="h-screen p-3 flex flex-col gap-3">
+
+    <!-- Header -->
+    <header class="flex justify-between items-center px-4 py-2 panel h-14 shrink-0">
+        <div class="flex items-center gap-4">
+            <div class="w-8 h-8 bg-cyan-500 rounded flex items-center justify-center">
+                <i data-lucide="shield" class="text-black" size="18"></i>
+            </div>
+            <span class="font-bold tracking-tighter text-lg uppercase italic">Nexus<span class="text-cyan-400">Pro</span></span>
+        </div>
+        <div class="flex items-center gap-6 text-xs font-medium text-zinc-500 uppercase tracking-widest">
+            <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-green-500 rounded-full"></span> AGENT ACTIVE</div>
+            <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-cyan-500 rounded-full"></span> SYNCING (120ms)</div>
+            <div class="h-4 w-px bg-white/10"></div>
+            <div class="text-zinc-300">USER: ANIKET_SHINDE</div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex gap-3 overflow-hidden">
+        
+        <!-- Left: Intelligence -->
+        <aside class="w-[320px] flex flex-col gap-3 shrink-0">
+            <!-- News Feed -->
+            <div class="flex-1 panel flex flex-col p-4 gap-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Global Intelligence</h2>
+                    <i data-lucide="activity" size="14" class="text-cyan-400"></i>
+                </div>
+                <div class="flex-1 overflow-y-auto scroll-hide space-y-4">
+                    <div class="space-y-1">
+                        <div class="text-[10px] text-cyan-400 font-bold">BLOCKCHAIN</div>
+                        <p class="text-xs font-semibold">Ethereum gas fees hit 3-year low as L2 adoption skyrockets.</p>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="text-[10px] text-purple-400 font-bold">AI RESEARCH</div>
+                        <p class="text-xs font-semibold">DeepMind announces new Gato-2 model with unified modality.</p>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="text-[10px] text-green-400 font-bold">STOCKS</div>
+                        <p class="text-xs font-semibold">Tech giants rally as inflation data beats estimates.</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Log Feed -->
+            <div class="h-64 panel flex flex-col p-4 gap-2 bg-black">
+                <h2 class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Cognitive Stream</h2>
+                <div class="flex-1 overflow-y-auto scroll-hide mono text-[9px] text-zinc-500 space-y-1">
+                    <div>[INFO] Initializing Nexus v2.4.0...</div>
+                    <div>[AUTH] User verified via biometric hash.</div>
+                    <div>[SYS] Mounting workspace: d:/AI/nexus-v2</div>
+                    <div class="text-cyan-400">[THINK] Reasoning: Summarize active PRs...</div>
+                    <div>[NET] Fetching data from GitHub API...</div>
+                    <div class="text-zinc-300">>> Found 3 open PRs. Summarizing...</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center: Core Control -->
+        <main class="flex-1 flex flex-col gap-3">
+            <!-- Top: Live Cam / Video -->
+            <div class="h-1/2 panel relative group bg-zinc-900/50">
+                <div class="absolute inset-0 scanline"></div>
+                <!-- Mock Cam View -->
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                    <i data-lucide="video" class="text-zinc-800 mb-2" size="48"></i>
+                    <span class="text-xs text-zinc-700 font-mono">FEED_SOURCE: CAM_01</span>
+                </div>
+                <!-- Controls -->
+                <div class="absolute top-4 right-4 flex gap-2">
+                    <button class="w-8 h-8 glass flex items-center justify-center hover:bg-white/10 rounded"><i data-lucide="maximize" size="14"></i></button>
+                    <button class="w-8 h-8 glass flex items-center justify-center hover:bg-white/10 rounded"><i data-lucide="settings-2" size="14"></i></button>
+                </div>
+            </div>
+            <!-- Bottom: The Nexus Core -->
+            <div class="flex-1 panel flex items-center justify-center relative bg-black/40">
+                <div id="nexus-core" class="w-full h-full"></div>
+                
+                <!-- Overlay UI -->
+                <div class="absolute bottom-6 flex gap-10">
+                    <button class="flex flex-col items-center gap-2 group">
+                        <div class="w-12 h-12 rounded-full glass flex items-center justify-center group-hover:neon-border transition-all">
+                            <i data-lucide="mic" size="20"></i>
+                        </div>
+                        <span class="text-[9px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-cyan-400">Voice</span>
+                    </button>
+                    <button class="flex flex-col items-center gap-2 group">
+                        <div class="w-16 h-16 rounded-full bg-cyan-500/10 border border-cyan-500 flex items-center justify-center neon-border">
+                            <i data-lucide="zap" class="text-cyan-400" size="28"></i>
+                        </div>
+                        <span class="text-[10px] font-bold uppercase tracking-widest text-cyan-400">Activate</span>
+                    </button>
+                    <button class="flex flex-col items-center gap-2 group">
+                        <div class="w-12 h-12 rounded-full glass flex items-center justify-center group-hover:neon-border transition-all">
+                            <i data-lucide="command" size="20"></i>
+                        </div>
+                        <span class="text-[9px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-cyan-400">Tools</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right: Metrics & Work -->
+        <aside class="w-[320px] flex flex-col gap-3 shrink-0">
+            <!-- System Health -->
+            <div class="h-48 panel p-4 flex flex-col gap-4">
+                <h2 class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Hardware Matrix</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <span class="text-[10px] text-zinc-500 uppercase">GPU Temp</span>
+                        <div class="text-lg font-bold">54°C</div>
+                    </div>
+                    <div class="space-y-1">
+                        <span class="text-[10px] text-zinc-500 uppercase">Mem Usage</span>
+                        <div class="text-lg font-bold">12.4GB</div>
+                    </div>
+                    <div class="col-span-2 space-y-1">
+                        <span class="text-[10px] text-zinc-500 uppercase">Neural Processing</span>
+                        <div class="h-1 bg-white/5 rounded-full overflow-hidden">
+                            <div class="h-full bg-cyan-500 w-[78%]"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Task List -->
+            <div class="flex-1 panel p-4 flex flex-col gap-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Workspace Tasks</h2>
+                    <i data-lucide="plus" size="14" class="cursor-pointer hover:text-cyan-400"></i>
+                </div>
+                <div class="space-y-3 overflow-y-auto scroll-hide">
+                    <div class="p-3 bg-white/5 rounded-lg border border-white/5 flex gap-3 items-center">
+                        <div class="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(0,242,255,0.8)]"></div>
+                        <span class="text-xs font-medium">Refactor Orb Shaders</span>
+                    </div>
+                    <div class="p-3 bg-white/5 rounded-lg border border-white/5 flex gap-3 items-center opacity-60">
+                        <div class="w-2 h-2 rounded-full bg-zinc-600"></div>
+                        <span class="text-xs font-medium">Setup Vercel Edge</span>
+                    </div>
+                    <div class="p-3 bg-white/5 rounded-lg border border-white/5 flex gap-3 items-center">
+                        <div class="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]"></div>
+                        <span class="text-xs font-medium">Test Multi-modal pipeline</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // --- Nexus Pro Core Visualization ---
+        let scene, camera, renderer, coreGroup;
+        const container = document.getElementById('nexus-core');
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.z = 4;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            coreGroup = new THREE.Group();
+            scene.add(coreGroup);
+
+            // Tech Mesh
+            const geometry = new THREE.IcosahedronGeometry(1.2, 1);
+            const material = new THREE.MeshBasicMaterial({ 
+                color: 0x00f2ff, 
+                wireframe: true, 
+                transparent: true, 
+                opacity: 0.1 
+            });
+            const outer = new THREE.Mesh(geometry, material);
+            coreGroup.add(outer);
+
+            // Inner Core
+            const coreGeo = new THREE.SphereGeometry(0.8, 32, 32);
+            const coreMat = new THREE.MeshPhongMaterial({
+                color: 0x00f2ff,
+                emissive: 0x00f2ff,
+                emissiveIntensity: 0.2,
+                transparent: true,
+                opacity: 0.9,
+                wireframe: true
+            });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            coreGroup.add(core);
+
+            // Glowing Points
+            const pointsGeo = new THREE.BufferGeometry();
+            const pointsCount = 200;
+            const pointsPos = new Float32Array(pointsCount * 3);
+            for(let i=0; i<pointsCount*3; i++) pointsPos[i] = (Math.random()-0.5) * 5;
+            pointsGeo.setAttribute('position', new THREE.BufferAttribute(pointsPos, 3));
+            const pointsMat = new THREE.PointsMaterial({ size: 0.02, color: 0x00f2ff });
+            const points = new THREE.Points(pointsGeo, pointsMat);
+            scene.add(points);
+
+            const light = new THREE.PointLight(0x00f2ff, 2, 10);
+            light.position.set(2, 2, 2);
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.1));
+
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            coreGroup.rotation.y += 0.003;
+            coreGroup.rotation.x += 0.001;
+            
+            const time = Date.now() * 0.002;
+            coreGroup.scale.set(
+                1 + Math.sin(time) * 0.05,
+                1 + Math.sin(time) * 0.05,
+                1 + Math.sin(time) * 0.05
+            );
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+    </script>
+</body>
+</html>

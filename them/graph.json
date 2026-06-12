@@ -1,0 +1,587 @@
+{
+  "nodes": [
+    {
+      "id": "temp_edit.py",
+      "label": "temp_edit.py",
+      "group": "frontend",
+      "size": 290.84
+    },
+    {
+      "id": "backend\\src\\backend\\main.py",
+      "label": "main.py",
+      "group": "backend",
+      "size": 44.19
+    },
+    {
+      "id": "backend\\src\\backend\\__init__.py",
+      "label": "__init__.py",
+      "group": "backend",
+      "size": 0.0
+    },
+    {
+      "id": "backend\\src\\backend\\api\\__init__.py",
+      "label": "__init__.py",
+      "group": "backend",
+      "size": 0.0
+    },
+    {
+      "id": "backend\\src\\backend\\config\\settings.py",
+      "label": "settings.py",
+      "group": "backend",
+      "size": 14.57
+    },
+    {
+      "id": "backend\\src\\backend\\config\\__init__.py",
+      "label": "__init__.py",
+      "group": "backend",
+      "size": 0.0
+    },
+    {
+      "id": "backend\\src\\backend\\core\\diagnostics.py",
+      "label": "diagnostics.py",
+      "group": "backend",
+      "size": 17.38
+    },
+    {
+      "id": "backend\\src\\backend\\core\\firebase_db.py",
+      "label": "firebase_db.py",
+      "group": "backend",
+      "size": 31.96
+    },
+    {
+      "id": "backend\\src\\backend\\core\\__init__.py",
+      "label": "__init__.py",
+      "group": "backend",
+      "size": 0.0
+    },
+    {
+      "id": "backend\\src\\backend\\models\\__init__.py",
+      "label": "__init__.py",
+      "group": "backend",
+      "size": 0.0
+    },
+    {
+      "id": "backend\\src\\backend\\services\\memory.py",
+      "label": "memory.py",
+      "group": "backend",
+      "size": 33.42
+    },
+    {
+      "id": "backend\\src\\backend\\services\\profile.py",
+      "label": "profile.py",
+      "group": "backend",
+      "size": 12.37
+    },
+    {
+      "id": "backend\\src\\backend\\services\\task.py",
+      "label": "task.py",
+      "group": "backend",
+      "size": 15.44
+    },
+    {
+      "id": "backend\\src\\backend\\services\\__init__.py",
+      "label": "__init__.py",
+      "group": "backend",
+      "size": 0.0
+    },
+    {
+      "id": "backend\\src\\backend\\utils\\__init__.py",
+      "label": "__init__.py",
+      "group": "backend",
+      "size": 0.0
+    },
+    {
+      "id": "backend\\src\\backend\\voice\\groq_llm.py",
+      "label": "groq_llm.py",
+      "group": "backend",
+      "size": 72.2
+    },
+    {
+      "id": "backend\\src\\backend\\voice\\local_worker.py",
+      "label": "local_worker.py",
+      "group": "backend",
+      "size": 29.43
+    },
+    {
+      "id": "backend\\src\\backend\\voice\\orchestrator.py",
+      "label": "orchestrator.py",
+      "group": "backend",
+      "size": 80.93
+    },
+    {
+      "id": "backend\\src\\backend\\voice\\providers.py",
+      "label": "providers.py",
+      "group": "backend",
+      "size": 103.63
+    },
+    {
+      "id": "backend\\src\\backend\\voice\\session.py",
+      "label": "session.py",
+      "group": "backend",
+      "size": 13.02
+    },
+    {
+      "id": "backend\\src\\backend\\voice\\tools\\nexus_tools.py",
+      "label": "nexus_tools.py",
+      "group": "backend",
+      "size": 52.44
+    },
+    {
+      "id": "backend\\voice_agent\\config.py",
+      "label": "config.py",
+      "group": "backend",
+      "size": 12.41
+    },
+    {
+      "id": "backend\\voice_agent\\debug_json.py",
+      "label": "debug_json.py",
+      "group": "backend",
+      "size": 6.69
+    },
+    {
+      "id": "backend\\voice_agent\\debug_json_v2.py",
+      "label": "debug_json_v2.py",
+      "group": "backend",
+      "size": 8.45
+    },
+    {
+      "id": "backend\\voice_agent\\list_routes.py",
+      "label": "list_routes.py",
+      "group": "backend",
+      "size": 2.75
+    },
+    {
+      "id": "backend\\voice_agent\\main.py",
+      "label": "main.py",
+      "group": "backend",
+      "size": 57.31
+    },
+    {
+      "id": "backend\\voice_agent\\test_groq.py",
+      "label": "test_groq.py",
+      "group": "backend",
+      "size": 7.81
+    },
+    {
+      "id": "backend\\voice_agent\\test_tts.py",
+      "label": "test_tts.py",
+      "group": "backend",
+      "size": 7.22
+    },
+    {
+      "id": "backend\\voice_agent\\core\\call_manager.py",
+      "label": "call_manager.py",
+      "group": "backend",
+      "size": 39.65
+    },
+    {
+      "id": "backend\\voice_agent\\core\\concurrency.py",
+      "label": "concurrency.py",
+      "group": "backend",
+      "size": 6.4
+    },
+    {
+      "id": "backend\\voice_agent\\core\\memory.py",
+      "label": "memory.py",
+      "group": "backend",
+      "size": 111.1
+    },
+    {
+      "id": "backend\\voice_agent\\core\\usage.py",
+      "label": "usage.py",
+      "group": "backend",
+      "size": 18.67
+    },
+    {
+      "id": "backend\\voice_agent\\core\\__init__.py",
+      "label": "__init__.py",
+      "group": "backend",
+      "size": 0.16
+    },
+    {
+      "id": "backend\\voice_agent\\providers\\llm.py",
+      "label": "llm.py",
+      "group": "backend",
+      "size": 29.63
+    },
+    {
+      "id": "backend\\voice_agent\\providers\\stt.py",
+      "label": "stt.py",
+      "group": "backend",
+      "size": 37.45
+    },
+    {
+      "id": "backend\\voice_agent\\providers\\tts.py",
+      "label": "tts.py",
+      "group": "backend",
+      "size": 35.49
+    },
+    {
+      "id": "backend\\voice_agent\\providers\\__init__.py",
+      "label": "__init__.py",
+      "group": "backend",
+      "size": 0.21
+    },
+    {
+      "id": "backend\\voice_agent\\scratch\\debug_env.py",
+      "label": "debug_env.py",
+      "group": "backend",
+      "size": 11.06
+    },
+    {
+      "id": "backend\\voice_agent\\scratch\\debug_env_v2.py",
+      "label": "debug_env_v2.py",
+      "group": "backend",
+      "size": 11.52
+    },
+    {
+      "id": "backend\\voice_agent\\scratch\\list_routes.py",
+      "label": "list_routes.py",
+      "group": "backend",
+      "size": 3.51
+    },
+    {
+      "id": "backend\\voice_agent\\tools\\memory_tools.py",
+      "label": "memory_tools.py",
+      "group": "backend",
+      "size": 12.87
+    },
+    {
+      "id": "backend\\voice_agent\\tools\\system.py",
+      "label": "system.py",
+      "group": "backend",
+      "size": 31.34
+    },
+    {
+      "id": "backend\\voice_agent\\tools\\task_tools.py",
+      "label": "task_tools.py",
+      "group": "backend",
+      "size": 26.78
+    },
+    {
+      "id": "backend\\voice_agent\\tools\\__init__.py",
+      "label": "__init__.py",
+      "group": "backend",
+      "size": 0.16
+    },
+    {
+      "id": "frontend\\drizzle.config.ts",
+      "label": "drizzle.config.ts",
+      "group": "frontend",
+      "size": 2.2
+    },
+    {
+      "id": "frontend\\next-env.d.ts",
+      "label": "next-env.d.ts",
+      "group": "frontend",
+      "size": 2.51
+    },
+    {
+      "id": "frontend\\next.config.ts",
+      "label": "next.config.ts",
+      "group": "frontend",
+      "size": 2.98
+    },
+    {
+      "id": "frontend\\src\\app\\layout.tsx",
+      "label": "layout.tsx",
+      "group": "frontend",
+      "size": 11.19
+    },
+    {
+      "id": "frontend\\src\\app\\page.tsx",
+      "label": "page.tsx",
+      "group": "frontend",
+      "size": 261.23
+    },
+    {
+      "id": "frontend\\src\\app\\api\\chat\\route.ts",
+      "label": "route.ts",
+      "group": "frontend",
+      "size": 23.56
+    },
+    {
+      "id": "frontend\\src\\app\\api\\groq\\route.ts",
+      "label": "route.ts",
+      "group": "frontend",
+      "size": 16.53
+    },
+    {
+      "id": "frontend\\src\\app\\api\\stream\\token\\route.ts",
+      "label": "route.ts",
+      "group": "frontend",
+      "size": 14.56
+    },
+    {
+      "id": "frontend\\src\\app\\api\\stream\\voice-session\\route.ts",
+      "label": "route.ts",
+      "group": "frontend",
+      "size": 37.46
+    },
+    {
+      "id": "frontend\\src\\app\\api\\suggestions\\route.ts",
+      "label": "route.ts",
+      "group": "frontend",
+      "size": 10.07
+    },
+    {
+      "id": "frontend\\src\\app\\api\\trpc\\[trpc]\\route.ts",
+      "label": "route.ts",
+      "group": "frontend",
+      "size": 4.06
+    },
+    {
+      "id": "frontend\\src\\app\\api-docs\\page.tsx",
+      "label": "page.tsx",
+      "group": "frontend",
+      "size": 143.62
+    },
+    {
+      "id": "frontend\\src\\bones\\registry.ts",
+      "label": "registry.ts",
+      "group": "frontend",
+      "size": 3.61
+    },
+    {
+      "id": "frontend\\src\\components\\ErrorBoundary.tsx",
+      "label": "ErrorBoundary.tsx",
+      "group": "frontend",
+      "size": 8.63
+    },
+    {
+      "id": "frontend\\src\\components\\Header.tsx",
+      "label": "Header.tsx",
+      "group": "frontend",
+      "size": 12.56
+    },
+    {
+      "id": "frontend\\src\\components\\InputArea.tsx",
+      "label": "InputArea.tsx",
+      "group": "frontend",
+      "size": 84.7
+    },
+    {
+      "id": "frontend\\src\\components\\LightOrb.tsx",
+      "label": "LightOrb.tsx",
+      "group": "frontend",
+      "size": 20.16
+    },
+    {
+      "id": "frontend\\src\\components\\MessageList.tsx",
+      "label": "MessageList.tsx",
+      "group": "frontend",
+      "size": 44.34
+    },
+    {
+      "id": "frontend\\src\\components\\NexusOrb.tsx",
+      "label": "NexusOrb.tsx",
+      "group": "frontend",
+      "size": 29.44
+    },
+    {
+      "id": "frontend\\src\\components\\NexusStreamProvider.tsx",
+      "label": "NexusStreamProvider.tsx",
+      "group": "frontend",
+      "size": 20.94
+    },
+    {
+      "id": "frontend\\src\\components\\Providers.tsx",
+      "label": "Providers.tsx",
+      "group": "frontend",
+      "size": 24.58
+    },
+    {
+      "id": "frontend\\src\\components\\Sidebar.tsx",
+      "label": "Sidebar.tsx",
+      "group": "frontend",
+      "size": 59.49
+    },
+    {
+      "id": "frontend\\src\\components\\SystemLogs.tsx",
+      "label": "SystemLogs.tsx",
+      "group": "frontend",
+      "size": 68.11
+    },
+    {
+      "id": "frontend\\src\\components\\ThreeOrb.tsx",
+      "label": "ThreeOrb.tsx",
+      "group": "frontend",
+      "size": 69.25
+    },
+    {
+      "id": "frontend\\src\\components\\providers\\TRPCProvider.tsx",
+      "label": "TRPCProvider.tsx",
+      "group": "frontend",
+      "size": 10.85
+    },
+    {
+      "id": "frontend\\src\\components\\ui\\badge.tsx",
+      "label": "badge.tsx",
+      "group": "frontend",
+      "size": 19.25
+    },
+    {
+      "id": "frontend\\src\\components\\ui\\button.tsx",
+      "label": "button.tsx",
+      "group": "frontend",
+      "size": 31.97
+    },
+    {
+      "id": "frontend\\src\\components\\ui\\card.tsx",
+      "label": "card.tsx",
+      "group": "frontend",
+      "size": 26.41
+    },
+    {
+      "id": "frontend\\src\\components\\ui\\scroll-area.tsx",
+      "label": "scroll-area.tsx",
+      "group": "frontend",
+      "size": 16.24
+    },
+    {
+      "id": "frontend\\src\\components\\ui\\tabs.tsx",
+      "label": "tabs.tsx",
+      "group": "frontend",
+      "size": 34.97
+    },
+    {
+      "id": "frontend\\src\\contexts\\NexusContext.tsx",
+      "label": "NexusContext.tsx",
+      "group": "frontend",
+      "size": 122.91
+    },
+    {
+      "id": "frontend\\src\\hooks\\useDebounce.ts",
+      "label": "useDebounce.ts",
+      "group": "frontend",
+      "size": 3.86
+    },
+    {
+      "id": "frontend\\src\\hooks\\useHealthCheck.ts",
+      "label": "useHealthCheck.ts",
+      "group": "frontend",
+      "size": 9.1
+    },
+    {
+      "id": "frontend\\src\\hooks\\useNexusChat.ts",
+      "label": "useNexusChat.ts",
+      "group": "frontend",
+      "size": 14.23
+    },
+    {
+      "id": "frontend\\src\\hooks\\useNexusVoice.ts",
+      "label": "useNexusVoice.ts",
+      "group": "frontend",
+      "size": 34.8
+    },
+    {
+      "id": "frontend\\src\\hooks\\useVoiceSession.ts",
+      "label": "useVoiceSession.ts",
+      "group": "frontend",
+      "size": 7.93
+    },
+    {
+      "id": "frontend\\src\\lib\\api-client.ts",
+      "label": "api-client.ts",
+      "group": "frontend",
+      "size": 26.87
+    },
+    {
+      "id": "frontend\\src\\lib\\apiClient.ts",
+      "label": "apiClient.ts",
+      "group": "frontend",
+      "size": 4.74
+    },
+    {
+      "id": "frontend\\src\\lib\\features.ts",
+      "label": "features.ts",
+      "group": "frontend",
+      "size": 11.29
+    },
+    {
+      "id": "frontend\\src\\lib\\logger.ts",
+      "label": "logger.ts",
+      "group": "frontend",
+      "size": 17.12
+    },
+    {
+      "id": "frontend\\src\\lib\\logStore.ts",
+      "label": "logStore.ts",
+      "group": "frontend",
+      "size": 11.42
+    },
+    {
+      "id": "frontend\\src\\lib\\stream.ts",
+      "label": "stream.ts",
+      "group": "frontend",
+      "size": 8.95
+    },
+    {
+      "id": "frontend\\src\\lib\\utils.ts",
+      "label": "utils.ts",
+      "group": "frontend",
+      "size": 1.66
+    },
+    {
+      "id": "frontend\\src\\lib\\firebase\\server.ts",
+      "label": "server.ts",
+      "group": "frontend",
+      "size": 7.18
+    },
+    {
+      "id": "frontend\\src\\lib\\trpc\\client.ts",
+      "label": "client.ts",
+      "group": "frontend",
+      "size": 2.38
+    },
+    {
+      "id": "frontend\\src\\lib\\trpc\\router.ts",
+      "label": "router.ts",
+      "group": "frontend",
+      "size": 44.76
+    },
+    {
+      "id": "frontend\\src\\lib\\trpc\\trpc.ts",
+      "label": "trpc.ts",
+      "group": "frontend",
+      "size": 6.78
+    },
+    {
+      "id": "scratch\\check_routes.py",
+      "label": "check_routes.py",
+      "group": "frontend",
+      "size": 2.74
+    },
+    {
+      "id": "scratch\\update_env.py",
+      "label": "update_env.py",
+      "group": "frontend",
+      "size": 6.62
+    },
+    {
+      "id": "them\\generator.py",
+      "label": "generator.py",
+      "group": "frontend",
+      "size": 30.36
+    },
+    {
+      "id": "windows_agent\\src\\windows_agent\\__init__.py",
+      "label": "__init__.py",
+      "group": "frontend",
+      "size": 0.0
+    },
+    {
+      "id": "windows_agent\\src\\windows_agent\\handlers\\__init__.py",
+      "label": "__init__.py",
+      "group": "frontend",
+      "size": 0.0
+    },
+    {
+      "id": "windows_agent\\src\\windows_agent\\server\\__init__.py",
+      "label": "__init__.py",
+      "group": "frontend",
+      "size": 0.0
+    }
+  ],
+  "links": []
+}
