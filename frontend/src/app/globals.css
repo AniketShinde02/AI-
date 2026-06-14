@@ -5,43 +5,31 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* === Nexus 2.0 — always dark, no class toggle needed === */
-  --background: #070708;
-  --foreground: oklch(0.985 0 0);
+  /* === Nexus Main OS — Shadow Monarch Theme === */
+  --background: #06060c;
+  --foreground: #ffffff;
 
-  --card-bg: rgba(255, 255, 255, 0.015);
-  --border: rgba(255, 255, 255, 0.06);
-  --accent: #6366f1;
-  --accent-glow: rgba(99, 102, 241, 0.15);
+  --card-bg: rgba(6, 6, 12, 0.8);
+  --border: rgba(97, 55, 255, 0.2);
+  --accent: #6137FF;
+  --accent-glow: rgba(0, 255, 255, 0.15);
+  --cyan: #00FFFF;
 
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --card: #06060c;
+  --card-foreground: #ffffff;
+  --popover: #06060c;
+  --popover-foreground: #ffffff;
+  --primary: #6137FF;
+  --primary-foreground: #ffffff;
+  --secondary: rgba(97, 55, 255, 0.1);
+  --secondary-foreground: #ffffff;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #a1a1aa;
+  --accent-foreground: #ffffff;
+  --destructive: #ff3366;
+  --input: rgba(255, 255, 255, 0.05);
+  --ring: #00FFFF;
+  --radius: 0; /* Strict sharp edges */
 }
 
 @theme {
@@ -50,7 +38,7 @@
 }
 
 html, body {
-  background-color: #070708;
+  background-color: #06060c;
   color: rgba(255, 255, 255, 0.85);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   margin: 0;
@@ -60,26 +48,41 @@ html, body {
   @apply antialiased;
 }
 
+/* Base structural clip-path for Shadow Monarch UI */
+.clip-cut {
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
+}
+.clip-cut-sm {
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+}
+
 .glass {
   background: var(--card-bg);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border);
-  border-radius: 1.5rem;
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
 }
 
 .glass:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.025);
+  border-color: rgba(0, 255, 255, 0.3);
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.05);
 }
 
-.main-container {
+.main-layout {
   height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.main-grid {
+  flex: 1;
   display: grid;
   grid-template-columns: 280px 1fr 360px;
   gap: 0.75rem;
-  padding: 0.75rem;
+  min-height: 0;
 }
 
 .scroll-hide {

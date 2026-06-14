@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useNexus } from "@/contexts/NexusContext";
+import { Activity, Wifi, Globe } from "lucide-react";
 
 export function SystemTelemetry() {
   const { systemMetrics } = useNexus();
@@ -16,82 +17,119 @@ export function SystemTelemetry() {
   const rx = systemMetrics?.network?.rx || 0;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       {/* CORE METRICS */}
-      <div className="glass p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">
-            Core System
+      <div className="bg-[#06060c] border border-[#6137FF]/30 p-3 space-y-2 clip-cut shadow-[0_0_15px_rgba(97,55,255,0.1)] relative">
+        <div className="absolute top-0 right-0 w-16 h-16 bg-[radial-gradient(circle_at_top_right,rgba(0,255,255,0.1)_0%,transparent_70%)] pointer-events-none"></div>
+        
+        <div className="flex items-center justify-between border-b border-white/5 pb-1.5">
+          <span className="text-[9px] font-quantico font-bold uppercase tracking-[0.3em] text-[#00FFFF]">
+            Core_Metrics
           </span>
-          <div className={`status-dot ${systemMetrics ? "animate-pulse bg-indigo-500" : "bg-zinc-600"}`}></div>
+          <div className={`w-1.5 h-1.5 rounded-sm transform rotate-45 ${systemMetrics ? "animate-pulse bg-[#00FFFF] shadow-[0_0_8px_#00FFFF]" : "bg-zinc-600"}`}></div>
         </div>
         
         <div className="grid grid-cols-2 gap-2">
           {/* CPU Load */}
-          <div className="bg-black/60 border border-white/10 p-3 rounded-lg flex flex-col justify-between relative overflow-hidden group hover:border-indigo-500/30 transition-colors cursor-default">
-            <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono mb-1">CPU_LOAD</span>
+          <div className="bg-black/80 border border-white/10 p-2 flex flex-col justify-between relative overflow-hidden group hover:border-[#00FFFF]/50 transition-colors cursor-default clip-cut-sm">
+            <div className="absolute inset-0 bg-[#00FFFF]/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            <span className="text-[7px] font-quantico text-[#00FFFF]/70 uppercase tracking-[0.2em] mb-1">CPU_LOAD</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-black text-indigo-400 font-mono tracking-tighter drop-shadow-[0_0_8px_rgba(99,102,241,0.3)]">
+              <span className="text-xl font-mono tracking-tighter text-white drop-shadow-[0_0_8px_rgba(0,255,255,0.5)]">
                 {cpu.toFixed(1)}
               </span>
-              <span className="text-[8px] font-bold text-indigo-500/50">%</span>
+              <span className="text-[8px] font-bold text-[#00FFFF]/50">%</span>
+            </div>
+            {/* Minimal progress bar */}
+            <div className="h-0.5 w-full bg-white/5 mt-1.5 overflow-hidden relative">
+              <div className="absolute top-0 left-0 h-full bg-[#00FFFF]" style={{ width: `${cpu}%` }}></div>
             </div>
           </div>
 
           {/* Memory Allocation */}
-          <div className="bg-black/60 border border-white/10 p-3 rounded-lg flex flex-col justify-between relative overflow-hidden group hover:border-purple-500/30 transition-colors cursor-default">
-            <div className="absolute inset-0 bg-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono mb-1">MEM_ALLOC</span>
+          <div className="bg-black/80 border border-white/10 p-2 flex flex-col justify-between relative overflow-hidden group hover:border-[#6137FF]/50 transition-colors cursor-default clip-cut-sm">
+            <div className="absolute inset-0 bg-[#6137FF]/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            <span className="text-[7px] font-quantico text-[#6137FF]/70 uppercase tracking-[0.2em] mb-1">MEM_ALLOC</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-black text-purple-400 font-mono tracking-tighter drop-shadow-[0_0_8px_rgba(168,85,247,0.3)]">
+              <span className="text-xl font-mono tracking-tighter text-white drop-shadow-[0_0_8px_rgba(97,55,255,0.5)]">
                 {mem.toFixed(1)}
               </span>
-              <span className="text-[8px] font-bold text-purple-500/50">%</span>
+              <span className="text-[8px] font-bold text-[#6137FF]/50">%</span>
+            </div>
+            {/* Minimal progress bar */}
+            <div className="h-0.5 w-full bg-white/5 mt-1.5 overflow-hidden relative">
+              <div className="absolute top-0 left-0 h-full bg-[#6137FF]" style={{ width: `${mem}%` }}></div>
             </div>
           </div>
 
           {/* Thermal State (Spans full width at the bottom) */}
-          <div className="col-span-2 bg-black/60 border border-white/10 p-3 rounded-lg flex items-center justify-between relative overflow-hidden group hover:border-fuchsia-500/30 transition-colors cursor-default">
-            <div className="absolute inset-0 bg-fuchsia-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="col-span-2 bg-black/80 border border-white/10 p-2 flex items-center justify-between relative overflow-hidden group hover:border-[#ff3366]/40 transition-colors cursor-default clip-cut-sm">
+            <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
             <div className="flex flex-col">
-              <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono mb-1">THERMAL_STATE</span>
-              <span className="text-[9px] font-bold tracking-widest text-emerald-400">
-                {temp > 80 ? <span className="text-red-500 animate-pulse">CRITICAL</span> : 'STABLE'}
+              <span className="text-[7px] font-quantico text-zinc-500 uppercase tracking-[0.2em]">THERMAL_STATE</span>
+              <span className={`text-[8px] font-bold tracking-widest ${temp > 80 ? 'text-[#ff3366] animate-pulse drop-shadow-[0_0_5px_#ff3366]' : 'text-zinc-400'}`}>
+                {temp > 80 ? 'CRITICAL' : 'STABLE'}
               </span>
             </div>
             <div className="flex items-baseline gap-1">
-              <span className={`text-3xl font-black font-mono tracking-tighter ${temp > 80 ? 'text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'text-fuchsia-400 drop-shadow-[0_0_8px_rgba(217,70,239,0.5)]'}`}>
+              <span className={`text-2xl font-mono tracking-tighter text-white ${temp > 80 ? 'drop-shadow-[0_0_10px_#ff3366]' : ''}`}>
                 {temp.toFixed(1)}
               </span>
-              <span className="text-xs font-bold text-fuchsia-500/50">°C</span>
+              <span className="text-[9px] font-bold text-zinc-600">°C</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* NETWORK TELEMETRY */}
-      <div className="glass p-4 space-y-4">
-        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">
-          Network Telemetry
-        </span>
+      <div className="bg-[#06060c] border border-[#00FFFF]/20 p-3 clip-cut shadow-[0_0_15px_rgba(0,255,255,0.05)] relative overflow-hidden group">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(0,255,255,0.05)_0%,transparent_70%)] pointer-events-none"></div>
+
+        <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-2 relative z-10">
+          <div className="flex items-center gap-2">
+            <Activity size={10} className="text-[#00FFFF]" />
+            <span className="text-[9px] font-quantico font-bold uppercase tracking-[0.2em] text-zinc-300">
+              Network Telemetry
+            </span>
+          </div>
+          <div className="px-2 py-0.5 border border-[#00FFFF]/30 rounded-full bg-[#00FFFF]/10 shadow-[0_0_10px_rgba(0,255,255,0.1)]">
+            <span className="text-[7px] font-mono font-bold text-[#00FFFF] tracking-widest uppercase">Secure Uplink</span>
+          </div>
+        </div>
         
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-black/40 border border-white/5 p-2 rounded-lg flex flex-col gap-1">
-            <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono">LATENCY</span>
-            <span className="text-xs font-bold text-indigo-400 font-mono">{ping}ms</span>
+        <div className="grid grid-cols-3 gap-2 mb-3 relative z-10">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[6px] font-mono text-zinc-500 uppercase tracking-widest">WSS Latency</span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <Wifi size={10} className="text-[#00FFFF]" />
+              <span className="text-[10px] font-bold text-white font-mono">{ping}ms</span>
+            </div>
           </div>
-          <div className="bg-black/40 border border-white/5 p-2 rounded-lg flex flex-col gap-1">
-            <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono">RATE</span>
-            <span className="text-xs font-bold text-purple-400 font-mono">{rate.toFixed(1)}Mb/s</span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[6px] font-mono text-zinc-500 uppercase tracking-widest">Packet Rate</span>
+            <span className="text-[10px] font-bold text-white font-mono mt-0.5">{rate.toFixed(2)} MB/s</span>
           </div>
-          <div className="bg-black/40 border border-white/5 p-2 rounded-lg flex flex-col gap-1">
-            <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono">PACKETS_TX</span>
-            <span className="text-xs font-bold text-zinc-300 font-mono">{tx}</span>
+          <div className="flex flex-col gap-0.5 items-end">
+            <span className="text-[6px] font-mono text-zinc-500 uppercase tracking-widest">Routing</span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] font-bold text-white font-mono uppercase">Global</span>
+              <Globe size={10} className="text-[#00FFFF]" />
+            </div>
           </div>
-          <div className="bg-black/40 border border-white/5 p-2 rounded-lg flex flex-col gap-1">
-            <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-mono">PACKETS_RX</span>
-            <span className="text-xs font-bold text-zinc-300 font-mono">{rx}</span>
+        </div>
+
+        <div className="flex flex-col gap-1.5 relative z-10">
+          <div className="flex items-center gap-2">
+            <span className="text-[6px] font-mono text-zinc-500 w-3">TX</span>
+            <div className="flex-1 h-1 bg-black border border-white/5 overflow-hidden">
+              <div className="h-full bg-[#00FFFF] shadow-[0_0_5px_#00FFFF]" style={{ width: `${Math.min((tx / 100) * 100, 100)}%` }}></div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[6px] font-mono text-zinc-500 w-3">RX</span>
+            <div className="flex-1 h-1 bg-black border border-white/5 overflow-hidden">
+              <div className="h-full bg-[#00FFFF]/60 shadow-[0_0_5px_#00FFFF]" style={{ width: `${Math.min((rx / 100) * 100, 100)}%` }}></div>
+            </div>
           </div>
         </div>
       </div>

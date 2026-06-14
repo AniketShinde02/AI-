@@ -2,8 +2,8 @@ import os
 from dotenv import load_dotenv
 from getstream import Stream
 
-# Load local backend .env specifically
-env_path = os.path.join(os.path.dirname(__file__), '.env')
+# Load main backend .env specifically
+env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
 load_dotenv(dotenv_path=env_path)
 
 # Stream API

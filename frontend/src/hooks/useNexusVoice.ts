@@ -108,11 +108,16 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
       return;
     }
 
+    let sessionId = typeof window !== 'undefined' ? localStorage.getItem('nexus_session_id') : null;
+    if (!sessionId && typeof window !== 'undefined') {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem('nexus_session_id', sessionId);
+    }
+
     isConnectingRef.current = true;
     connectionStateRef.current = reconnectAttemptsRef.current > 0 ? "reconnecting" : "connecting";
-    const wsUrl = "ws://localhost:8000/ws/nexus";
-    console.log(`[Nexus WS] ${connectionStateRef.current === "reconnecting" ? "Reconnecting" : "Connecting"} to: ${wsUrl}`);
-    
+    const wsUrl = `ws://localhost:8000/ws/nexus?session_id=${sessionId}`;
+    logger.info(`[WS] ${connectionStateRef.current === "reconnecting" ? "Reconnecting" : "Connecting"} to: ${wsUrl}`);
     if (socketRef.current) {
       socketRef.current.onclose = null;
       socketRef.current.close();
@@ -198,6 +203,8 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
             onTranscriptRef.current?.(msg.text);
           } else if (msg.type === 'agent_partial') {
             onAgentMessageRef.current?.(msg.text, !!msg.is_paragraph_end);
+          } else if (msg.type === 'agent_message') {
+            onAgentMessageRef.current?.(msg.text, true);
           } else if (msg.type === 'interrupt') {
             // Immediately stop playback on barge-in
             activeAudioNodesRef.current.forEach((node) => {
@@ -269,12 +276,10 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
   // Keep connectRef in sync so the reconnect timer always calls the live function
   useEffect(() => { connectRef.current = connect; }, [connect]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      disconnect();
-    };
-  }, [disconnect]);
+  // NOTE: No cleanup-on-unmount disconnect here.
+  // VoiceProvider is mounted at app root and never unmounts.
+  // Cleanup on unmount would fire during React StrictMode double-invoke
+  // and cause reconnect loops. Manual disconnect() is still available.
 
   const startListening = useCallback(async () => {
     try {
@@ -283,16 +288,21 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
           sampleRate: 16000,
         });
         audioContextRef.current = ctx;
-        
-        // Load worklets
-        workletLoadedRef.current = ctx.audioWorklet.addModule('/worklets/voice-processor.js');
-      }
-      if (workletLoadedRef.current) {
-        await workletLoadedRef.current;
       }
       
       const audioCtx = audioContextRef.current;
-      if (audioCtx.state === 'suspended') await audioCtx.resume();
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
+      if (!workletLoadedRef.current) {
+        workletLoadedRef.current = audioCtx.audioWorklet.addModule('/worklets/voice-processor.js').catch(e => {
+          workletLoadedRef.current = null;
+          throw e;
+        });
+      }
+      
+      await workletLoadedRef.current;
 
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {

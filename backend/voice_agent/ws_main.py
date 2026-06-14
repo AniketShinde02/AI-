@@ -40,7 +40,9 @@ import core.rag_oracle as rag_oracle_module
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nexus.ws")
 
-load_dotenv()
+from dotenv import load_dotenv, find_dotenv
+# Automatically find .env in parent directories
+load_dotenv(find_dotenv(usecwd=True))
 
 # Import config
 import config
@@ -51,8 +53,20 @@ llm_provider: Optional[GroqLLM] = None
 tts_router: Optional[TTSProviderRouter] = None
 vad_model = None
 
+import pickle
+import os
+
 # Global state for greeting cache
 cached_greeting_pcm: list = []
+CACHE_FILE = "greeting_cache.pkl"
+
+if os.path.exists(CACHE_FILE):
+    try:
+        with open(CACHE_FILE, "rb") as f:
+            cached_greeting_pcm = pickle.load(f)
+            print("✅ Loaded cached greeting from disk.")
+    except Exception as e:
+        print(f"❌ Failed to load greeting cache: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -85,10 +99,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.get("/")
+async def root():
+    """Health check — stops browser probe 404 log noise."""
+    return {"status": "ok", "service": "Nexus Voice Backend", "version": "1.0.0"}
+
+@app.get("/health")
+async def health_check():
+    """Explicit health endpoint for monitoring."""
+    return {"status": "ok", "providers": {
+        "stt": stt_provider is not None,
+        "llm": llm_provider is not None,
+        "tts": tts_router is not None,
+        "vad": vad_model is not None,
+    }}
+
 @app.get("/memory")
 async def get_memory_api():
     """Returns the long-term persistent user memory."""
     return load_memory()
+
 
 @app.post("/execute-tool")
 async def execute_tool(request: dict):
@@ -338,7 +369,7 @@ class VoiceSession:
 
                         # Send final remaining buffer for this sentence — never mark as is_last
                         # because more sentences might be in the queue.
-                        if audio_buffer and self.is_connected and turn_id == self.current_turn_id:
+                        if self.is_connected and turn_id == self.current_turn_id:
                             self.current_chunk_index += 1
                             logger.info(f"📤 [Worker] Final chunk {self.current_chunk_index} for Turn {turn_id} ({len(audio_buffer)} bytes)")
                             await self.safe_send_json({
@@ -627,6 +658,7 @@ class VoiceSession:
     async def greet(self):
         """Sends an initial greeting when connected."""
         global cached_greeting_pcm
+        global greeting_lock
         
         if self.has_greeted:
             logger.info("👋 Skipping greeting (already greeted this session)")
@@ -643,88 +675,97 @@ class VoiceSession:
             greeting_turn_id = 0
             await self.safe_send_json({"type": "agent_message", "text": text})
 
-            if cached_greeting_pcm:
-                logger.info("👋 Sending cached greeting PCM")
-                for i, chunk in enumerate(cached_greeting_pcm):
-                    if not self.is_connected: break
-                    await self.safe_send_json({
-                        "type": "audio_chunk",
-                        "data": base64.b64encode(chunk).decode('utf-8'),
-                        "meta": {"turn_id": greeting_turn_id, "chunk_index": i}
-                    })
-                    self.last_agent_speech_time = time.time()
-                
-                if self.is_connected:
-                    await self.safe_send_json({"type": "tts_end", "turn_id": greeting_turn_id})
-                
-                self.has_greeted = True
-                return
-
-            # Synthesize and cache
-            full_pcm = []
-            if tts_router is not None:
-                # Wait for provider readiness (Cartesia or Kokoro)
-                if not await tts_router.wait_until_ready(timeout=5.0):
-                    logger.error("❌ [Pipeline] TTS providers failed to become ready in time.")
+            async with greeting_lock:
+                if cached_greeting_pcm:
+                    logger.info("👋 Sending cached greeting PCM")
+                    for i, chunk in enumerate(cached_greeting_pcm):
+                        if not self.is_connected: break
+                        await self.safe_send_json({
+                            "type": "audio_chunk",
+                            "data": base64.b64encode(chunk).decode('utf-8'),
+                            "meta": {"turn_id": greeting_turn_id, "chunk_index": i}
+                        })
+                        self.last_agent_speech_time = time.time()
+                    
+                    if self.is_connected:
+                        await self.safe_send_json({"type": "tts_end", "turn_id": greeting_turn_id})
+                    
+                    self.has_greeted = True
                     return
 
-                audio_gen = await tts_router.stream_audio(
-                    text,
-                    provider="gemini",
-                    gender=self.selected_persona,
-                    language="en"
-                )
-                if audio_gen:
-                    idx = 0
-                    audio_buffer = b""
-                    BUFFER_SIZE = 9600  # 200ms @ 24kHz s16
+                # Synthesize and cache
+                full_pcm = []
+                if tts_router is not None:
+                    # Wait for provider readiness (Cartesia or Kokoro)
+                    if not await tts_router.wait_until_ready(timeout=5.0):
+                        logger.error("❌ [Pipeline] TTS providers failed to become ready in time.")
+                        return
 
-                    async for pcm_data in audio_gen:
-                        if not self.is_connected: break
+                    audio_gen = await tts_router.stream_audio(
+                        text,
+                        provider="gemini",
+                        gender=self.selected_persona,
+                        language="en"
+                    )
+                    if audio_gen:
+                        idx = 0
+                        audio_buffer = b""
+                        BUFFER_SIZE = 9600  # 200ms @ 24kHz s16
 
-                        audio_buffer += pcm_data.samples.tobytes()
+                        async for pcm_data in audio_gen:
+                            if not self.is_connected: break
 
-                        if len(audio_buffer) >= BUFFER_SIZE:
+                            audio_buffer += pcm_data.samples.tobytes()
+
+                            if len(audio_buffer) >= BUFFER_SIZE:
+                                full_pcm.append(audio_buffer)
+                                logger.info(f"📤 [Greeting] Chunk {idx} ({len(audio_buffer)} bytes)")
+                                await self.safe_send_json({
+                                    "type": "audio_chunk",
+                                    "data": base64.b64encode(audio_buffer).decode('utf-8'),
+                                    "meta": {
+                                        "turn_id": greeting_turn_id,
+                                        "chunk_index": idx,
+                                        "is_last": False
+                                    }
+                                })
+                                audio_buffer = b""
+                                idx += 1
+                                self.last_agent_speech_time = time.time()
+
+                        # Final remaining buffer
+                        if audio_buffer and self.is_connected:
                             full_pcm.append(audio_buffer)
-                            logger.info(f"📤 [Greeting] Chunk {idx} ({len(audio_buffer)} bytes)")
+                            logger.info(f"📤 [Greeting] Final chunk {idx} ({len(audio_buffer)} bytes)")
                             await self.safe_send_json({
                                 "type": "audio_chunk",
                                 "data": base64.b64encode(audio_buffer).decode('utf-8'),
                                 "meta": {
                                     "turn_id": greeting_turn_id,
                                     "chunk_index": idx,
-                                    "is_last": False
+                                    "is_last": True
                                 }
                             })
-                            audio_buffer = b""
-                            idx += 1
                             self.last_agent_speech_time = time.time()
-
-                    # Final remaining buffer
-                    if audio_buffer and self.is_connected:
-                        full_pcm.append(audio_buffer)
-                        logger.info(f"📤 [Greeting] Final chunk {idx} ({len(audio_buffer)} bytes)")
-                        await self.safe_send_json({
-                            "type": "audio_chunk",
-                            "data": base64.b64encode(audio_buffer).decode('utf-8'),
-                            "meta": {
-                                "turn_id": greeting_turn_id,
-                                "chunk_index": idx,
-                                "is_last": True
-                            }
-                        })
-                        self.last_agent_speech_time = time.time()
-                    
-                    if self.is_connected:
-                        await self.safe_send_json({"type": "tts_end", "turn_id": greeting_turn_id})
                         
-                    cached_greeting_pcm = full_pcm
+                        if self.is_connected:
+                            await self.safe_send_json({"type": "tts_end", "turn_id": greeting_turn_id})
+                    else:
+                        logger.error("❌ [Pipeline] TTS provider is None during greeting")
+                    
+                    if full_pcm:
+                        cached_greeting_pcm = full_pcm
+                        try:
+                            with open(CACHE_FILE, "wb") as f:
+                                pickle.dump(cached_greeting_pcm, f)
+                        except Exception as e:
+                            logger.error(f"❌ Failed to save greeting cache: {e}")
+                    else:
+                        logger.warning("⚠️ No TTS audio generated, not updating cache.")
+                        
                     self.has_greeted = True
-            else:
-                logger.error("❌ [Pipeline] TTS provider is None during greeting")
-            
-            cached_greeting_pcm = full_pcm
-            self.has_greeted = True
+                else:
+                    logger.error("❌ [Pipeline] TTS router is None during greeting")
         except WebSocketDisconnect:
             logger.warning("🔌 Client disconnected during greeting")
             self.is_connected = False
@@ -994,12 +1035,27 @@ class VoiceSession:
             self.llm_is_streaming = False
             logger.info(f"🧠 [Turn {turn_id}] LLM stream finished.")
 
+active_sessions = {}
+greeting_lock = asyncio.Lock()
+
 @app.websocket("/ws/nexus")
 async def websocket_endpoint(websocket: WebSocket):
-    logger.info(f"🔌 Incoming WebSocket connection from {websocket.client}")
+    session_id = websocket.query_params.get("session_id")
+    logger.info(f"🔌 Incoming WebSocket connection from {websocket.client} with session_id: {session_id}")
     await websocket.accept()
     logger.info("🔌 WebSocket connected and accepted")
-    session = VoiceSession(websocket)
+    
+    if session_id and session_id in active_sessions:
+        session = active_sessions[session_id]
+        session.websocket = websocket
+        session.is_connected = True
+        logger.info(f"♻️ Resuming active session {session_id}")
+    else:
+        session = VoiceSession(websocket)
+        if session_id:
+            active_sessions[session_id] = session
+            logger.info(f"🆕 Created new session {session_id}")
+
     
     try:
         # 5. Startup Greeting
@@ -1008,15 +1064,17 @@ async def websocket_endpoint(websocket: WebSocket):
         while session.is_connected:
             try:
                 data = await websocket.receive()
+                if "bytes" not in data: # Prevent logging massive binary payloads
+                    logger.info(f"🔍 RAW WS RECEIVE: {data}")
             except (WebSocketDisconnect, RuntimeError):
                 # RuntimeError = "Cannot call receive once a disconnect message has been received"
                 break
             
             if "disconnect" in data:
                 break
-            elif "bytes" in data:
+            elif "bytes" in data and data["bytes"] is not None:
                 await session.process_audio(data["bytes"])
-            elif "text" in data:
+            elif "text" in data and data["text"] is not None:
                 msg = json.loads(data["text"])
                 if msg.get("type") == "ping":
                     await session.safe_send_json({
@@ -1068,7 +1126,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         logger.info("🔌 WebSocket disconnected cleanly")
     except Exception as e:
-        logger.error(f"❌ WebSocket Error: {e}")
+        logger.error(f"❌ WebSocket Error: {e}", exc_info=True)
     finally:
         await session.stop()
         logger.info("🔌 Session cleaned up")

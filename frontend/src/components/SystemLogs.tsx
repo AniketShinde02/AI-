@@ -79,8 +79,8 @@ export function SystemLogs({ variant = 'minimal', maxHeight = '100%' }: SystemLo
       >
         {logs.length === 0 && (
           <div className="flex gap-2 opacity-40">
-            <span className="text-indigo-500">nexus@system:~$</span>
-            <span>standing by...</span>
+            <span className="text-[#6137FF] drop-shadow-[0_0_5px_#6137FF]">nexus@shadow:~$</span>
+            <span className="text-zinc-500">standing by...</span>
           </div>
         )}
         {logs.map((log) => (
@@ -90,52 +90,55 @@ export function SystemLogs({ variant = 'minimal', maxHeight = '100%' }: SystemLo
             <span className="text-zinc-300">{log.message}</span>
           </div>
         ))}
-        <div className="flex gap-2 items-center text-indigo-500 mt-2">
-          <span>nexus@system:~$</span>
-          <div className="w-1.5 h-3 bg-indigo-500 animate-pulse"></div>
+        <div className="flex gap-2 items-center text-[#6137FF] mt-2">
+          <span className="drop-shadow-[0_0_5px_#6137FF]">nexus@shadow:~$</span>
+          <div className="w-1.5 h-3 bg-[#00FFFF] animate-pulse shadow-[0_0_8px_#00FFFF]"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-black/40">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/[0.02]">
-        <div className="flex items-center gap-2">
+    <div className="flex flex-col h-full overflow-hidden bg-[#06060c]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#00FFFF]/20 bg-black/60 shadow-[0_0_15px_rgba(0,0,0,0.8)] z-10 relative">
+        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#6137FF]/50 to-transparent"></div>
+        <div className="flex items-center gap-3">
           <div className="flex gap-1.5 mr-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/40" />
-            <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-500/40" />
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/20 border border-emerald-500/40" />
+            <div className="w-2.5 h-2.5 bg-[#ff3366] transform rotate-45 shadow-[0_0_5px_#ff3366]" />
+            <div className="w-2.5 h-2.5 bg-[#00FFFF] transform rotate-45 shadow-[0_0_5px_#00FFFF]" />
+            <div className="w-2.5 h-2.5 bg-[#6137FF] transform rotate-45 shadow-[0_0_5px_#6137FF]" />
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Console_Nexus_v1.0</span>
+          <span className="text-[10px] font-quantico font-bold uppercase tracking-[0.3em] text-[#00FFFF]">Console_Shadow_v2.0</span>
         </div>
         <button 
           onClick={() => logStore.clear()}
-          className="p-1 hover:bg-white/5 rounded text-zinc-600 hover:text-red-400 transition-colors"
+          className="p-1.5 hover:bg-[#ff3366]/20 bg-black border border-white/5 rounded text-zinc-500 hover:text-[#ff3366] hover:border-[#ff3366]/50 transition-all clip-cut-sm"
         >
-          <Trash2 size={13} />
+          <Trash2 size={12} />
         </button>
       </div>
       
       <div 
         ref={scrollRef}
-        className={`${terminalBase} p-2`}
+        className={`${terminalBase} p-2 relative z-0`}
       >
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(97,55,255,0.03)_0%,transparent_100%)] pointer-events-none"></div>
+
         {logs.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center opacity-20 gap-2 font-sans">
-            <Terminal size={24} />
-            <span className="text-[10px] font-bold uppercase tracking-widest">No Log Entries</span>
+          <div className="h-full flex flex-col items-center justify-center opacity-30 gap-3 font-sans">
+            <Terminal size={32} className="text-[#6137FF]" />
+            <span className="text-[10px] font-quantico font-bold uppercase tracking-[0.3em] text-zinc-500">No Log Entries</span>
           </div>
         )}
-        <div className="divide-y divide-white/[0.02]">
+        <div className="divide-y divide-white/[0.05] relative z-10">
           {logs.map((log) => (
             <div 
               key={log.id} 
-              className={`py-1 px-2 hover:bg-white/[0.02] transition-all cursor-pointer group border-l-2 ${expandedLogs.has(log.id) ? 'bg-white/[0.03] border-indigo-500/40' : 'border-transparent'}`}
+              className={`py-2 px-3 hover:bg-[#6137FF]/10 transition-all cursor-pointer group border-l-2 clip-cut-sm mb-1 ${expandedLogs.has(log.id) ? 'bg-black/60 border-[#00FFFF] shadow-[inset_0_0_10px_rgba(0,255,255,0.1)]' : 'border-transparent hover:border-[#6137FF]/50'}`}
               onClick={() => toggleExpand(log.id)}
             >
-              <div className="flex items-start gap-2.5">
-                <span className="text-[9px] text-zinc-600 tabular-nums shrink-0 mt-1 opacity-50 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-start gap-3">
+                <span className="text-[9px] text-[#6137FF] tabular-nums shrink-0 mt-1 opacity-60 group-hover:opacity-100 transition-opacity font-quantico">
                   {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </span>
                 
@@ -143,10 +146,10 @@ export function SystemLogs({ variant = 'minimal', maxHeight = '100%' }: SystemLo
                   {getLevelIcon(log.level)}
                 </div>
 
-                <span className={`text-zinc-300 break-words flex-1 tracking-tight ${log.level === 'ai' ? 'italic text-purple-200/90' : ''}`}>
+                <span className={`text-zinc-300 break-words flex-1 tracking-wide font-mono text-[11px] ${log.level === 'ai' ? 'italic text-[#00FFFF]/90' : ''}`}>
                   {log.message}
                   {log.data && !expandedLogs.has(log.id) && (
-                    <span className="ml-2 text-[9px] text-indigo-400/50 uppercase tracking-tighter font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="ml-2 text-[9px] text-[#00FFFF] uppercase tracking-widest font-quantico font-bold opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-[0_0_5px_#00FFFF]">
                       DATA+
                     </span>
                   )}
@@ -154,8 +157,8 @@ export function SystemLogs({ variant = 'minimal', maxHeight = '100%' }: SystemLo
               </div>
               
               {log.data && expandedLogs.has(log.id) && (
-                <div className="mt-2 ml-16 p-2.5 rounded bg-black/80 border border-white/5 overflow-hidden shadow-2xl">
-                  <pre className="text-[10px] text-zinc-400 overflow-x-auto whitespace-pre-wrap leading-relaxed scroll-hide font-mono">
+                <div className="mt-2 ml-16 p-3 bg-black border border-[#6137FF]/40 overflow-hidden shadow-[inset_0_0_15px_rgba(97,55,255,0.15)] clip-cut-sm">
+                  <pre className="text-[10px] text-[#00FFFF]/80 overflow-x-auto whitespace-pre-wrap leading-relaxed scroll-hide font-mono">
                     {JSON.stringify(log.data, null, 2)}
                   </pre>
                 </div>

@@ -61,7 +61,7 @@ class GeminiTTS(TTS):
                     try:
                         return self.client.models.generate_content(
                             model='gemini-2.5-flash-preview-tts',
-                            contents=text,
+                            contents=f"Generate audio from the following text transcript without any extra commentary:\n\n{text}",
                             config=types.GenerateContentConfig(
                                 response_modalities=["AUDIO"],
                                 speech_config=types.SpeechConfig(
@@ -80,21 +80,47 @@ class GeminiTTS(TTS):
                             if retries > max_retries:
                                 logger.error(f"❌ Gemini API Rate Limit Exceeded after {max_retries} retries.")
                                 raise e
-                            # Exponential backoff with jitter
-                            sleep_time = (2 ** retries) + random.uniform(0.1, 1.0)
+                            
+                            import re
+                            # Parse retry delay from Google API error (e.g. 'retryDelay': '33s' or 'retry in 2.06s')
+                            retry_delay = None
+                            match1 = re.search(r"retrydelay':\s*'(\d+)s'", err_str)
+                            match2 = re.search(r"retry in (\d+(?:\.\d+)?)s", err_str)
+                            if match1:
+                                retry_delay = float(match1.group(1))
+                            elif match2:
+                                retry_delay = float(match2.group(1))
+                                
+                            if retry_delay is not None:
+                                sleep_time = retry_delay + random.uniform(0.1, 1.0)
+                            else:
+                                # Exponential backoff with jitter (5s, 10s, 20s)
+                                sleep_time = (2 ** retries) * 5 + random.uniform(0.1, 1.0)
+                            
+                            if sleep_time > 65:
+                                logger.error(f"❌ Rate limit retry delay too long ({sleep_time:.2f}s). Failing.")
+                                raise e
+                                
                             logger.warning(f"⚠️ Gemini Rate Limit Hit (429)! Retrying in {sleep_time:.2f}s... (Attempt {retries}/{max_retries})")
                             time.sleep(sleep_time)
                         else:
                             raise e
             
             response = await asyncio.to_thread(fetch_tts)
+            
+            if not response:
+                logger.error("❌ GeminiTTS: API returned no response (None).")
+                return
 
             audio_bytes = None
-            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data and part.inline_data.data:
-                        audio_bytes = part.inline_data.data
-                        break
+            try:
+                if getattr(response, "candidates", None) and response.candidates[0].content and response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts:
+                        if getattr(part, "inline_data", None) and getattr(part.inline_data, "data", None):
+                            audio_bytes = part.inline_data.data
+                            break
+            except Exception as e:
+                logger.warning(f"⚠️ GeminiTTS: Failed to parse response candidates: {e}")
             
             if not audio_bytes:
                 logger.error("❌ GeminiTTS: No audio data returned by API.")

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from "react";
-import { useGeminiLive } from "@/hooks/useGeminiLive";
+import React, { createContext, useContext, useState, ReactNode, useCallback } from "react";
+import { useVoice } from "@/contexts/VoiceContext";
 
 interface Message {
   id: string;
@@ -26,7 +26,7 @@ interface NexusContextType {
   isChecking: boolean;
   setIsChecking: React.Dispatch<React.SetStateAction<boolean>>;
   voiceState: string;
-  systemMetrics: null; // Not available in Gemini Live mode
+  systemMetrics: any; // Real-time backend metrics via WebSocket
   
   // Chat State
   messages: Message[];
@@ -131,58 +131,26 @@ export function NexusProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const handleToolCall = useCallback(async (toolCall: any) => {
-    // Map tool name to UI state
-    let stateName = "RUNNING TOOL";
-    if (toolCall.name === "search_web") stateName = "SEARCHING WEB";
-    else if (toolCall.name === "consultOracle" || toolCall.name === "run_rag") stateName = "CONSULTING ORACLE";
-    else if (toolCall.name === "run_command") stateName = "EXECUTING COMMAND";
-    else if (toolCall.name === "update_preferences") stateName = "UPDATING MEMORY";
-    else if (toolCall.name === "get_user_memory") stateName = "RETRIEVING MEMORY";
-    else if (toolCall.name === "delete_user_preference") stateName = "DELETING MEMORY";
-    
-    setVoiceState(stateName);
-    try {
-      // Hardcoded fetch to FastAPI execute-tool for now
-      const res = await fetch("http://localhost:8000/execute-tool", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ functionCalls: [toolCall] })
-      });
-      const data = await res.json();
-      setVoiceState("thinking");
-      return data;
-    } catch (e) {
-      console.error(e);
-      setVoiceState("idle");
-      return { error: "Tool execution failed" };
-    }
-  }, []);
+
 
   const {
     isListening: voiceIsListening,
     micCaptured,
     isSpeaking,
-    connect,
-    disconnect,
+    systemMetrics,
     startListening,
     stopListening,
     setMicMuted,
     sendTextMessage,
-    setApiKey
-  } = useGeminiLive({
-    onTranscript: handleTranscript,
-    onAgentMessage: handleAgentMessage,
-    onToolCall: handleToolCall
-  });
+    setCallbacks
+  } = useVoice();
 
-  // Inject the Gemini API key once on mount
-  useEffect(() => {
-    const key = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
-    if (key) setApiKey(key);
-  }, [setApiKey]);
-
-  const systemMetrics = null; // Not available in Gemini Live mode
+  React.useEffect(() => {
+    setCallbacks({
+      onTranscript: handleTranscript,
+      onAgentMessage: handleAgentMessage,
+    });
+  }, [setCallbacks, handleTranscript, handleAgentMessage]);
 
   // Sync state
   React.useEffect(() => {
@@ -195,11 +163,6 @@ export function NexusProvider({ children }: { children: ReactNode }) {
     }
   }, [isSpeaking, voiceIsListening]);
 
-  // Connect once the API key has been injected (key is set synchronously in the effect above)
-  React.useEffect(() => {
-    connect();
-    return () => disconnect();
-  }, [connect, disconnect]);
 
   // Sync hook state with context state
   React.useEffect(() => {
@@ -211,11 +174,11 @@ export function NexusProvider({ children }: { children: ReactNode }) {
     setIsSending(true);
     addMessage({ role: "user", content });
     
-    // Send text directly to Gemini Live WebSocket
+    // Send text directly to the Python Nexus Voice Backend WebSocket
     sendTextMessage(content);
     setIsSending(false);
     
-    // Filter out empty streaming artifacts left by Gemini Live turn chunks
+    // Filter out empty streaming artifacts left by AI turn chunks
     setMessages(prev => prev.filter(m => m.content.trim() !== "" || m.role === "user"));
   }, [addMessage, isSending, sendTextMessage]);
 

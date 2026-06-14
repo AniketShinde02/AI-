@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Geist } from "next/font/google";
+import { Inter, Geist, Quantico } from "next/font/google";
 import "./globals.css";
 import "../bones/registry";
 
@@ -11,12 +11,18 @@ export const metadata: Metadata = {
 };
 
 import { Providers } from "@/components/Providers";
+import { VoiceProvider } from "@/contexts/VoiceContext";
 import { NexusStreamProvider } from "@/components/NexusStreamProvider";
 import { NexusProvider } from "@/contexts/NexusContext";
 import { cn } from "@/lib/utils";
+import { TopNav } from "@/components/layout/TopNav";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
-
+const quantico = Quantico({
+  weight: ['400', '700'],
+  subsets: ['latin'],
+  variable: '--font-quantico',
+});
 
 export default function RootLayout({
   children,
@@ -24,14 +30,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
-      <body className={`${inter.className} antialiased bg-neutral-950 text-white`} suppressHydrationWarning={true}>
+    <html lang="en" className={cn("font-sans", geist.variable, quantico.variable)}>
+      <body className={`${inter.className} antialiased bg-[#06060c] text-white`} suppressHydrationWarning={true}>
         <Providers>
-          <NexusStreamProvider>
-            <NexusProvider>
-              {children}
-            </NexusProvider>
-          </NexusStreamProvider>
+          <VoiceProvider>
+            <NexusStreamProvider>
+              <NexusProvider>
+                <div className="flex flex-col h-screen overflow-hidden max-w-[1800px] mx-auto w-full relative z-10">
+                  <TopNav />
+                  <div className="flex-1 overflow-hidden">
+                    {children}
+                  </div>
+                </div>
+              </NexusProvider>
+            </NexusStreamProvider>
+          </VoiceProvider>
         </Providers>
       </body>
     </html>

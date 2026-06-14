@@ -14,22 +14,22 @@ export function useGeminiLive({ onTranscript, onAgentMessage, onToolCall }: UseG
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [micCaptured, setMicCaptured] = useState(false);
   const recognitionRef = useRef<any>(null);
-  
+
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const micWorkletRef = useRef<AudioWorkletNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const workletLoadedRef = useRef<Promise<void> | null>(null);
-  
+
   const activeAudioNodesRef = useRef<AudioBufferSourceNode[]>([]);
   const nextStartTimeRef = useRef<number>(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  
+
   // Parser state for separating reasoning
   const isThinkingRef = useRef<boolean>(false);
   const textBufferRef = useRef<string>("");
   const hasEmittedThinkingRef = useRef<boolean>(false);
-  
+
   const apiKeyRef = useRef<string | null>(null);
 
   const setApiKey = useCallback((key: string) => {
@@ -40,7 +40,7 @@ export function useGeminiLive({ onTranscript, onAgentMessage, onToolCall }: UseG
     logger.info("[Gemini Live] Disconnecting...");
     setIsConnected(false);
     setIsListening(false);
-    
+
     if (socketRef.current) {
       socketRef.current.onclose = null;
       socketRef.current.close(1000, "Intentional disconnect");
@@ -51,26 +51,26 @@ export function useGeminiLive({ onTranscript, onAgentMessage, onToolCall }: UseG
       micStreamRef.current.getTracks().forEach(t => t.stop());
       micStreamRef.current = null;
     }
-    
+
     setMicCaptured(false);
 
     if (audioContextRef.current?.state !== 'closed') {
-      try { audioContextRef.current?.close(); } catch {}
+      try { audioContextRef.current?.close(); } catch { }
     }
-    
+
     activeAudioNodesRef.current.forEach(node => {
-      try { node.stop(); node.disconnect(); } catch {}
+      try { node.stop(); node.disconnect(); } catch { }
     });
     activeAudioNodesRef.current = [];
     nextStartTimeRef.current = 0;
-    
+
     isThinkingRef.current = false;
     textBufferRef.current = "";
     hasEmittedThinkingRef.current = false;
-    
+
     micWorkletRef.current?.disconnect();
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
+      try { recognitionRef.current.stop(); } catch { }
     }
   }, []);
 
@@ -96,14 +96,15 @@ export function useGeminiLive({ onTranscript, onAgentMessage, onToolCall }: UseG
           memoryText = `\n\n**USER PREFERENCES (LONG-TERM MEMORY):**\n${JSON.stringify(memory, null, 2)}\n\nIMPORTANT: Use these preferences to guide your behavior. Update them if the user asks you to remember something new.`;
         }
       } catch (e) {
-        console.warn("Failed to load memory:", e);
+        // Silently ignore if memory server is offline
       }
 
       const setupMsg = {
         setup: {
           model: 'models/gemini-2.5-flash-native-audio-preview-12-2025',
           systemInstruction: {
-            parts: [{ text: `You are Nexus, a highly intelligent, fast, and natural human-like chief-of-staff.
+            parts: [{
+              text: `You are Nexus, a highly intelligent, fast, and natural human-like chief-of-staff.
 Your voice must sound like a real person—conversational, confident, and slightly casual.
 
 **1. Tone & Vocabulary (CRITICAL):**
@@ -125,7 +126,8 @@ Your voice must sound like a real person—conversational, confident, and slight
 
 **4. Separation of Reasoning (CRITICAL):**
 - If you must process thoughts, plan, or analyze instructions before speaking, you MUST wrap that internal reasoning entirely within <think>...</think> XML tags.
-- NEVER output reasoning or chain-of-thought as plain text. Only the final spoken response should be outside the <think> tags.` + memoryText }]
+- NEVER output reasoning or chain-of-thought as plain text. Only the final spoken response should be outside the <think> tags.` + memoryText
+            }]
           },
           generationConfig: {
             speechConfig: {
@@ -302,17 +304,17 @@ Your voice must sound like a real person—conversational, confident, and slight
       try {
         let msgStr = event.data;
         if (event.data instanceof Blob) {
-            msgStr = await event.data.text();
+          msgStr = await event.data.text();
         }
         const msg = JSON.parse(msgStr);
-        
+
         if (msg.serverContent) {
           const content = msg.serverContent;
-          
+
           if (content.interrupted) {
             logger.info("[Gemini Live] 💥 Interrupted");
             activeAudioNodesRef.current.forEach(node => {
-              try { node.stop(); node.disconnect(); } catch {}
+              try { node.stop(); node.disconnect(); } catch { }
             });
             activeAudioNodesRef.current = [];
             nextStartTimeRef.current = 0;
@@ -329,7 +331,7 @@ Your voice must sound like a real person—conversational, confident, and slight
                   bytes[i] = binaryString.charCodeAt(i);
                 }
                 const int16Array = new Int16Array(bytes.buffer);
-                
+
                 const float32Data = new Float32Array(int16Array.length);
                 for (let i = 0; i < int16Array.length; i++) {
                   float32Data[i] = int16Array[i] / 32768.0;
@@ -348,19 +350,19 @@ Your voice must sound like a real person—conversational, confident, and slight
 
                   const currentTime = ctx.currentTime;
                   if (nextStartTimeRef.current < currentTime) {
-                      nextStartTimeRef.current = currentTime + 0.02; 
+                    nextStartTimeRef.current = currentTime + 0.02;
                   }
 
                   source.start(nextStartTimeRef.current);
                   nextStartTimeRef.current += buffer.duration;
 
                   activeAudioNodesRef.current.push(source);
-                  
+
                   if (!isSpeaking) {
                     setIsSpeaking(true);
                     traceStore.addTrace('🔊', 'Generating Voice');
                   }
-                  
+
                   source.onended = () => {
                     activeAudioNodesRef.current = activeAudioNodesRef.current.filter((n) => n !== source);
                     if (activeAudioNodesRef.current.length === 0) {
@@ -438,7 +440,7 @@ Your voice must sound like a real person—conversational, confident, and slight
           }
         } else if (msg.toolCall) {
           logger.info("[Gemini Live] 🛠️ Tool Call Request:", msg.toolCall);
-          
+
           msg.toolCall.functionCalls.forEach((call: any) => {
             if (call.name === "search_web") traceStore.addTrace('🔍', 'Searching Web');
             else if (call.name === "consultOracle" || call.name === "run_rag") traceStore.addTrace('📚', 'Consulting Oracle');
@@ -457,7 +459,7 @@ Your voice must sound like a real person—conversational, confident, and slight
                 response: { result: res }
               };
             }));
-            
+
             ws.send(JSON.stringify({
               toolResponse: {
                 functionResponses: results
@@ -484,23 +486,23 @@ Your voice must sound like a real person—conversational, confident, and slight
           sampleRate: 16000,
         });
         audioContextRef.current = ctx;
-        
-        workletLoadedRef.current = ctx.audioWorklet.addModule('/worklets/voice-processor.js').then(() => {});
+
+        workletLoadedRef.current = ctx.audioWorklet.addModule('/worklets/voice-processor.js').then(() => { });
       }
       if (workletLoadedRef.current) {
         await workletLoadedRef.current;
       }
-      
+
       const audioCtx = audioContextRef.current;
       if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           sampleRate: 16000,
           echoCancellation: true,
           noiseSuppression: true,
-        } 
+        }
       });
       micStreamRef.current = stream;
 
@@ -515,9 +517,9 @@ Your voice must sound like a real person—conversational, confident, and slight
           for (let i = 0; i < inputData.length; i++) {
             pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
           }
-          
+
           const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
-          
+
           socketRef.current.send(JSON.stringify({
             realtimeInput: {
               mediaChunks: [{
@@ -544,7 +546,7 @@ Your voice must sound like a real person—conversational, confident, and slight
         recognition.continuous = true;
         recognition.interimResults = false;
         recognition.lang = 'en-US'; // or dynamic based on user preference
-        
+
         recognition.onresult = (event: any) => {
           const resultIndex = event.resultIndex;
           const transcript = event.results[resultIndex][0].transcript;
@@ -553,17 +555,17 @@ Your voice must sound like a real person—conversational, confident, and slight
             traceStore.addTrace('📝', `Speech Recognized: "${transcript.trim()}"`);
           }
         };
-        
+
         recognition.onend = () => {
           if (isListening) {
-             try { recognition.start(); } catch {}
+            try { recognition.start(); } catch { }
           }
         };
-        
+
         try {
           recognition.start();
           recognitionRef.current = recognition;
-        } catch(e) {
+        } catch (e) {
           logger.warn("[Gemini Live] SpeechRecognition failed to start:", e);
         }
       }
@@ -589,7 +591,7 @@ Your voice must sound like a real person—conversational, confident, and slight
   const stopListening = useCallback(() => {
     setMicMuted(true);
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
+      try { recognitionRef.current.stop(); } catch { }
     }
   }, [setMicMuted]);
 

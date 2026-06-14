@@ -8,7 +8,7 @@ $BACKEND_ROOT = "$PROJECT_ROOT\backend\voice_agent"
 $VENV_PATH = "$PROJECT_ROOT\backend\venv"
 $REQUIREMENTS = "$BACKEND_ROOT\requirements.txt"
 $PYTHON_BIN = "$VENV_PATH\Scripts\python.exe"
-$ENV_FILE = "$BACKEND_ROOT\.env"
+$ENV_FILE = "$PROJECT_ROOT\backend\.env"
 
 Write-Host "`n[Nexus] [Launch] Starting Voice Backend..." -ForegroundColor Cyan
 
