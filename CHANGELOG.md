@@ -12,12 +12,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) + Semant
 - Machine: JinWoo-PC
 
 ### Fixed
+- **Frontend/Chat**: Fixed the "double reply" visual bug where the UI would create duplicated empty chat bubbles at the end of every AI streaming turn, and then populate them twice because `agent_message` was conflicting with `agent_partial` paragraph boundary pushes.
+- **Backend/WebSockets**: Fixed the "silent AI" bug where restarting or hard-reloading the frontend caused the Python backend to "resume" an active session, but the background worker tasks (`tts_worker` and `metrics_worker`) remained cancelled from the previous disconnect. Replaced resuming with clean session recreation to ensure background tasks always boot.
 - **Frontend/Contexts**: Resolved "ghost drop" behavior where the backend received connections and played greetings, but the frontend chat UI appeared offline and failed to send messages.
-- **Root Cause**: Fixed a React StrictMode double-mount lifecycle mismatch in `VoiceContext.tsx` where an orphaned WebSocket connection remained alive in the background while the active React hook possessed a `null` socket reference.
-- **Implementation**: 
-  - Removed the `_globalConnectCalled` module-level hack.
-  - Implemented proper `disconnect()` cleanup inside `useNexusVoice.ts` that clears the `reconnectTimerRef` and `pingTimerRef`.
-  - Added correct `useEffect` cleanup in `VoiceContext.tsx` to handle unmounts seamlessly.
 
 ---
 

@@ -65,6 +65,7 @@ Set-Location $BACKEND_ROOT
 # Set environment variables
 $env:LOG_LEVEL = "INFO"
 $env:PYTHONPATH = "$BACKEND_ROOT;$PROJECT_ROOT\backend"
+$env:PYTHONIOENCODING = "utf-8"
 
 # Run the Nexus Agent (Simplified WebSocket Version)
 & $PYTHON_BIN ws_main.py

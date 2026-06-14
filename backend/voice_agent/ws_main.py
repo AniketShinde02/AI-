@@ -1046,15 +1046,14 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info("🔌 WebSocket connected and accepted")
     
     if session_id and session_id in active_sessions:
-        session = active_sessions[session_id]
-        session.websocket = websocket
-        session.is_connected = True
-        logger.info(f"♻️ Resuming active session {session_id}")
-    else:
-        session = VoiceSession(websocket)
-        if session_id:
-            active_sessions[session_id] = session
-            logger.info(f"🆕 Created new session {session_id}")
+        old_session = active_sessions[session_id]
+        old_session.is_connected = False
+        logger.info(f"♻️ Replacing previous session {session_id} with a fresh one to restart worker tasks")
+        
+    session = VoiceSession(websocket)
+    if session_id:
+        active_sessions[session_id] = session
+        logger.info(f"🆕 Created session {session_id}")
 
     
     try:

@@ -88,44 +88,29 @@ export function NexusProvider({ children }: { children: ReactNode }) {
     setMessages(prev => {
       const lastMsg = prev[prev.length - 1];
       if (lastMsg && lastMsg.role === "assistant") {
-        const newMessages = [...prev];
-        const updatedMsg = { ...lastMsg, content: lastMsg.content + text };
-        newMessages[newMessages.length - 1] = updatedMsg;
+        // If text is empty or duplicate of the full message, ignore
+        if (!text || lastMsg.content === text) return prev;
         
-        // If it was a paragraph end, we'll start a new empty assistant message for the next chunk
-        if (isParagraphEnd) {
-          return [
-            ...newMessages,
-            {
-              id: Math.random().toString(36).substring(7),
-              role: "assistant",
-              content: "",
-              timestamp: Date.now()
-            }
-          ];
+        const newMessages = [...prev];
+        // Only append if it's not a complete overwrite (agent_message sends the full text)
+        if (text.length > lastMsg.content.length && text.startsWith(lastMsg.content)) {
+            newMessages[newMessages.length - 1] = { ...lastMsg, content: text };
+        } else if (lastMsg.content.length > 0 && text !== lastMsg.content) {
+            newMessages[newMessages.length - 1] = { 
+                ...lastMsg, 
+                content: lastMsg.content + (lastMsg.content.endsWith(" ") ? "" : " ") + text.trim() 
+            };
         }
         return newMessages;
       } else {
         // Start new assistant message
+        if (!text) return prev;
         const initialMsg: Message = {
           id: Math.random().toString(36).substring(7),
           role: "assistant",
-          content: text,
+          content: text.trim(),
           timestamp: Date.now()
         };
-        
-        if (isParagraphEnd) {
-          return [
-            ...prev,
-            initialMsg,
-            {
-              id: Math.random().toString(36).substring(7),
-              role: "assistant",
-              content: "",
-              timestamp: Date.now()
-            }
-          ];
-        }
         return [...prev, initialMsg];
       }
     });
