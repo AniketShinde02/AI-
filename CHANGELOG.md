@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) + Semant
 
 ---
 
+## [2026-06-14] — Nexus WebSocket StrictMode Lifecycle Fix
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Fixed
+- **Frontend/Contexts**: Resolved "ghost drop" behavior where the backend received connections and played greetings, but the frontend chat UI appeared offline and failed to send messages.
+- **Root Cause**: Fixed a React StrictMode double-mount lifecycle mismatch in `VoiceContext.tsx` where an orphaned WebSocket connection remained alive in the background while the active React hook possessed a `null` socket reference.
+- **Implementation**: 
+  - Removed the `_globalConnectCalled` module-level hack.
+  - Implemented proper `disconnect()` cleanup inside `useNexusVoice.ts` that clears the `reconnectTimerRef` and `pingTimerRef`.
+  - Added correct `useEffect` cleanup in `VoiceContext.tsx` to handle unmounts seamlessly.
+
+---
+
 ## [2026-06-14] — Consolidation of AI Documentation & Previous Voice Pipeline Fixes
 
 ### Author

@@ -76,6 +76,11 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
       clearInterval(pingTimerRef.current);
       pingTimerRef.current = null;
     }
+    
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
 
     if (socketRef.current) {
       socketRef.current.onclose = null; // Prevent reconnect logic
@@ -276,10 +281,7 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
   // Keep connectRef in sync so the reconnect timer always calls the live function
   useEffect(() => { connectRef.current = connect; }, [connect]);
 
-  // NOTE: No cleanup-on-unmount disconnect here.
-  // VoiceProvider is mounted at app root and never unmounts.
-  // Cleanup on unmount would fire during React StrictMode double-invoke
-  // and cause reconnect loops. Manual disconnect() is still available.
+  // Cleaned up properly by VoiceProvider on unmount.
 
   const startListening = useCallback(async () => {
     try {
