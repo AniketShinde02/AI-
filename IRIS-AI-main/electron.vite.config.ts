@@ -4,8 +4,22 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  main: {},
-  preload: {},
+  main: {
+    build: {
+      bytecode: {
+        transformArrowFunctions: true,
+        removeBundleJS: true
+      }
+    }
+  },
+  preload: {
+    build: {
+      bytecode: {
+        transformArrowFunctions: true,
+        removeBundleJS: true
+      }
+    }
+  },
   renderer: {
     publicDir: resolve('src/renderer/src/public'),
     resolve: {

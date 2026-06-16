@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 import psutil
 import platform
 import random
+from speech_cleaner import cleaner as speech_cleaner
 
 # Re-use existing provider logic
 from providers.stt import GroqSTT
@@ -30,17 +31,17 @@ from silero_vad import load_silero_vad, VADIterator # type: ignore
 from tools.system import run_command, open_application
 from tools.task_tools import create_task, create_note
 from tools.memory_tools import update_preferences, get_user_memory, delete_user_preference
-from memory_manager import load_memory
+from core.memory_manager import load_memory
 from tools.file_tools import read_file, write_file, read_directory
 from tools.third_party_tools import get_weather
-from core.rag_oracle import RAGOracle, oracle_instance
+from core.rag_oracle import RAGOracle
 import core.rag_oracle as rag_oracle_module
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nexus.ws")
 
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv
 # Automatically find .env in parent directories
 load_dotenv(find_dotenv(usecwd=True))
 
@@ -54,7 +55,6 @@ tts_router: Optional[TTSProviderRouter] = None
 vad_model = None
 
 import pickle
-import os
 
 # Global state for greeting cache
 cached_greeting_pcm: list = []
@@ -120,6 +120,16 @@ async def get_memory_api():
     """Returns the long-term persistent user memory."""
     return load_memory()
 
+@app.get("/api/history/{session_id}")
+async def get_session_history(session_id: str):
+    """Returns the conversation history for a specific active session."""
+    # Since active_sessions is defined below, we'll access it globally.
+    # We can just return empty for now to stop the 404, or actually return it.
+    global active_sessions
+    session = active_sessions.get(session_id)
+    if not session:
+        return {"history": []}
+    return {"history": list(session.conversation_history)}
 
 @app.post("/execute-tool")
 async def execute_tool(request: dict):
@@ -256,13 +266,20 @@ class VoiceSession:
         # regardless of whether the client sends audio_finished early.
         self.post_tts_guard_time: float = 0.4   # Was 1.8s
         self.post_tts_guard_until: float = 0.0  # epoch timestamp; 0 = guard inactive
-        self.vad_threshold_normal: float = 0.3
-        self.vad_threshold_strict: float = 0.6  # raised threshold during post-speech window
+        # Extremely strict VAD thresholds to block ambient room noise/fans
+        self.vad_threshold_normal: float = 0.85 
+        self.vad_threshold_strict: float = 0.95 
 
-        self.vad_iterator = VADIterator(vad_model, threshold=self.vad_threshold_normal)
+        self.vad_iterator = VADIterator(
+            vad_model, 
+            threshold=self.vad_threshold_normal,
+            min_silence_duration_ms=500,
+            speech_pad_ms=100
+        )
         self.vad_chunk_buffer = bytearray()
-        self.vad_preroll_buffer: Deque[bytes] = deque(maxlen=50) # ~2-3 seconds context
+        self.vad_preroll_buffer: Deque[bytes] = deque(maxlen=8) # ~0.5s context
         self.recent_ai_outputs: Deque[str] = deque(maxlen=3) # Phase 8 Echo Cancellation
+        self.conversation_history: Deque[dict] = deque(maxlen=16) # 8 rolling turns
 
     async def tts_worker(self):
         """Background worker to synthesize and send audio from the queue sequentially."""
@@ -314,8 +331,8 @@ class VoiceSession:
                         "gender":   self.selected_persona,
                         "language": self.selected_language,
                     }
-                    # Phase 3 & 4: Language Routing and forcing Gemini
-                    provider_name = "gemini" # Mode 1 TTS
+                    # Phase 3 & 4: Language Routing and forcing Edge
+                    provider_name = "edge" # Primary TTS
                     is_indian = bool(re.search(r'[\u0900-\u097f]', text)) or self.selected_language in ["hi", "mr"]
                     
                     if is_indian and self.selected_language != "mr":
@@ -338,6 +355,10 @@ class VoiceSession:
                             if not self.is_connected or turn_id != self.current_turn_id:
                                 logger.info("⏹ [Worker] Turn superseded or disconnected, stopping...")
                                 break
+
+                            if isinstance(pcm_data, dict):
+                                logger.info(f"🔄 [TTS] Routing metadata received: {pcm_data}")
+                                continue
 
                             audio_buffer += pcm_data.samples.tobytes()
 
@@ -371,7 +392,7 @@ class VoiceSession:
                         # because more sentences might be in the queue.
                         if self.is_connected and turn_id == self.current_turn_id:
                             self.current_chunk_index += 1
-                            logger.info(f"📤 [Worker] Final chunk {self.current_chunk_index} for Turn {turn_id} ({len(audio_buffer)} bytes)")
+                            logger.debug(f"📤 [Worker] Final chunk {self.current_chunk_index} for Turn {turn_id} ({len(audio_buffer)} bytes)")
                             await self.safe_send_json({
                                 "type": "audio_chunk",
                                 "data": base64.b64encode(audio_buffer).decode('utf-8'),
@@ -385,7 +406,7 @@ class VoiceSession:
                             # Arm the post-TTS echo guard the moment the last audio byte leaves.
                             # This is the only reliable signal — client ACK can arrive early or late.
                             self.post_tts_guard_until = time.time() + self.post_tts_guard_time
-                            logger.info(f"🛡️ [Guard] Post-TTS echo guard armed for {self.post_tts_guard_time:.1f}s (until +{self.post_tts_guard_time:.1f}s)")
+                            logger.debug(f"🛡️ [Guard] Post-TTS echo guard armed for {self.post_tts_guard_time:.1f}s (until +{self.post_tts_guard_time:.1f}s)")
                 except Exception as e:
                     logger.error(f"❌ [Worker] Error synthesizing Turn {turn_id}: {e}")
                     if self.is_connected:
@@ -516,7 +537,14 @@ class VoiceSession:
             "Tell me more.", "Yes.", "No.", "Alright.", "Cool.", "Sure."
         ]
         
+        # Whisper often hallucinates Portuguese/Indonesian subtitle credits on absolute silence
+        hallucination_keywords = ["pedro negri", "amara.org", "transcrição e legendas", "subtitles by", "terima kasih"]
         lower_text = text.lower().strip(".?!, ")
+        
+        if any(keyword in lower_text for keyword in hallucination_keywords):
+            logger.info(f"🗑 Filtered Whisper hallucination: {text}")
+            return None
+            
         if any(lower_text == j.lower().strip(".?!, ") for j in junk_phrases):
             logger.info(f"🗑 Filtered junk phrase: {text}")
             return None
@@ -535,6 +563,15 @@ class VoiceSession:
         text = re.sub(r'[^\w\s\.,\?!\u0900-\u097f]', ' ', text)
         # Collapse multiple spaces
         text = re.sub(r'\s+', ' ', text).strip()
+        
+        # Apply Speech Director and Pronunciation Map
+        try:
+            from pronunciation_dictionary import apply_pronunciation, apply_speech_director
+            text = apply_speech_director(text)
+            text = apply_pronunciation(text)
+        except ImportError:
+            pass
+            
         return text
 
     async def start_response(self):
@@ -574,7 +611,8 @@ class VoiceSession:
             logger.debug(f"🛡️ [Guard] VAD blocked — echo guard active ({remaining:.2f}s remaining)")
             # Still accumulate preroll so user speech that starts after the guard
             # retains context, but do NOT run VAD.
-            self.vad_preroll_buffer.append(data)
+            if self.state in [SessionState.LISTENING, SessionState.IDLE, SessionState.DEBOUNCE]:
+                self.vad_preroll_buffer.append(data)
             self.last_audio_time = current_time
             return
 
@@ -583,7 +621,8 @@ class VoiceSession:
             self.audio_buffer.extend(data)
 
         self.vad_chunk_buffer.extend(data)
-        self.vad_preroll_buffer.append(data)
+        if self.state in [SessionState.LISTENING, SessionState.IDLE, SessionState.DEBOUNCE]:
+            self.vad_preroll_buffer.append(data)
 
         chunk_size = 1024
         while len(self.vad_chunk_buffer) >= chunk_size:
@@ -592,6 +631,10 @@ class VoiceSession:
 
             samples = np.frombuffer(chunk, dtype=np.int16).astype(np.float32) / 32768.0  # type: ignore[operator]
             tensor = torch.from_numpy(samples)
+            
+            # Diagnostics: Calculate RMS Energy
+            rms_energy = float(torch.sqrt(torch.mean(tensor**2)))
+
             speech_dict = self.vad_iterator(tensor, return_seconds=True)
 
             if speech_dict:
@@ -607,15 +650,24 @@ class VoiceSession:
                         # Prepend preroll context so we capture the very start of speech
                         preroll_context = b"".join(self.vad_preroll_buffer)
                         self.audio_buffer = bytearray(preroll_context) + self.audio_buffer
-                        logger.info(f"🎤 [VAD] Speech start detected (preroll={len(preroll_context)}B, state was {self.state.value})")
+                        self.vad_preroll_buffer.clear()
+                        logger.debug(f"🎤 [VAD] Speech START | Reason: Silero Trigger | Energy: {rms_energy:.4f} | Preroll: {len(preroll_context)}B")
 
+            # SAFETY NET: Hard timeout to prevent infinite listening
+            if self.state == SessionState.LISTENING and not speech_dict:
+                duration = current_time - self.speech_start_time
+                if duration > 7.0:
+                    logger.warning(f"[FORENSIC] VAD_FORCED_END reason=MAX_DURATION duration={duration:.3f}s")
+                    speech_dict = {'end': current_time}
+
+            if speech_dict:
                 if 'end' in speech_dict:
                     if self.state == SessionState.LISTENING:
                         duration = current_time - self.speech_start_time
-                        logger.info(f"🎤 [VAD] Speech end — duration={duration:.2f}s")
+                        logger.debug(f"🎤 [VAD] Speech END | Reason: Silero Trigger | Duration: {duration:.2f}s | Energy: {rms_energy:.4f}")
 
                         if duration < self.min_speech_duration:
-                            logger.info("🗑 [VAD] Too short, ignoring.")
+                            logger.debug(f"🗑 [VAD] Rejected | Reason: Too short ({duration:.2f}s < {self.min_speech_duration}s)")
                             self._change_state(SessionState.IDLE)
                         else:
                             # ── Barge-in path (AI was speaking when user started) ──
@@ -632,7 +684,7 @@ class VoiceSession:
                                 # Normal turn — start debounce
                                 if self.state not in [SessionState.THINKING, SessionState.SPEAKING]:
                                     self._change_state(SessionState.DEBOUNCE)
-                                    logger.info(f"⏳ [VAD] Debouncing for {self.silence_threshold}s...")
+                                    logger.debug(f"⏳ [VAD] Debouncing for {self.silence_threshold}s...")
                                     if self.debounce_task:
                                         self.debounce_task.cancel()
                                     self.debounce_task = asyncio.create_task(self.debounce_turn())
@@ -703,7 +755,7 @@ class VoiceSession:
 
                     audio_gen = await tts_router.stream_audio(
                         text,
-                        provider="gemini",
+                        provider="edge",
                         gender=self.selected_persona,
                         language="en"
                     )
@@ -817,12 +869,36 @@ class VoiceSession:
 
             if stt_provider is None:
                 raise RuntimeError("STT provider not initialized — startup lifecycle may have failed")
-            transcription = await stt_provider.client.audio.transcriptions.create(
-                file=("audio.wav", wav_data),
-                model="whisper-large-v3",
-                response_format="verbose_json",
-                prompt=multilingual_prompt
-            )
+                
+            try:
+                transcription = await stt_provider.client.audio.transcriptions.create(
+                    file=("audio.wav", wav_data),
+                    model="whisper-large-v3",
+                    response_format="verbose_json",
+                    prompt=multilingual_prompt
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ [STT] Groq failed: {e}. Falling back to Gemini.")
+                from google import genai
+                from google.genai import types
+                gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+                
+                resp = await asyncio.to_thread(
+                    gemini_client.models.generate_content,
+                    model='gemini-2.5-flash',
+                    contents=[  # type: ignore[arg-type]
+                        types.Part.from_bytes(data=wav_data, mime_type='audio/wav'),
+                        types.Part.from_text(text="Transcribe the audio exactly. Output ONLY the transcription text. Do not answer questions. Ensure Indian languages (Hindi, Marathi) are transcribed accurately if detected.")
+                    ]
+                )
+                
+                class MockTranscription:
+                    text: str
+                    
+                    def __init__(self, text: str | None):
+                        self.text = text or ""
+                
+                transcription = MockTranscription(text=resp.text)
             
             self.stt_latency = time.perf_counter() - stt_start_time
             
@@ -859,8 +935,17 @@ class VoiceSession:
             transcript = self.sanitize_transcript(transcript_text)
             
             # Additional check: If transcript is too short or likely noise
-            if not transcript or (len(transcript.split()) <= 1 and len(transcript) < 4):
+            if not transcript or len(transcript) < 2:
                 logger.info(f"🗑 Rejected suspect transcript: {transcript}")
+                return
+
+            # Apply Wispr Flow Style Speech Cleaner
+            transcript = await speech_cleaner.clean(transcript)
+            logger.info(f"📝 Final STT Text: '{transcript}'")
+            
+            # Extra safety: If cleanup emptied the string or it's still too short
+            if not transcript or len(transcript) < 2:
+                logger.info("🗑 Rejected transcript after cleanup.")
                 return
 
             # Phase 8: Echo Cancellation
@@ -906,56 +991,68 @@ class VoiceSession:
             current_sentence = ""
             sent_count = 0
             
-            system_prompt = (
-                "You are Nexus, a premium AI assistant. "
-                "Your persona is Professional, Confident, Helpful, Fast, and Natural. "
-                "Do not sound robotic. Be concise. "
-                "Mirror the user's dominant language naturally. "
-                "If the user speaks English, respond in English. "
-                "If the user speaks Hindi or Marathi, respond in that language. "
-                "Only mix languages when the user naturally mixes them first. "
-                "Do not force translations. "
-                "Keep responses conversational and natural. "
-                "CRITICAL: Do NOT output internal monologues, reasoning steps, or thought processes. "
-                "CRITICAL: No markdown or emojis. Never use asterisks (*) or formatting."
-            )
+            from prompts import get_nexus_system_prompt
+            system_prompt = get_nexus_system_prompt()
 
             if llm_provider is None:
                 raise RuntimeError("LLM provider not initialized")
                 
             llm_start_time = time.perf_counter()
-            stream = await llm_provider.client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": transcript}
-                ],
-                model=llm_provider.model,
-                temperature=0.7,
-                stream=True
-            )
+            
+            # Update memory
+            self.conversation_history.append({"role": "user", "content": transcript})
+            messages = [{"role": "system", "content": system_prompt}] + list(self.conversation_history)
+            
+            async def gemini_stream():
+                from google import genai
+                from google.genai import types
+                async_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+                gemini_messages = []
+                for msg in messages:
+                    if msg["role"] != "system":
+                        role = "user" if msg["role"] == "user" else "model"
+                        gemini_messages.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
+                config = types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.7)
+                
+                stream = await async_client.aio.models.generate_content_stream(
+                    model='gemini-2.5-flash',
+                    contents=gemini_messages,
+                    config=config
+                )
+                async for chunk in stream:
+                    yield chunk.text or ""
+            
+            try:
+                groq_stream = await llm_provider.client.chat.completions.create(
+                    messages=messages,
+                    model=llm_provider.model,
+                    temperature=0.7,
+                    stream=True
+                )
+                async def unified_stream():
+                    async for chunk in groq_stream:
+                        yield chunk.choices[0].delta.content or ""
+                active_stream = unified_stream()
+            except Exception as e:
+                logger.warning(f"⚠️ [LLM] Groq failed: {e}. Falling back to Gemini.")
+                active_stream = gemini_stream()
 
             # --- Semantic TTS chunking ---
-            # Strategy: buffer LLM tokens until we hit a semantic boundary with sufficient words.
-            # This balances Time-To-First-Audio with natural TTS prosody (Piper sounds much better with full sentences).
-            #
-            # Boundaries: \n । (Hindi danda)
-            # We no longer chunk on . ! ? to avoid unnatural "robot breathing" hard cuts mid-paragraph
-            SENTENCE_ENDS = {"\n", "।"}
-            MAX_BUFFER_CHARS = 10000  # Effectively disabled to accumulate full paragraph
+            SENTENCE_ENDS = {".", "?", "!", "\n", "।"}
+            MAX_BUFFER_CHARS = 10000
 
-            async for chunk in stream:
+            async for content in active_stream:
                 if turn_id != self.current_turn_id:
                     logger.warning(f"🛑 [LLM] Turn {turn_id} superseded. Stopping stream.")
                     return
 
-                content = chunk.choices[0].delta.content
                 if content:
                     full_ai_text += content
                     current_sentence += content
 
                     # Check semantic boundary
                     last_char = content.rstrip()[-1] if content.strip() else ""
-                    word_count = len(current_sentence.split())
+                    # Check semantic boundary
                     
                     is_punctuation_boundary = last_char in SENTENCE_ENDS
                     is_long_enough = True # Always flush on paragraph boundary
@@ -1021,6 +1118,7 @@ class VoiceSession:
                 "is_sentinel": True
             })
 
+            self.conversation_history.append({"role": "assistant", "content": full_ai_text})
             await self.safe_send_json({"type": "agent_message", "text": full_ai_text})
             logger.info(f"🤖 Nexus Full Response: {full_ai_text}")
             
@@ -1064,7 +1162,9 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = await websocket.receive()
                 if "bytes" not in data: # Prevent logging massive binary payloads
-                    logger.info(f"🔍 RAW WS RECEIVE: {data}")
+                    text_data = data.get("text", "")
+                    if text_data and '{"type":"ping"' not in text_data:
+                        logger.info(f"🔍 RAW WS RECEIVE: {data}")
             except (WebSocketDisconnect, RuntimeError):
                 # RuntimeError = "Cannot call receive once a disconnect message has been received"
                 break
@@ -1083,23 +1183,21 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
 
                 if msg.get("type") == "audio_finished":
-                    # Client reports playback complete. We accept this as a signal to
-                    # clear the SPEAKING state, and we reset the post-TTS guard starting NOW
-                    # to protect against acoustic room tail.
+                    # Client reports playback complete.
+                    session.agent_is_speaking = False
                     if session.state == SessionState.SPEAKING:
-                        session.agent_is_speaking = False
                         session._change_state(SessionState.IDLE)
                         session.post_tts_guard_until = time.time() + 1.2
                         logger.info(f"✅ [Session] audio_finished received. Armed post-TTS guard for 1.2s.")
                     else:
-                        logger.info(f"ℹ️ [Session] Ignoring audio_finished in state: {session.state.value}")
+                        logger.info(f"ℹ️ [Session] audio_finished received in state: {session.state.value}. Cleared speaking flag.")
                     continue
                     
                 if msg.get("type") == "settings":
                     logger.info(f"📩 Received settings: {msg}")
-                    session.selected_persona = msg.get("persona")
-                    session.selected_provider = msg.get("ttsProvider")
-                    session.selected_language = msg.get("language")
+                    session.selected_persona = msg.get("persona") or "female"
+                    session.selected_provider = msg.get("ttsProvider") or "edge"
+                    session.selected_language = msg.get("language") or "auto"
                     continue
                     
                 if "action" in msg:

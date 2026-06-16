@@ -1,7 +1,7 @@
 import logging
 import json
 from typing import Dict, Any
-from memory_manager import update_memory, load_memory, delete_memory
+from core.memory_manager import update_memory, load_memory, delete_memory
 
 logger = logging.getLogger("nexus.tools.memory")
 

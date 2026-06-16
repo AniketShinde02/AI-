@@ -10,5 +10,16 @@ declare global {
       }
     }
     api: unknown
+    iris: {
+      startSession: () => void
+      stopSession: () => void
+      toggleMic: (isMuted: boolean) => void
+      onSystemStatus: (
+        callback: (status: 'STANDBY' | 'CONNECTING' | 'ACTIVE' | 'ERROR') => void
+      ) => void
+      onSpeakingState: (callback: (isSpeaking: boolean) => void) => void
+      onTranscript: (callback: (data: { role: 'user' | 'model'; text: string }) => void) => void
+      removeAllListeners: () => void
+    }
   }
 }

@@ -1,4 +1,3 @@
-import { IpcMain } from 'electron'
 import { exec } from 'child_process'
 
 const PROTECTED_PROCESSES = [
@@ -85,51 +84,52 @@ const PROCESS_NAMES: Record<string, string> = {
   files: 'explorer.exe'
 }
 
-export default function registerAppLauncher(ipcMain: IpcMain) {
-  ipcMain.removeHandler('open-app')
-  ipcMain.handle('open-app', async (_event, appName: string) => {
-    return new Promise((resolve) => {
-      const lowerName = appName.toLowerCase().trim()
-      let command = APP_ALIASES[lowerName]
+export async function openApp(
+  appName: string
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  return new Promise((resolve) => {
+    const lowerName = appName.toLowerCase().trim()
+    let command = APP_ALIASES[lowerName]
 
-      if (command) {
-        executeCommand(command, appName, resolve)
-      } else {
-        launchViaPowerShell(appName, resolve)
-      }
-    })
+    if (command) {
+      executeCommand(command, appName, resolve)
+    } else {
+      launchViaPowerShell(appName, resolve)
+    }
   })
+}
 
-  ipcMain.removeHandler('close-app')
-  ipcMain.handle('close-app', async (_event, appName: string) => {
-    return new Promise((resolve) => {
-      const lowerName = appName.toLowerCase().trim()
-      let processName = PROCESS_NAMES[lowerName]
+export async function closeApp(
+  appName: string
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  return new Promise((resolve) => {
+    const lowerName = appName.toLowerCase().trim()
+    let processName = PROCESS_NAMES[lowerName]
 
-      if (!processName) {
-        processName = appName.endsWith('.exe') ? appName : `${appName}.exe`
-      }
+    if (!processName) {
+      processName = appName.endsWith('.exe') ? appName : `${appName}.exe`
+    }
 
-      if (PROTECTED_PROCESSES.includes(processName.toLowerCase())) {
-        resolve({
-          success: false,
-          error: `Security Protocol: I cannot close '${appName}' (System Critical Process). Doing so would crash your PC.`
-        })
-        return
-      }
-
-      const cmd = `taskkill /IM "${processName}" /F /T`
-
-      exec(cmd, (error) => {
-        if (error) {
-          resolve({ success: false, error: `Could not close ${appName}. Is it running?` })
-        } else {
-          resolve({ success: true, message: `Terminated ${appName}` })
-        }
+    if (PROTECTED_PROCESSES.includes(processName.toLowerCase())) {
+      resolve({
+        success: false,
+        error: `Security Protocol: I cannot close '${appName}' (System Critical Process). Doing so would crash your PC.`
       })
+      return
+    }
+
+    const cmd = `taskkill /IM "${processName}" /F /T`
+
+    exec(cmd, (error) => {
+      if (error) {
+        resolve({ success: false, error: `Could not close ${appName}. Is it running?` })
+      } else {
+        resolve({ success: true, message: `Terminated ${appName}` })
+      }
     })
   })
 }
+
 
 function executeCommand(command: string, appName: string, resolve: any) {
   exec(command, (error) => {

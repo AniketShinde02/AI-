@@ -68,6 +68,7 @@ $env:PYTHONPATH = "$BACKEND_ROOT;$PROJECT_ROOT\backend"
 $env:PYTHONIOENCODING = "utf-8"
 
 # Run the Nexus Agent (Simplified WebSocket Version)
-& $PYTHON_BIN ws_main.py
+& $PYTHON_BIN -m uvicorn ws_main:app --host 0.0.0.0 --port 8001 --ws wsproto --log-level info --reload
+
 
 

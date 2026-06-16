@@ -2,6 +2,9 @@ import urllib.request
 import urllib.parse
 import json
 import logging
+import asyncio
+from duckduckgo_search import DDGS
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger("nexus.tools.third_party")
 
@@ -48,6 +51,52 @@ async def get_weather(city: str) -> str:
         logger.error(f"Weather tool failed: {e}")
         return f"Failed to get weather: {str(e)}"
 
+async def search_web(query: str, max_results: int = 5) -> str:
+    """Perform a web search using DuckDuckGo."""
+    try:
+        def _search():
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=max_results))
+                return results
+                
+        results = await asyncio.to_thread(_search)
+        if not results:
+            return f"No results found for '{query}'"
+            
+        output = [f"Web Search Results for '{query}':"]
+        for i, res in enumerate(results, 1):
+            title = res.get('title', 'No Title')
+            href = res.get('href', '')
+            body = res.get('body', '')
+            output.append(f"{i}. {title}")
+            output.append(f"   URL: {href}")
+            output.append(f"   Snippet: {body}")
+            
+        return "\n".join(output)
+    except Exception as e:
+        logger.error(f"Web search failed: {e}")
+        return f"Error performing web search: {str(e)}"
+
+async def read_webpage(url: str) -> str:
+    """Fetch and read the text content of a webpage."""
+    try:
+        def _fetch():
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                html = response.read().decode('utf-8', errors='ignore')
+                soup = BeautifulSoup(html, 'html.parser')
+                # Remove script and style elements
+                for script in soup(["script", "style"]):
+                    script.extract()
+                text = soup.get_text(separator=' ', strip=True)
+                return text[:5000] # Return first 5000 chars to avoid overwhelming the LLM
+                
+        text_content = await asyncio.to_thread(_fetch)
+        return f"Content of {url}:\n\n{text_content}"
+    except Exception as e:
+        logger.error(f"Failed to read webpage {url}: {e}")
+        return f"Error reading webpage: {str(e)}"
+
 THIRD_PARTY_TOOLS = [
     {
         "type": "function",
@@ -63,6 +112,40 @@ THIRD_PARTY_TOOLS = [
                     }
                 },
                 "required": ["city"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "Perform a web search using DuckDuckGo to find up-to-date information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query."
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_webpage",
+            "description": "Read the text content of a specific webpage URL.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The full URL of the webpage to read."
+                    }
+                },
+                "required": ["url"]
             }
         }
     }

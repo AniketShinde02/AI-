@@ -15,6 +15,8 @@ interface VoiceContextType {
   stopListening: () => void;
   setMicMuted: (muted: boolean) => void;
   sendTextMessage: (text: string, speech?: boolean) => void;
+  updateSettings: (settings: any) => void;
+  testVoice: (text?: string) => void;
   setCallbacks: (callbacks: {
     onTranscript?: (text: string) => void;
     onAgentMessage?: (text: string, isFinal: boolean) => void;

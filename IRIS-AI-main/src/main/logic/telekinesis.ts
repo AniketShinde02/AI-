@@ -1,67 +1,78 @@
-import { IpcMain, screen } from 'electron'
+import { screen } from 'electron'
 import { windowManager } from 'node-window-manager'
 
-export default function registerTelekinesis({ ipcMain }: { ipcMain: IpcMain }) {
-  ipcMain.handle('teleport-windows', async (_event, commands) => {
-    try {
-      windowManager.requestAccessibility()
+export interface TeleportCommand {
+  appName: string
+  position:
+    | 'left'
+    | 'right'
+    | 'top-left'
+    | 'bottom-left'
+    | 'top-right'
+    | 'bottom-right'
+    | 'maximize'
+    | 'center'
+}
 
-      const primaryDisplay = screen.getPrimaryDisplay()
-      const { width, height, x: screenX, y: screenY } = primaryDisplay.workArea
+export async function teleportWindows(commands: TeleportCommand[]) {
+  try {
+    windowManager.requestAccessibility()
 
-      const openWindows = windowManager.getWindows()
+    const primaryDisplay = screen.getPrimaryDisplay()
+    const { width, height, x: screenX, y: screenY } = primaryDisplay.workArea
 
-      for (const cmd of commands) {
-        const validWindows = openWindows.filter(
-          (w) =>
-            w.isWindow() &&
-            w.isVisible() &&
-            w.getTitle() !== '' &&
-            (w.getTitle().toLowerCase().includes(cmd.appName.toLowerCase()) ||
-              w.path.toLowerCase().includes(cmd.appName.toLowerCase()))
-        )
+    const openWindows = windowManager.getWindows()
 
-        const targetWindow = validWindows[0]
+    for (const cmd of commands) {
+      const validWindows = openWindows.filter(
+        (w) =>
+          w.isWindow() &&
+          w.isVisible() &&
+          w.getTitle() !== '' &&
+          (w.getTitle().toLowerCase().includes(cmd.appName.toLowerCase()) ||
+            w.path.toLowerCase().includes(cmd.appName.toLowerCase()))
+      )
 
-        if (targetWindow) {
-          targetWindow.restore() 
-          targetWindow.bringToTop()
+      const targetWindow = validWindows[0]
 
-          const halfW = Math.floor(width / 2)
-          const halfH = Math.floor(height / 2)
+      if (targetWindow) {
+        targetWindow.restore()
+        targetWindow.bringToTop()
 
-          let newBounds = { x: screenX, y: screenY, width, height }
+        const halfW = Math.floor(width / 2)
+        const halfH = Math.floor(height / 2)
 
-          switch (cmd.position) {
-            case 'left':
-              newBounds = { x: screenX, y: screenY, width: halfW, height }
-              break
-            case 'right':
-              newBounds = { x: screenX + halfW, y: screenY, width: halfW, height }
-              break
-            case 'top-left':
-              newBounds = { x: screenX, y: screenY, width: halfW, height: halfH }
-              break
-            case 'bottom-left':
-              newBounds = { x: screenX, y: screenY + halfH, width: halfW, height: halfH }
-              break
-            case 'top-right':
-              newBounds = { x: screenX + halfW, y: screenY, width: halfW, height: halfH }
-              break
-            case 'bottom-right':
-              newBounds = { x: screenX + halfW, y: screenY + halfH, width: halfW, height: halfH }
-              break
-            case 'maximize':
-              targetWindow.maximize()
-              continue 
-          }
+        let newBounds = { x: screenX, y: screenY, width, height }
 
-          targetWindow.setBounds(newBounds)
+        switch (cmd.position) {
+          case 'left':
+            newBounds = { x: screenX, y: screenY, width: halfW, height }
+            break
+          case 'right':
+            newBounds = { x: screenX + halfW, y: screenY, width: halfW, height }
+            break
+          case 'top-left':
+            newBounds = { x: screenX, y: screenY, width: halfW, height: halfH }
+            break
+          case 'bottom-left':
+            newBounds = { x: screenX, y: screenY + halfH, width: halfW, height: halfH }
+            break
+          case 'top-right':
+            newBounds = { x: screenX + halfW, y: screenY, width: halfW, height: halfH }
+            break
+          case 'bottom-right':
+            newBounds = { x: screenX + halfW, y: screenY + halfH, width: halfW, height: halfH }
+            break
+          case 'maximize':
+            targetWindow.maximize()
+            continue
         }
+
+        targetWindow.setBounds(newBounds)
       }
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: String(err) }
     }
-  })
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
 }

@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 
     // 5. Trigger the Python backend to start the Agent
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
         
       console.log(`[Nexus API] Triggering Python Agent to join call: ${callType}:${sessionId}`);
       // Framework-native endpoint: POST /calls/{call_type}/{call_id}/sessions

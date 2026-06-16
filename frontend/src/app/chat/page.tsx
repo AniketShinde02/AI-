@@ -16,6 +16,7 @@ export default function ChatPage() {
     uiMode,
     setUiMode,
     isChecking,
+    systemMetrics,
   } = useNexus();
 
   const stateColor =
@@ -87,6 +88,17 @@ export default function ChatPage() {
             <Zap size={12} className="inline mr-1" />
             {uiMode === "chat" ? "Chat Mode" : "Voice Mode"}
           </button>
+          
+          {/* Latency Metrics */}
+          {systemMetrics && (
+            <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-black/40 border border-[#00FFFF]/20 clip-cut-sm ml-2">
+               <span className="text-[9px] font-mono text-zinc-400">LATENCY:</span>
+               <span className="text-[9px] font-bold text-[#00FFFF]">{systemMetrics.total_ms}ms</span>
+               <span className="text-[8px] font-mono text-zinc-500">
+                 (STT {systemMetrics.stt_ms} | LLM {systemMetrics.llm_ms} | TTS {systemMetrics.tts_ms})
+               </span>
+            </div>
+          )}
         </div>
       </div>
 

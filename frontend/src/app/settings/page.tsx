@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { Settings, Shield, Mic, Volume2, Cpu, Zap, Globe, Save } from "lucide-react";
+import Link from "next/link";
 import { useNexus } from "@/contexts/NexusContext";
 
 export default function SettingsPage() {
-  const { selectedModel, setSelectedModel, persona, setPersona, ttsProvider, setTtsProvider, language, setLanguage } = useNexus();
+  const { selectedModel, setSelectedModel, persona, setPersona, ttsProvider, setTtsProvider, language, setLanguage, voiceEngine, setVoiceEngine } = useNexus();
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
@@ -74,40 +75,23 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* TTS Provider */}
-          <div className="bg-[#06060c] border border-[#00FFFF]/15 clip-cut p-5">
+          {/* Voice Studio Link */}
+          <div className="bg-[#06060c] border border-[#00FFFF]/15 clip-cut p-5 flex flex-col">
             <div className="flex items-center gap-2 mb-4">
               <Volume2 size={14} className="text-[#00FFFF]" />
-              <h2 className="text-[10px] font-quantico font-bold uppercase tracking-widest text-white">TTS Provider</h2>
+              <h2 className="text-[10px] font-quantico font-bold uppercase tracking-widest text-white">Voice Output</h2>
             </div>
-            <div className="flex flex-col gap-2">
-              {[
-                { value: "gemini", label: "Gemini TTS", badge: "24kHz PCM", recommended: true },
-                { value: "piper", label: "Piper (Local)", badge: "ONNX" },
-                { value: "kokoro", label: "Kokoro (Local)", badge: "ONNX" },
-              ].map((provider) => (
-                <button
-                  key={provider.value}
-                  onClick={() => setTtsProvider(provider.value)}
-                  className={`flex items-center justify-between p-3 border clip-cut-sm text-left transition-all ${
-                    ttsProvider === provider.value
-                      ? "border-[#00FFFF]/50 bg-[#00FFFF]/5 text-white"
-                      : "border-white/5 text-zinc-400 hover:border-white/15 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-mono">{provider.label}</span>
-                    {provider.recommended && (
-                      <span className="text-[7px] font-bold uppercase text-[#00FFFF] border border-[#00FFFF]/30 px-1.5 py-0.5 clip-cut-sm">
-                        REC
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border border-white/10 text-zinc-500 clip-cut-sm">
-                    {provider.badge}
-                  </span>
-                </button>
-              ))}
+            <div className="flex-1 flex flex-col justify-center items-center gap-4 py-4">
+              <p className="text-[10px] text-zinc-400 text-center font-mono px-4">
+                Configure TTS Providers, Voices, Pitch, Speed, and Volume in the dedicated Voice Studio.
+              </p>
+              <Link
+                href="/settings/voice-studio"
+                className="px-4 py-2 bg-[#00FFFF]/10 border border-[#00FFFF]/30 text-[#00FFFF] text-[10px] font-bold uppercase tracking-widest clip-cut transition-all hover:bg-[#00FFFF]/20 flex items-center gap-2"
+              >
+                <Volume2 size={12} />
+                Open Voice Studio
+              </Link>
             </div>
           </div>
 
@@ -118,18 +102,23 @@ export default function SettingsPage() {
               <h2 className="text-[10px] font-quantico font-bold uppercase tracking-widest text-white">Voice Persona</h2>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {(["female", "male"] as const).map((p) => (
+              {[
+                { value: "sarah", label: "Sarah", icon: "👩" },
+                { value: "nexus_male", label: "Nexus Male", icon: "👨‍💻" },
+                { value: "professional_male", label: "Professional Male", icon: "👔" },
+                { value: "casual_female", label: "Casual Female", icon: "👱‍♀️" }
+              ].map((p) => (
                 <button
-                  key={p}
-                  onClick={() => setPersona(p)}
+                  key={p.value}
+                  onClick={() => setPersona(p.value)}
                   className={`p-4 border clip-cut text-center transition-all ${
-                    persona === p
+                    persona === p.value
                       ? "border-[#ff3366]/50 bg-[#ff3366]/10 text-white"
                       : "border-white/5 text-zinc-500 hover:border-white/15 hover:text-white"
                   }`}
                 >
-                  <div className="text-2xl mb-1">{p === "female" ? "⚡" : "🌑"}</div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest">{p}</span>
+                  <div className="text-2xl mb-1">{p.icon}</div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest">{p.label}</span>
                 </button>
               ))}
             </div>
@@ -161,6 +150,35 @@ export default function SettingsPage() {
                   {lang.value === "auto" && (
                     <Zap size={12} className="text-[#10b981]" />
                   )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Voice Engine (Experimental) */}
+          <div className="col-span-2 bg-[#06060c] border border-orange-500/15 clip-cut p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Zap size={14} className="text-orange-500" />
+              <h2 className="text-[10px] font-quantico font-bold uppercase tracking-widest text-white">Voice Engine</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { value: "standard", label: "Standard", badge: "GROQ + TTS" },
+                { value: "gemini_live", label: "Gemini Live Experimental", badge: "NATIVE AUDIO" },
+              ].map((engine) => (
+                <button
+                  key={engine.value}
+                  onClick={() => setVoiceEngine(engine.value)}
+                  className={`flex items-center justify-between p-3 border clip-cut-sm text-left transition-all ${
+                    voiceEngine === engine.value
+                      ? "border-orange-500/50 bg-orange-500/10 text-white"
+                      : "border-white/5 text-zinc-400 hover:border-white/15 hover:text-white"
+                  }`}
+                >
+                  <span className="text-[11px] font-mono">{engine.label}</span>
+                  <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border border-white/10 text-zinc-500 clip-cut-sm">
+                    {engine.badge}
+                  </span>
                 </button>
               ))}
             </div>

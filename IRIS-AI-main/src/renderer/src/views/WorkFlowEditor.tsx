@@ -8,17 +8,21 @@ import ReactFlow, {
   ReactFlowProvider
 } from 'reactflow'
 import { Tooltip } from 'react-tooltip'
+import { motion } from 'framer-motion'
 import 'reactflow/dist/style.css'
 import 'react-tooltip/dist/react-tooltip.css'
+
 import ToolNode, { getIcon } from '../components/ToolNode'
 import ParameterEditorDrawer from '../components/ParameterEditorDrawer'
 import MacroManagementMenu from '../components/MacroManagementMenu'
+
 import {
   RiSave3Line,
   RiLayoutColumnLine,
-  RiLayoutColumnFill,
   RiAddLine,
-  RiPlayFill
+  RiPlayFill,
+  RiTerminalBoxLine,
+  RiSettings4Line
 } from 'react-icons/ri'
 
 import { getMacroSequence } from '@renderer/code/macro-executor'
@@ -36,6 +40,7 @@ import {
 import { runTerminal } from '@renderer/functions/coding-manager-api'
 import { draftEmail, readEmails, sendEmail } from '@renderer/functions/gmail-manager-api'
 
+// --- CONSTANTS ---
 const CATEGORIZED_TOOLS = {
   TRIGGERS: [
     { name: 'TRIGGER', description: 'Starts the workflow.', parameters: {} },
@@ -112,11 +117,7 @@ const CATEGORIZED_TOOLS = {
       description: 'Exposes local server port to the internet.',
       parameters: { properties: { port: { type: 'NUMBER', description: 'e.g. 3000' } } }
     },
-    {
-      name: 'close_wormhole',
-      description: 'Closes the public wormhole.',
-      parameters: {}
-    }
+    { name: 'close_wormhole', description: 'Closes the public wormhole.', parameters: {} }
   ],
   COMMUNICATION: [
     {
@@ -194,7 +195,6 @@ function Editor() {
   const [description, setDescription] = useState('Custom Macro')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [isSaved, setIsSaved] = useState(false)
-
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
 
   const openParameterEditor = useCallback((nodeId: string) => setSelectedNodeId(nodeId), [])
@@ -202,15 +202,10 @@ function Editor() {
   const loadMacroToCanvas = (macro: any) => {
     setWorkflowName(macro.name)
     setDescription(macro.description)
-
     const rehydratedNodes = (macro.nodes || []).map((node: any) => ({
       ...node,
-      data: {
-        ...node.data,
-        openParameterEditor
-      }
+      data: { ...node.data, openParameterEditor }
     }))
-
     setNodes(rehydratedNodes)
     setEdges(macro.edges || [])
     setIsSaved(true)
@@ -258,7 +253,11 @@ function Editor() {
             ...params,
             type: 'default',
             animated: true,
-            style: { stroke: '#10b981', strokeWidth: 2, filter: 'drop-shadow(0 0 4px #10b981)' }
+            style: {
+              stroke: '#10b981',
+              strokeWidth: 2,
+              filter: 'drop-shadow(0 0 4px rgba(16,185,129,0.5))'
+            }
           },
           eds
         )
@@ -273,7 +272,7 @@ function Editor() {
       if (!toolName) return
 
       const toolSchema = ALL_TOOLS.find((t) => t.name === toolName)
-      const position = { x: event.clientX - (isSidebarOpen ? 300 : 50), y: event.clientY - 100 }
+      const position = { x: event.clientX - (isSidebarOpen ? 320 : 50), y: event.clientY - 100 }
 
       const newNode = {
         id: `${toolName}_${Date.now()}`,
@@ -301,36 +300,30 @@ function Editor() {
     try {
       const res = await (window as any).electron.ipcRenderer.invoke('save-workflow', {
         name: workflowName,
-        description: description,
+        description,
         nodes: sanitizedNodes,
         edges
       })
-      if (res.success) {
-        setIsSaved(true)
-      } else {
-      }
+      if (res.success) setIsSaved(true)
     } catch (err) {
+      console.error(err)
     }
   }
 
   const runMacroManually = async () => {
     await saveWorkflow()
-
     const macroRes = await getMacroSequence(workflowName)
-
     if (!macroRes.success) {
       alert(`❌ Execution Failed: ${macroRes.error}`)
       return
     }
 
     for (const step of macroRes.steps) {
-
       try {
         if (step.tool === 'TRIGGER' || step.tool === 'TRIGGER_VOICE') {
+          continue
         } else if (step.tool === 'WAIT') {
-          await new Promise((resolve) =>
-            setTimeout(resolve, Number(step.args.milliseconds) || 1000)
-          )
+          await new Promise((r) => setTimeout(r, Number(step.args.milliseconds) || 1000))
         } else if (step.tool === 'set_volume') {
           await setVolume(Number(step.args.level))
         } else if (step.tool === 'open_app') {
@@ -367,73 +360,77 @@ function Editor() {
           await clickOnCoordinate(Number(step.args.x), Number(step.args.y))
         } else if (step.tool === 'scroll_screen') {
           await scrollScreen(step.args.direction, Number(step.args.amount))
-        }
-
-        else if (step.tool === 'ghost_type') {
+        } else if (step.tool === 'ghost_type') {
           await (window as any).electron.ipcRenderer.invoke('ghost-sequence', [
             { type: 'type', text: step.args.text }
           ])
         } else if (step.tool === 'press_shortcut') {
           let safeModifiers: string[] = []
-
           if (step.args.modifiers) {
-            if (Array.isArray(step.args.modifiers)) {
-              safeModifiers = step.args.modifiers
-            } else if (typeof step.args.modifiers === 'string') {
+            if (Array.isArray(step.args.modifiers)) safeModifiers = step.args.modifiers
+            else if (typeof step.args.modifiers === 'string') {
               safeModifiers = step.args.modifiers
                 .split(',')
                 .map((m: string) => m.trim())
                 .filter(Boolean)
             }
           }
-
           await (window as any).electron.ipcRenderer.invoke('ghost-sequence', [
             { type: 'press', key: step.args.key, modifiers: safeModifiers }
           ])
         } else if (step.tool === 'take_screenshot') {
           await takeScreenshot()
-        } else {
         }
       } catch (stepError) {
         alert(`🔴 Macro Execution Halted! Failed at node: ${step.tool}`)
         break
       }
     }
-
   }
 
   return (
-    <div className="flex h-full w-full bg-[#09090b] relative overflow-hidden">
+    <div className="flex h-full w-full bg-[#050505] relative overflow-hidden font-sans">
+      {/* --- SIDEBAR: MODULE LIBRARY --- */}
       <div
-        className={`fixed top-14 left-0 h-[calc(100vh-56px)] bg-[#111113] border-r border-[#27272a] p-4 flex flex-col gap-1 transition-all duration-300 ease-in-out z-40 scrollbar-small overflow-auto mt-5 ${isSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0'}`}
+        className={`h-full bg-zinc-950/80 backdrop-blur-2xl border-r border-white/5 flex flex-col transition-all duration-300 ease-in-out z-40 shrink-0 ${
+          isSidebarOpen ? 'w-72' : 'w-0 overflow-hidden border-none'
+        }`}
       >
-        {isSidebarOpen && (
-          <>
-            <h2 className="text-[10px] font-black tracking-[0.2em] text-emerald-500 mb-6 flex items-center gap-2 border-b border-[#27272a] pb-2 uppercase">
-              MODULE LIBRARY
+        <div className="p-6 h-full flex flex-col overflow-y-auto scrollbar-none w-72">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <RiTerminalBoxLine className="text-emerald-400" size={16} />
+            </div>
+            <h2 className="text-xs font-bold font-mono tracking-widest text-zinc-200 uppercase">
+              Module Library
             </h2>
+          </div>
 
+          <div className="flex flex-col gap-8 pb-10">
             {Object.entries(CATEGORIZED_TOOLS).map(([category, tools]) => (
-              <div key={category} className="mb-6">
-                <h3 className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase mb-3">
-                  {category}
+              <div key={category} className="flex flex-col gap-3">
+                <h3 className="text-[9px] font-bold font-mono tracking-[0.2em] text-zinc-500 uppercase border-b border-white/5 pb-2">
+                  {category.replace(/_/g, ' ')}
                 </h3>
                 <div className="flex flex-col gap-2">
                   {tools.map((tool: any) => (
                     <div
                       key={tool.name}
-                      className="flex items-center gap-3 p-2 bg-[#18181b] border border-[#27272a] rounded-lg cursor-grab hover:border-emerald-500/50 hover:bg-[#27272a]/50 transition-all group"
+                      className="flex items-center gap-3 p-3 bg-black/40 border border-white/5 rounded-xl cursor-grab hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all group shadow-sm"
                       draggable
                       onDragStart={(e) =>
                         e.dataTransfer.setData('application/reactflow', tool.name)
                       }
                     >
-                      <div className="p-1.5 bg-black rounded shadow-inner border border-white/5">
+                      <div className="p-1.5 bg-zinc-900 rounded-lg shadow-inner border border-white/5 text-zinc-400 group-hover:text-emerald-400 transition-colors">
                         {getIcon(tool.name, 14)}
                       </div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-bold tracking-widest text-zinc-300 uppercase group-hover:text-white transition-colors">
+                      <div className="flex flex-col overflow-hidden">
+                        <span className="text-[11px] font-semibold tracking-wide text-zinc-300 group-hover:text-white transition-colors truncate">
                           {tool.name.replace(/_/g, ' ')}
+                        </span>
+                        <span className="text-[9px] text-zinc-600 truncate mt-0.5">
+                          {tool.description}
                         </span>
                       </div>
                     </div>
@@ -441,56 +438,91 @@ function Editor() {
                 </div>
               </div>
             ))}
-          </>
-        )}
+          </div>
+        </div>
       </div>
 
-      <button
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="absolute top-1/2 left-0 transform -translate-y-1/2 bg-[#111113] border border-[#27272a] border-l-0 p-2 rounded-r-lg text-zinc-600 hover:text-emerald-500 z-50 transition-colors"
-      >
-        {isSidebarOpen ? <RiLayoutColumnLine size={18} /> : <RiLayoutColumnFill size={18} />}
-      </button>
-
-      <div
-        className={`grow flex flex-col relative transition-all duration-300 ease-in-out ${isSidebarOpen ? 'ml-72' : 'ml-0'}`}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
-      >
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-3 shadow-2xl">
-          <button
-            onClick={resetCanvas}
-            className="p-3 rounded-lg bg-[#18181b] border border-[#27272a] text-zinc-600 hover:text-emerald-500 hover:border-emerald-500/50 transition-colors cursor-pointer"
-            data-tooltip-id="global-tooltip"
-            data-tooltip-content="Start New Macro"
-          >
-            <RiAddLine size={16} />
-          </button>
-
-          <MacroManagementMenu loadMacroToCanvas={loadMacroToCanvas} />
-
-          <input
-            type="text"
-            value={workflowName}
-            onChange={(e) => setWorkflowName(e.target.value)}
-            className="bg-[#18181b] border border-[#27272a] px-4 py-2 rounded-lg text-sm text-white outline-none focus:border-emerald-500 font-bold tracking-wide w-64 shadow-inner"
+      {/* --- MAIN CANVAS AREA --- */}
+      <div className="flex-1 flex flex-col relative" onDrop={onDrop} onDragOver={onDragOver}>
+        {/* FLOATING HUD TOOLBAR */}
+        <div className="absolute top-6 left-6 z-50 flex items-center gap-2 bg-zinc-950/90 backdrop-blur-xl border border-white/10 p-1.5 rounded-2xl shadow-2xl">
+          <Tooltip
+            id="global-tooltip"
+            place="bottom"
+            style={{
+              backgroundColor: '#18181b',
+              border: '1px solid #27272a',
+              zIndex: 100,
+              fontSize: '12px',
+              fontWeight: 'bold'
+            }}
           />
 
-          <button
-            onClick={runMacroManually}
-            className="bg-[#18181b] hover:bg-[#27272a] text-emerald-400 px-5 py-2 rounded-lg text-[11px] font-black tracking-widest transition-all border border-[#27272a] hover:border-emerald-500/50 flex items-center gap-2 cursor-pointer shadow-lg"
+          {/* Toggle Sidebar */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            data-tooltip-id="global-tooltip"
+            data-tooltip-content="Toggle Library"
           >
-            <RiPlayFill size={16} /> RUN
-          </button>
+            <RiLayoutColumnLine size={18} />
+          </motion.button>
 
-          <button
-            onClick={saveWorkflow}
-            className="bg-emerald-600 hover:bg-emerald-500 text-black px-6 py-2 rounded-lg text-[11px] font-black tracking-widest transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center gap-2 cursor-pointer"
+          <div className="w-px h-6 bg-white/10 mx-1" />
+
+          {/* Canvas Actions */}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={resetCanvas}
+            className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            data-tooltip-id="global-tooltip"
+            data-tooltip-content="New Macro"
           >
-            <RiSave3Line size={16} /> SAVE
-          </button>
+            <RiAddLine size={18} />
+          </motion.button>
+
+          <div className="px-1">
+            <MacroManagementMenu loadMacroToCanvas={loadMacroToCanvas} />
+          </div>
+
+          <div className="w-px h-6 bg-white/10 mx-1" />
+
+          {/* Macro Name Input */}
+          <div className="flex items-center bg-black/50 border border-white/5 rounded-xl px-3 py-1.5 focus-within:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/50 transition-all w-64">
+            <RiSettings4Line size={14} className="text-zinc-500 mr-2 shrink-0" />
+            <input
+              type="text"
+              value={workflowName}
+              onChange={(e) => setWorkflowName(e.target.value)}
+              className="bg-transparent border-none outline-none text-sm font-semibold text-white w-full placeholder:text-zinc-600"
+              placeholder="Macro Name..."
+            />
+          </div>
+
+          {/* Execution Controls */}
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={runMacroManually}
+            className="ml-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-5 py-2 rounded-xl text-[11px] font-bold tracking-widest uppercase transition-all border border-emerald-500/30 flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.1)]"
+          >
+            <RiPlayFill size={16} /> Run
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={saveWorkflow}
+            className="bg-white hover:bg-zinc-200 text-black px-5 py-2 rounded-xl text-[11px] font-bold tracking-widest uppercase transition-all shadow-[0_0_15px_rgba(255,255,255,0.1)] flex items-center gap-2 cursor-pointer"
+          >
+            <RiSave3Line size={16} /> Save
+          </motion.button>
         </div>
 
+        {/* REACT FLOW CANVAS */}
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -498,22 +530,13 @@ function Editor() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           nodeTypes={nodeTypes}
-          className="bg-[#09090b]"
+          className="bg-[#050505]"
+          fitView
         >
-          <Background color="#27272a" gap={20} size={1} />
-          <Controls className="react-flow__controls" />
+          {/* Extremely subtle, professional dot grid */}
+          <Background color="#ffffff" gap={24} size={1} style={{ opacity: 0.03 }} />
+          <Controls className="react-flow__controls bg-zinc-900 border-white/10 fill-zinc-400" />
         </ReactFlow>
-
-        <Tooltip
-          id="global-tooltip"
-          place="top"
-          style={{
-            maxWidth: '250px',
-            backgroundColor: '#18181b',
-            border: '1px solid #27272a',
-            zIndex: 100
-          }}
-        />
 
         {selectedNodeId && (
           <ParameterEditorDrawer

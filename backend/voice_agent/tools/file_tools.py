@@ -1,6 +1,8 @@
 import os
 import logging
+import asyncio
 from typing import Dict, Any, List
+from pathlib import Path
 
 logger = logging.getLogger("nexus.tools.files")
 
@@ -42,6 +44,67 @@ async def read_directory(directory_path: str) -> str:
         return "\n".join(output)
     except Exception as e:
         return f"Error reading directory: {str(e)}"
+
+IGNORE_FOLDERS = {
+    'node_modules', 'appdata', 'program files', 'windows',
+    'system volume information', 'dist', 'build', '.git', '$recycle.bin',
+    '.next', 'venv', 'env'
+}
+
+def _native_search_sync(keywords: List[str], target_dir: str, max_results: int = 15) -> List[str]:
+    """Synchronous heavy lifting for file searching to run in a thread."""
+    found_files = []
+    
+    try:
+        target_path = Path(target_dir).expanduser().resolve()
+        if not target_path.exists():
+            return []
+            
+        for root, dirs, files in os.walk(target_path):
+            # In-place modification to skip ignored directories
+            dirs[:] = [d for d in dirs if d.lower() not in IGNORE_FOLDERS and not d.startswith(('.', '$'))]
+            
+            for file in files:
+                if len(found_files) >= max_results:
+                    return found_files
+                    
+                file_lower = file.lower()
+                # Check if ALL keywords match the file name
+                is_match = all(kw.lower() in file_lower for kw in keywords)
+                if is_match:
+                    found_files.append(os.path.join(root, file))
+                    
+    except Exception as e:
+        logger.error(f"Error during deep search: {e}")
+        
+    return found_files
+
+async def search_files(keywords: List[str], search_root: str = "home") -> str:
+    """
+    Search for files locally using a native crawler.
+    """
+    try:
+        # Determine the root
+        if search_root.lower() in ["desktop", "documents", "downloads", "music", "pictures", "videos"]:
+            base_dir = os.path.join(os.path.expanduser("~"), search_root.capitalize())
+        elif search_root.lower() == "home":
+            base_dir = os.path.expanduser("~")
+        elif os.path.isabs(search_root):
+            base_dir = search_root
+        else:
+            base_dir = os.path.join(os.path.expanduser("~"), search_root)
+            
+        logger.info(f"🔎 Sweeping {base_dir} for keywords: {keywords}")
+        
+        # Run the heavy IO-bound search in a separate thread so we don't block the WebSocket event loop
+        found = await asyncio.to_thread(_native_search_sync, keywords, base_dir)
+        
+        if found:
+            return f"⚡ Native Deep System Matches in {base_dir}:\n" + "\n".join([f"- {f}" for f in found])
+        else:
+            return f"No files found matching {keywords} in {base_dir}."
+    except Exception as e:
+        return f"Error searching files: {str(e)}"
 
 FILE_TOOLS = [
     {
@@ -96,6 +159,28 @@ FILE_TOOLS = [
                     }
                 },
                 "required": ["directory_path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_files",
+            "description": "Search for files locally on the user's computer.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keywords": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Keywords to match in the filename (e.g. ['resume', 'pdf'])"
+                    },
+                    "search_root": {
+                        "type": "string",
+                        "description": "The root folder to search in (e.g., 'home', 'desktop', 'documents', 'downloads', or an absolute path). Defaults to 'home'."
+                    }
+                },
+                "required": ["keywords"]
             }
         }
     }

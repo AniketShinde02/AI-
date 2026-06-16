@@ -2,17 +2,31 @@ import logging
 import asyncio
 from typing import AsyncIterator, Optional, Dict
 import os
-from getstream.video.rtc import PcmData
-from vision_agents.core.tts.tts import TTS
-
-# Local Providers
-# Removed top-level import to prevent startup crashes if dependencies are missing
-from kokoro_onnx import Kokoro
 import numpy as np
 from scipy.signal import resample
 import re
 from enum import Enum
 from dataclasses import dataclass
+
+@dataclass
+class PcmData:
+    samples: np.ndarray
+
+class TTS:
+    def __init__(self, provider_name: str = "Unknown"):
+        self.provider_name = provider_name
+    
+    async def generate(self, text: str):
+        pass
+
+    async def stream_audio(self, text: str, *args, **kwargs) -> AsyncIterator[PcmData]:
+        yield PcmData(samples=np.array([]))
+
+    async def stop_audio(self):
+        pass
+
+    async def close(self):
+        pass
 
 @dataclass
 class ProviderCapabilities:
@@ -49,12 +63,19 @@ class TTSProviderRouter(TTS):
         except Exception as e:
             logger.error(f"❌ Failed to init GeminiTTS: {e}")
 
+        # 2. Initialize Edge TTS (Fallback)
+        try:
+            from .tts_edge import EdgeTTS
+            self.providers["edge"] = EdgeTTS()
+        except Exception as e:
+            logger.error(f"❌ Failed to init EdgeTTS: {e}")
+
         # Final Status Resolution
         if any(getattr(p, 'status', None) == ProviderStatus.READY for p in self.providers.values()):
             self.status = ProviderStatus.READY
         else:
             self.status = ProviderStatus.FAILED
-            logger.critical("🆘 [TTS] GeminiTTS failed to initialize. Voice pipeline broken.")
+            logger.critical("🆘 [TTS] All TTS providers failed to initialize. Voice pipeline broken.")
 
     def validate_provider(self, provider_name: str) -> bool:
         """Strict validation before switching to a provider."""
@@ -78,41 +99,49 @@ class TTSProviderRouter(TTS):
         """
         Routes text to Gemini TTS.
         """
-        async def _gen() -> AsyncIterator[PcmData]:
-            chain = ["gemini"]
+        async def _gen():
+            base_chain = ["edge"]
+            chain = [provider] + [p for p in base_chain if p != provider]
 
             provider_used = None
+            fallback_occurred = False
+            provider_errors = {}
 
             for p_key in chain:
                 if not self.validate_provider(p_key):
                     continue
 
+                if fallback_occurred:
+                    logger.info(f"[TTS] Provider Fallback: Trying {p_key}")
+
                 p_instance = self.providers[p_key]
 
                 try:
-                    logger.info(f"🔀 [TTS Router] Attempting: {p_key}")
+                    logger.info(f"[TTS] Provider Selected: {p_key}")
 
-                    gen_obj = p_instance.stream_audio(text, **kwargs)
-                    # Providers return either a coroutine (async def) or async generator directly
-                    if asyncio.iscoroutine(gen_obj):
-                        gen_obj = await gen_obj
+                    yield {"provider": p_key, "fallback": fallback_occurred, "voice": kwargs.get("voice", "unknown")}
 
-                    async for data in gen_obj:
+                    async for data in p_instance.stream_audio(text, **kwargs):
                         yield data
 
                     provider_used = p_key
-                    logger.info(f"✅ [TTS Router] Completed with: {p_key}")
+                    logger.info(f"[TTS] Provider Success: {p_key}")
                     break  # Success — stop fallback chain
 
                 except Exception as e:
-                    logger.error(f"❌ [TTS Router] {p_key} failed: {e}. Trying next...")
+                    import traceback
+                    err_str = traceback.format_exc()
+                    logger.error(f"[TTS] Provider Failed: {p_key}. Error: {e}")
+                    with open("DEBUG_FORENSICS.txt", "a", encoding="utf-8") as f: f.write(f"[TTS Router Error] {p_key} failed: {e}\n{err_str}\n")
+                    fallback_occurred = True
+                    provider_errors[p_key] = str(e)
                     # Mark this provider degraded so validate_provider skips it next time
                     if hasattr(p_instance, "status"):
                         setattr(p_instance, "status", ProviderStatus.FAILED)
 
             if not provider_used:
                 logger.critical("🆘 [TTS Router] All providers in chain failed!")
-                raise RuntimeError("All TTS providers failed — no audio produced.")
+                raise RuntimeError(f"All TTS providers failed — no audio produced. Errors: {provider_errors}")
 
         return _gen()
 

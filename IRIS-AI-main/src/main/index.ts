@@ -16,40 +16,16 @@ import fs from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
-import registerIpcHandlers from './logic/iris-memory-save'
-import registerSystemHandlers from './logic/get-system-info'
-import registerFileSearch from './logic/file-search'
-import registerFileOps from './logic/file-ops'
-import registerFileWrite from './logic/file-write'
-import registerFileRead from './logic/file-read'
-import registerFileOpen from './logic/file-open'
-import registerDirLoader from './logic/dir-load'
-import registerFileScanner from './logic/file-launcher'
-import registerAppLauncher from './logic/app-launcher'
-import registerNotesHandlers from './logic/notes-manager'
-import registerWebAgent from './logic/web-agent'
-import registerGhostControl from './logic/ghost-control'
-import registerterminalControl from './logic/terminal-control'
-import registerGalleryHandlers from './logic/gallery-manager'
-import registerGmailHandlers from './logic/gmail-manager'
-import registerLocationHandlers from './logic/live-location'
-import registerAdbHandlers from './logic/adb-manager'
-import registerRealityHacker from './logic/reality-hacker'
-import registerIrisCoder from './services/iris-coder'
-import registerTelekinesis from './logic/telekinesis'
-import registerPermanentMemory from './logic/permanent-memory'
-import registerWormhole from './services/wormhole'
-import registerOracle from './services/RAG-oracle'
-import registerDeepResearch from './services/deep-research'
-import registerWidgetMaker from './auto/widget-manager'
-import registerWebsiteBuilder from './auto/website-builder'
-import registerWorkflowManager from './workflow/workflow-manager'
-import registerDropZoneControl from './handlers/SmartDropZone-Handler'
 import registerScreenPeeler from './handlers/ScreenPeeler-handler'
 import registerPhantomKeyboard from './handlers/PhantomControl-handler'
 import registerSecurityVault from './security/Security'
 import registerLockSystem from './security/lock-system'
 import { autoUpdater } from 'electron-updater'
+import { pushVisionToGemini, StartIRIS, stopIRIS, toggleIRISMic } from './agents/iris-ai'
+import { getMemory } from './hooks/iris-memory'
+import { getAdbHistory } from './mobile/adb-manager'
+import registerSystemHandlers from './lib/system'
+import registerFrontendIPC from './handler/ui-ipc-bridge'
 
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream')
 
@@ -155,6 +131,8 @@ function toggleOverlayMode() {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron')
+
+  registerFrontendIPC()
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
@@ -299,39 +277,39 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.on('iris:start-session', (event) => {
+    console.log('Starting IRIS...')
+    StartIRIS(event)
+  })
+
+  ipcMain.on('iris:stop-session', () => {
+    console.log('Stopping IRIS...')
+    stopIRIS()
+  })
+
+  ipcMain.on('iris:toggle-mic', (_event, isMuted: boolean) => {
+    console.log(`Toggling Mic... Muted state: ${isMuted}`)
+    toggleIRISMic(isMuted)
+  })
+
+  ipcMain.handle('iris:get-history', async () => {
+    return await getMemory()
+  })
+
+  ipcMain.handle('adb-get-history', async () => {
+    return await getAdbHistory()
+  })
+
+  ipcMain.on('iris:send-vision-frame', (_event, base64Data: string) => {
+    pushVisionToGemini(base64Data)
+  })
+
+  registerSystemHandlers(ipcMain)
+
   registerLockSystem()
   registerSecurityVault()
   registerPhantomKeyboard()
   registerScreenPeeler()
-  registerDropZoneControl(ipcMain)
-  registerWorkflowManager()
-  registerWebsiteBuilder()
-  registerWidgetMaker()
-  registerDeepResearch({ ipcMain })
-  registerOracle({ ipcMain })
-  registerWormhole({ ipcMain })
-  registerPermanentMemory({ ipcMain, app })
-  registerTelekinesis({ ipcMain })
-  registerIrisCoder({ ipcMain, app })
-  registerRealityHacker(ipcMain)
-  registerAdbHandlers(ipcMain)
-  registerLocationHandlers(ipcMain)
-  registerGmailHandlers(ipcMain)
-  registerGalleryHandlers(ipcMain)
-  registerterminalControl(ipcMain)
-  registerGhostControl(ipcMain)
-  registerWebAgent(ipcMain)
-  registerNotesHandlers(ipcMain)
-  registerAppLauncher(ipcMain)
-  registerDirLoader(ipcMain)
-  registerFileOpen(ipcMain)
-  registerFileSearch(ipcMain)
-  registerFileRead(ipcMain)
-  registerFileWrite(ipcMain)
-  registerFileOps(ipcMain)
-  registerFileScanner(ipcMain)
-  registerSystemHandlers(ipcMain)
-  registerIpcHandlers({ ipcMain, app })
 
   ipcMain.handle('get-screen-source', async () => {
     const sources = await desktopCapturer.getSources({ types: ['screen'] })

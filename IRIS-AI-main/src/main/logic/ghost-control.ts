@@ -1,4 +1,4 @@
-import { IpcMain, app, shell, clipboard, screen } from 'electron'
+import { app, shell, clipboard, screen } from 'electron'
 import { keyboard, Key, mouse, Point, Button } from '@nut-tree-fork/nut-js'
 import screenshot from 'screenshot-desktop'
 import loudness from 'loudness'
@@ -60,12 +60,12 @@ const KEY_MAP: Record<string, Key> = {
 }
 
 function generateHumanPath(start: Point, end: Point): Point[] {
-  const steps = 25 
+  const steps = 25
   const pathArray: Point[] = []
 
   const directionX = end.x > start.x ? 1 : -1
   const directionY = end.y > start.y ? 1 : -1
-  const deviation = Math.random() * 80 + 20 
+  const deviation = Math.random() * 80 + 20
 
   const controlPoint = new Point(
     start.x +
@@ -85,115 +85,126 @@ function generateHumanPath(start: Point, end: Point): Point[] {
   return pathArray
 }
 
-export default function registerGhostControl(ipcMain: IpcMain) {
-  ipcMain.handle('copy-file-to-clipboard', async (_event, filePath: string) => {
-    return new Promise((resolve) => {
-      const cmd = `powershell -command "Set-Clipboard -Path '${filePath}'"`
-      exec(cmd, (error) => {
-        if (error) {
-          resolve(false)
-        } else resolve(true)
-      })
+export async function copyFileToClipboard(filePath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const cmd = `powershell -command "Set-Clipboard -Path '${filePath}'"`
+    exec(cmd, (error) => {
+      if (error) {
+        resolve(false)
+      } else resolve(true)
     })
   })
+}
 
-  ipcMain.handle('ghost-sequence', async (_event, actions: any[]) => {
-    try {
-      for (const action of actions) {
-        if (action.type === 'paste') {
-          clipboard.writeText(action.text)
-          await new Promise((r) => setTimeout(r, 200))
-          await keyboard.pressKey(Key.LeftControl, Key.V)
-          await keyboard.releaseKey(Key.V, Key.LeftControl)
-        } else if (action.type === 'wait') {
-          await new Promise((r) => setTimeout(r, action.ms || 500))
-        } else if (action.type === 'type') {
-          await keyboard.type(action.text)
-        } else if (action.type === 'press') {
-          const k = KEY_MAP[action.key.toLowerCase()]
-          if (k !== undefined) {
-            if (action.modifiers) {
-              const mods = action.modifiers
-                .map((m: any) => KEY_MAP[m.toLowerCase()])
-                .filter(Boolean)
-              for (const mod of mods) await keyboard.pressKey(mod)
-              await keyboard.pressKey(k)
-              await keyboard.releaseKey(k)
-              for (const mod of mods.reverse()) await keyboard.releaseKey(mod)
-            } else {
-              await keyboard.pressKey(k)
-              await keyboard.releaseKey(k)
-            }
+export async function executeGhostSequence(actions: any[]): Promise<boolean> {
+  try {
+    for (const action of actions) {
+      if (action.type === 'paste') {
+        clipboard.writeText(action.text)
+        await new Promise((r) => setTimeout(r, 200))
+        await keyboard.pressKey(Key.LeftControl, Key.V)
+        await keyboard.releaseKey(Key.V, Key.LeftControl)
+      } else if (action.type === 'wait') {
+        await new Promise((r) => setTimeout(r, action.ms || 500))
+      } else if (action.type === 'type') {
+        await keyboard.type(action.text)
+      } else if (action.type === 'press') {
+        const k = KEY_MAP[action.key.toLowerCase()]
+        if (k !== undefined) {
+          if (action.modifiers) {
+            const mods = action.modifiers.map((m: any) => KEY_MAP[m.toLowerCase()]).filter(Boolean)
+            for (const mod of mods) await keyboard.pressKey(mod)
+            await keyboard.pressKey(k)
+            await keyboard.releaseKey(k)
+            for (const mod of mods.reverse()) await keyboard.releaseKey(mod)
+          } else {
+            await keyboard.pressKey(k)
+            await keyboard.releaseKey(k)
           }
-        } else if (action.type === 'click') {
-          await mouse.leftClick()
         }
+      } else if (action.type === 'click') {
+        await mouse.leftClick()
       }
-      return true
-    } catch (e) {
-      return false
     }
-  })
+    return true
+  } catch (e) {
+    return false
+  }
+}
 
-  ipcMain.handle('ghost-click-coordinate', async (_event, { x, y, doubleClick }) => {
-    try {
-      const primaryDisplay = screen.getPrimaryDisplay()
-      const scaleFactor = primaryDisplay.scaleFactor
-
-      const logicalX = Math.round(x / scaleFactor)
-      const logicalY = Math.round(y / scaleFactor)
-
-      const startPoint = await mouse.getPosition()
-      const endPoint = new Point(logicalX, logicalY)
-
-      const pathPoints = generateHumanPath(startPoint, endPoint)
-      await mouse.move(pathPoints)
-
-      if (doubleClick) await mouse.doubleClick(Button.LEFT)
-      else await mouse.leftClick()
-
-      return true
-    } catch (e) {
-      return false
-    }
-  })
-
-  ipcMain.handle('ghost-scroll', async (_event, { direction, amount }) => {
-    try {
-      const scrollAmount = amount || 500
-      if (direction === 'up') await mouse.scrollUp(scrollAmount)
-      else await mouse.scrollDown(scrollAmount)
-      return true
-    } catch (e) {
-      return false
-    }
-  })
-
-  ipcMain.handle('get-screen-size', async () => {
+export async function ghostClickCoordinate({
+  x,
+  y,
+  doubleClick
+}: {
+  x: number
+  y: number
+  doubleClick?: boolean
+}): Promise<boolean> {
+  try {
     const primaryDisplay = screen.getPrimaryDisplay()
-    return {
-      width: primaryDisplay.size.width * primaryDisplay.scaleFactor,
-      height: primaryDisplay.size.height * primaryDisplay.scaleFactor
-    }
-  })
+    const scaleFactor = primaryDisplay.scaleFactor
 
-  ipcMain.handle('set-volume', async (_event, level: number) => {
-    try {
-      await loudness.setVolume(level)
-      return `Volume ${level}%`
-    } catch (e) {
-      return 'Error'
-    }
-  })
-  ipcMain.handle('take-screenshot', async () => {
-    try {
-      const filename = `IRIS_Capture_${Date.now()}.png`
-      const savePath = path.join(app.getPath('pictures'), filename)
-      await screenshot({ filename: savePath })
-      shell.showItemInFolder(savePath)
-      return `Screenshot saved.`
-    } catch (e) {
-      return 'Error'
-    }
-  })
+    const logicalX = Math.round(x / scaleFactor)
+    const logicalY = Math.round(y / scaleFactor)
+
+    const startPoint = await mouse.getPosition()
+    const endPoint = new Point(logicalX, logicalY)
+
+    const pathPoints = generateHumanPath(startPoint, endPoint)
+    await mouse.move(pathPoints)
+
+    if (doubleClick) await mouse.doubleClick(Button.LEFT)
+    else await mouse.leftClick()
+
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+export async function ghostScroll({
+  direction,
+  amount
+}: {
+  direction: 'up' | 'down'
+  amount?: number
+}): Promise<boolean> {
+  try {
+    const scrollAmount = amount || 500
+    if (direction === 'up') await mouse.scrollUp(scrollAmount)
+    else await mouse.scrollDown(scrollAmount)
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+export async function getScreenSize(): Promise<{ width: number; height: number }> {
+  const primaryDisplay = screen.getPrimaryDisplay()
+  return {
+    width: primaryDisplay.size.width * primaryDisplay.scaleFactor,
+    height: primaryDisplay.size.height * primaryDisplay.scaleFactor
+  }
+}
+
+export async function setVolume(level: number): Promise<string> {
+  try {
+    await loudness.setVolume(level)
+    return `Volume ${level}%`
+  } catch (e) {
+    return 'Error'
+  }
+}
+
+export async function takeScreenshot(): Promise<string> {
+  try {
+    const filename = `IRIS_Capture_${Date.now()}.png`
+    const savePath = path.join(app.getPath('pictures'), filename)
+    await screenshot({ filename: savePath })
+    shell.showItemInFolder(savePath)
+    return `Screenshot saved.`
+  } catch (e) {
+    return 'Error'
+  }
 }

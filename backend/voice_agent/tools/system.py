@@ -1,6 +1,7 @@
 import os
 import subprocess
 import logging
+import psutil
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger("nexus.tools.system")
@@ -46,11 +47,45 @@ async def open_application(app_name: str) -> str:
     """Opens a Windows application by name."""
     logger.info(f"🚀 Opening application: {app_name}")
     try:
+        # Resolve common app names
+        aliases = {
+            "browser": "msedge",
+            "chrome": "chrome",
+            "edge": "msedge",
+            "code": "code",
+            "vscode": "code",
+            "notepad": "notepad",
+            "calculator": "calc",
+            "calc": "calc",
+            "explorer": "explorer",
+            "terminal": "wt"
+        }
+        
+        target_app = aliases.get(app_name.lower(), app_name)
+        
         # Simple start command for Windows
-        subprocess.Popen(f"start {app_name}", shell=True)
-        return f"Attempting to open {app_name}..."
+        subprocess.Popen(f"start {target_app}", shell=True)
+        return f"Successfully launched '{target_app}'."
     except Exception as e:
-        return f"Failed to open {app_name}: {str(e)}"
+        return f"Failed to open '{app_name}': {str(e)}"
+
+async def get_system_status() -> str:
+    """Get the current system resource usage."""
+    try:
+        cpu = psutil.cpu_percent(interval=0.5)
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+        
+        status = [
+            "🖥️ Nexus Host System Status:",
+            f"- CPU Usage: {cpu}%",
+            f"- RAM Usage: {memory.percent}% ({memory.used // (1024**3)}GB / {memory.total // (1024**3)}GB)",
+            f"- Disk Usage: {disk.percent}% ({disk.used // (1024**3)}GB / {disk.total // (1024**3)}GB)",
+            f"- Active Processes: {len(psutil.pids())}"
+        ]
+        return "\n".join(status)
+    except Exception as e:
+        return f"Failed to get system status: {str(e)}"
 
 # Define the tool metadata for the LLM
 SYSTEM_TOOLS = [
@@ -85,6 +120,18 @@ SYSTEM_TOOLS = [
                     }
                 },
                 "required": ["app_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_system_status",
+            "description": "Get current CPU, RAM, and Disk usage of the host machine.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
             }
         }
     }

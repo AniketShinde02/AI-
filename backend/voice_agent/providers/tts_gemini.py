@@ -6,9 +6,7 @@ from typing import AsyncIterator
 from scipy.signal import resample_poly
 from math import gcd
 
-from getstream.video.rtc import PcmData
-from vision_agents.core.tts.tts import TTS
-from .tts import ProviderStatus
+from .tts import ProviderStatus, PcmData, TTS
 
 logger = logging.getLogger("nexus.tts.gemini")
 
@@ -45,72 +43,47 @@ class GeminiTTS(TTS):
             return
 
         # Voice selection (Gemini supports voices like Puck, Aoede, Charon, Fenrir, Kore)
-        gender = kwargs.get("gender", "female")
-        voice_name = "Puck" if gender == "male" else "Aoede"
+        voice_name = kwargs.get("voice")
+        if not voice_name or voice_name == "undefined":
+            gender = kwargs.get("gender", "nexus_male")
+            voice_map = {
+                "sarah": "Aoede",
+                "nexus_male": "Puck",
+                "professional_male": "Fenrir",
+                "casual_female": "Kore"
+            }
+            voice_name = voice_map.get(gender, "Puck")
 
         try:
             from google.genai import types
             
             def fetch_tts():
-                import time
-                import random
-                max_retries = 3
-                retries = 0
-                
-                while retries <= max_retries:
-                    try:
-                        return self.client.models.generate_content(
-                            model='gemini-2.5-flash-preview-tts',
-                            contents=f"Generate audio from the following text transcript without any extra commentary:\n\n{text}",
-                            config=types.GenerateContentConfig(
-                                response_modalities=["AUDIO"],
-                                speech_config=types.SpeechConfig(
-                                    voice_config=types.VoiceConfig(
-                                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                            voice_name=voice_name
-                                        )
+                try:
+                    return self.client.models.generate_content(
+                        model='gemini-2.5-flash-preview-tts',
+                        contents=text,
+                        config=types.GenerateContentConfig(
+                            response_modalities=["AUDIO"],
+                            speech_config=types.SpeechConfig(
+                                voice_config=types.VoiceConfig(
+                                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                        voice_name=voice_name
                                     )
                                 )
                             )
                         )
-                    except Exception as e:
-                        err_str = str(e).lower()
-                        if "429" in err_str or "too many requests" in err_str or "quota" in err_str:
-                            retries += 1
-                            if retries > max_retries:
-                                logger.error(f"❌ Gemini API Rate Limit Exceeded after {max_retries} retries.")
-                                raise e
-                            
-                            import re
-                            # Parse retry delay from Google API error (e.g. 'retryDelay': '33s' or 'retry in 2.06s')
-                            retry_delay = None
-                            match1 = re.search(r"retrydelay':\s*'(\d+)s'", err_str)
-                            match2 = re.search(r"retry in (\d+(?:\.\d+)?)s", err_str)
-                            if match1:
-                                retry_delay = float(match1.group(1))
-                            elif match2:
-                                retry_delay = float(match2.group(1))
-                                
-                            if retry_delay is not None:
-                                sleep_time = retry_delay + random.uniform(0.1, 1.0)
-                            else:
-                                # Exponential backoff with jitter (5s, 10s, 20s)
-                                sleep_time = (2 ** retries) * 5 + random.uniform(0.1, 1.0)
-                            
-                            if sleep_time > 65:
-                                logger.error(f"❌ Rate limit retry delay too long ({sleep_time:.2f}s). Failing.")
-                                raise e
-                                
-                            logger.warning(f"⚠️ Gemini Rate Limit Hit (429)! Retrying in {sleep_time:.2f}s... (Attempt {retries}/{max_retries})")
-                            time.sleep(sleep_time)
-                        else:
-                            raise e
+                    )
+                except Exception as e:
+                    logger.error(f"❌ GeminiTTS Error: {e}")
+                    raise e
             
-            response = await asyncio.to_thread(fetch_tts)
+            try:
+                response = await asyncio.wait_for(asyncio.to_thread(fetch_tts), timeout=15.0)
+            except asyncio.TimeoutError:
+                raise RuntimeError("GeminiTTS: API call timed out after 15 seconds.")
             
             if not response:
-                logger.error("❌ GeminiTTS: API returned no response (None).")
-                return
+                raise RuntimeError("GeminiTTS: API returned no response (None).")
 
             audio_bytes = None
             try:
@@ -123,8 +96,14 @@ class GeminiTTS(TTS):
                 logger.warning(f"⚠️ GeminiTTS: Failed to parse response candidates: {e}")
             
             if not audio_bytes:
-                logger.error("❌ GeminiTTS: No audio data returned by API.")
-                return
+                error_msg = "GeminiTTS: No audio data returned by API."
+                logger.error(f"❌ {error_msg}")
+                if getattr(response, "candidates", None) and response.candidates[0].content:
+                    parts = getattr(response.candidates[0].content, "parts", []) or []
+                    for part in parts:
+                        if getattr(part, "text", None):
+                            logger.error(f"   Gemini Text Output instead of Audio: {part.text}")
+                raise RuntimeError(error_msg)
 
             # Extract raw PCM from WAV file
             import wave
@@ -141,13 +120,14 @@ class GeminiTTS(TTS):
             for i in range(0, len(audio_bytes_raw), chunk_size):
                 chunk = audio_bytes_raw[i:i + chunk_size]
                 chunk_array = np.frombuffer(chunk, dtype=np.int16)
-                yield PcmData(sample_rate=24000, format='s16', channels=1, samples=chunk_array)
+                yield PcmData(samples=chunk_array)
                 # We do NOT await asyncio.sleep here. The backend should push to the socket
                 # as fast as possible, and the frontend will buffer and schedule it.
                 await asyncio.sleep(0) # yield control to event loop
 
         except Exception as e:
             logger.error(f"❌ GeminiTTS Error: {e}")
+            raise e
 
     async def stop_audio(self) -> None:
         """Stop generating audio. For REST APIs this is a no-op as chunks are buffered immediately."""

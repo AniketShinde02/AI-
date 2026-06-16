@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { useVoice } from "@/contexts/VoiceContext";
 
 interface Message {
@@ -41,14 +41,25 @@ interface NexusContextType {
   setUiMode: (mode: "voice" | "chat") => void;
   selectedModel: string;
   setSelectedModel: (model: string) => void;
-  persona: "female" | "male";
-  setPersona: (persona: "female" | "male") => void;
+  persona: string;
+  setPersona: (persona: string) => void;
   perplexityMode: boolean;
   setPerplexityMode: (mode: boolean) => void;
   ttsProvider: string;
   setTtsProvider: (provider: string) => void;
   language: string;
   setLanguage: (lang: string) => void;
+  voiceEngine: string;
+  setVoiceEngine: (engine: string) => void;
+  voice: string;
+  setVoice: (voice: string) => void;
+  speed: number;
+  setSpeed: (speed: number) => void;
+  pitch: number;
+  setPitch: (pitch: number) => void;
+  voiceVolume: number;
+  setVoiceVolume: (volume: number) => void;
+  testVoice: (text?: string) => void;
 }
 
 const NexusContext = createContext<NexusContextType | undefined>(undefined);
@@ -63,11 +74,92 @@ export function NexusProvider({ children }: { children: ReactNode }) {
   const [isSending, setIsSending] = useState(false);
   const [uiMode, setUiMode] = useState<"voice" | "chat">("voice");
   const [selectedModel, setSelectedModel] = useState("llama-3.3-70b-versatile");
-  const [persona, setPersona] = useState<"female" | "male">("female");
+  const [persona, setPersona] = useState<string>("nexus_male");
   const [perplexityMode, setPerplexityMode] = useState(true);
   const [ttsProvider, setTtsProvider] = useState("gemini");
   const [language, setLanguage] = useState("auto");
+  const [voiceEngine, setVoiceEngineState] = useState("standard");
   const [voiceState, setVoiceState] = useState<string>("idle");
+  const [voice, setVoice] = useState("");
+  const [speed, setSpeed] = useState(1.0);
+  const [pitch, setPitch] = useState(0);
+  const [voiceVolume, setVoiceVolume] = useState(100);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+        const savedEngine = localStorage.getItem('nexus_voice_engine');
+        if (savedEngine) setVoiceEngineState(savedEngine);
+        
+        const savedProvider = localStorage.getItem('nexus_tts_provider');
+        if (savedProvider) setTtsProvider(savedProvider);
+        
+        const savedVoice = localStorage.getItem('nexus_voice');
+        if (savedVoice) setVoice(savedVoice);
+        
+        const savedSpeed = localStorage.getItem('nexus_speed');
+        if (savedSpeed) setSpeed(parseFloat(savedSpeed));
+        
+        const savedPitch = localStorage.getItem('nexus_pitch');
+        if (savedPitch) setPitch(parseInt(savedPitch, 10));
+        
+        const savedVolume = localStorage.getItem('nexus_volume');
+        if (savedVolume) setVoiceVolume(parseInt(savedVolume, 10));
+
+        // Load Session History
+        const sessionId = localStorage.getItem('nexus_session_id');
+        if (sessionId) {
+            fetch(`http://localhost:8001/api/history/${sessionId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.history && data.history.length > 0) {
+                        const loadedMessages = data.history.map((msg: any, i: number) => ({
+                            id: `hist_${i}`,
+                            role: msg.role,
+                            content: msg.content,
+                            timestamp: msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now()
+                        }));
+                        setMessages(loadedMessages);
+                    }
+                })
+                .catch(err => console.error("Failed to load history:", err));
+        }
+    }
+  }, []);
+
+  // Wrap setters to persist
+  const setTtsProviderPersist = useCallback((val: string) => {
+    setTtsProvider(val);
+    if (typeof window !== 'undefined') localStorage.setItem('nexus_tts_provider', val);
+  }, []);
+  
+  const setVoicePersist = useCallback((val: string) => {
+    setVoice(val);
+    if (typeof window !== 'undefined') localStorage.setItem('nexus_voice', val);
+  }, []);
+  
+  const setSpeedPersist = useCallback((val: number) => {
+    setSpeed(val);
+    if (typeof window !== 'undefined') localStorage.setItem('nexus_speed', val.toString());
+  }, []);
+  
+  const setPitchPersist = useCallback((val: number) => {
+    setPitch(val);
+    if (typeof window !== 'undefined') localStorage.setItem('nexus_pitch', val.toString());
+  }, []);
+  
+  const setVoiceVolumePersist = useCallback((val: number) => {
+    setVoiceVolume(val);
+    if (typeof window !== 'undefined') localStorage.setItem('nexus_volume', val.toString());
+  }, []);
+
+  const setVoiceEngine = useCallback((engine: string) => {
+    setVoiceEngineState(engine);
+    if (typeof window !== 'undefined') {
+        localStorage.setItem('nexus_voice_engine', engine);
+    }
+    // We would ideally reload or reconnect the voice context here
+    window.location.reload();
+  }, []);
 
   const addMessage = useCallback((msg: Omit<Message, "id" | "timestamp">) => {
     setMessages(prev => [
@@ -84,7 +176,7 @@ export function NexusProvider({ children }: { children: ReactNode }) {
     addMessage({ role: "user", content: text });
   }, [addMessage]);
 
-  const handleAgentMessage = useCallback((text: string, isParagraphEnd: boolean) => {
+  const handleAgentMessage = useCallback((text: string, _isParagraphEnd: boolean) => {
     setMessages(prev => {
       const lastMsg = prev[prev.length - 1];
       if (lastMsg && lastMsg.role === "assistant") {
@@ -127,8 +219,23 @@ export function NexusProvider({ children }: { children: ReactNode }) {
     stopListening,
     setMicMuted,
     sendTextMessage,
-    setCallbacks
+    setCallbacks,
+    updateSettings,
+    testVoice
   } = useVoice();
+
+  React.useEffect(() => {
+    updateSettings({
+      persona,
+      ttsProvider,
+      language,
+      voiceEngine,
+      voice,
+      speed,
+      pitch,
+      volume: voiceVolume
+    });
+  }, [persona, ttsProvider, language, voiceEngine, voice, speed, pitch, voiceVolume, updateSettings]);
 
   React.useEffect(() => {
     setCallbacks({
@@ -201,9 +308,20 @@ export function NexusProvider({ children }: { children: ReactNode }) {
       perplexityMode,
       setPerplexityMode,
       ttsProvider,
-      setTtsProvider,
+      setTtsProvider: setTtsProviderPersist,
       language,
       setLanguage,
+      voiceEngine,
+      setVoiceEngine,
+      voice,
+      setVoice: setVoicePersist,
+      speed,
+      setSpeed: setSpeedPersist,
+      pitch,
+      setPitch: setPitchPersist,
+      voiceVolume,
+      setVoiceVolume: setVoiceVolumePersist,
+      testVoice,
       systemMetrics,
       voiceState
     }}>

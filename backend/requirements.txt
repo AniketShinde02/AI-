@@ -4,16 +4,7 @@ uvicorn[standard]
 pydantic-settings
 python-dotenv
 httpx
-vision-agents==0.5.4
-vision-agents-plugins-getstream==0.5.4
-vision-agents-plugins-deepgram==0.5.4
-vision-agents-plugins-elevenlabs==0.5.4
-aiortc
-getstream
-stream-chat
 groq
-deepgram-sdk
-elevenlabs
 redis
 python-multipart
 firebase-admin

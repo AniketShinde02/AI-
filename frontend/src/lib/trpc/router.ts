@@ -113,7 +113,7 @@ export const appRouter = router({
       });
 
       const token = serverClient.createToken(input.userId);
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8001';
 
       try {
         const response = await fetch(`${backendUrl}/voice/session`, {

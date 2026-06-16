@@ -315,3 +315,14 @@ temp_venv
 *.onnx
 
 backend/studio-*.json
+
+# --------------------------------------------
+# 11. FORENSICS & DEBUGGING SCRIPTS
+# --------------------------------------------
+scratch_*.py
+test_*.py
+forensics_*.py
+*.raw
+DEBUG_FORENSICS.txt
+.tempmediaStorage/
+Stonic-AI-Source-Code/

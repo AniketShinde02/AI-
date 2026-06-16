@@ -16,12 +16,13 @@ interface UseNexusVoiceProps {
   onMessage?: (msg: any) => void;
   onTranscript?: (text: string) => void;
   onAgentMessage?: (text: string, isParagraphEnd: boolean) => void;
-  persona?: "female" | "male";
+  persona?: string;
   ttsProvider?: string;
   language?: string;
+  voiceEngine?: string;
 }
 
-export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvider, language }: UseNexusVoiceProps = {}) {
+export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvider, language, voiceEngine }: UseNexusVoiceProps = {}) {
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -54,17 +55,44 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
   useEffect(() => { onTranscriptRef.current = onTranscript; }, [onTranscript]);
   useEffect(() => { onAgentMessageRef.current = onAgentMessage; }, [onAgentMessage]);
 
+  // Global Autoplay Unlocker: Initialize/Resume AudioContext on any user interaction
+  useEffect(() => {
+    const unlockAudio = () => {
+      try {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
+            sampleRate: 16000,
+          });
+        }
+        if (audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume().catch(() => {});
+        }
+      } catch (e) {
+        // Ignore initialization errors
+      }
+    };
+
+    window.addEventListener('click', unlockAudio, { passive: true });
+    window.addEventListener('keydown', unlockAudio, { passive: true });
+
+    return () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
+
   useEffect(() => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
-      logger.info("[Nexus WS] 📤 Sending settings...", { persona, ttsProvider, language });
+      logger.info("[Nexus WS] 📤 Sending settings...", { persona, ttsProvider, language, voiceEngine });
       socketRef.current.send(JSON.stringify({
         type: 'settings',
         persona,
         ttsProvider,
-        language
+        language,
+        voiceEngine
       }));
     }
-  }, [persona, ttsProvider, language, isConnected]);
+  }, [persona, ttsProvider, language, voiceEngine, isConnected]);
 
   const disconnect = useCallback(() => {
     logger.info("[Nexus WS] Disconnecting...");
@@ -108,6 +136,34 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     micWorkletRef.current?.disconnect();
   }, []);
 
+  const ensureAudioContext = useCallback(async () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      if (!audioContextRef.current) {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({
+          sampleRate: 16000,
+        });
+        audioContextRef.current = ctx;
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') {
+        try {
+          await ctx.resume();
+        } catch (e) {
+          console.warn("[Nexus Voice] AudioContext resume blocked by browser policy:", e);
+        }
+      }
+      if (!analyserRef.current) {
+        analyserRef.current = ctx.createAnalyser();
+        analyserRef.current.connect(ctx.destination);
+      }
+      return ctx;
+    } catch (err) {
+      console.error("[Nexus Voice] Failed to ensure AudioContext:", err);
+      return null;
+    }
+  }, []);
+
   const connect = useCallback(() => {
     if (connectionStateRef.current === "connected" || connectionStateRef.current === "connecting") {
       return;
@@ -121,7 +177,12 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
 
     isConnectingRef.current = true;
     connectionStateRef.current = reconnectAttemptsRef.current > 0 ? "reconnecting" : "connecting";
-    const wsUrl = `ws://localhost:8000/ws/nexus?session_id=${sessionId}`;
+    
+    // Choose endpoint based on voice engine preference
+    let engine = typeof window !== 'undefined' ? localStorage.getItem('nexus_voice_engine') : 'standard';
+    const endpoint = engine === 'gemini_live' ? 'gemini-live' : 'nexus';
+    const wsUrl = `ws://localhost:8001/ws/${endpoint}?session_id=${sessionId}`;
+    
     logger.info(`[WS] ${connectionStateRef.current === "reconnecting" ? "Reconnecting" : "Connecting"} to: ${wsUrl}`);
     if (socketRef.current) {
       socketRef.current.onclose = null;
@@ -154,6 +215,9 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
           
           if (msg.type === 'audio_chunk') {
             const { data } = msg;
+            const base64Bytes = data.length; // base64 string length
+            const pcmBytes = Math.floor(base64Bytes * 0.75); // approx decoded bytes
+            console.log(`[FORENSIC] AUDIO_CHUNK_RECEIVED chunk_index=${msg.meta?.chunk_index} base64_len=${base64Bytes} approx_pcm_bytes=${pcmBytes} turn=${msg.meta?.turn_id}`);
             
             // Convert base64 to Int16Array -> Float32Array
             const binaryString = window.atob(data);
@@ -168,8 +232,21 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
             }
 
             // Playback via AudioBufferSourceNode
-            const ctx = audioContextRef.current;
+            const ctx = await ensureAudioContext();
+            console.log(`[FORENSIC] AUDIO_CONTEXT_STATE state=${ctx?.state} analyser_exists=${!!analyserRef.current}`);
             if (ctx && analyserRef.current) {
+                if (ctx.state === 'suspended') {
+                    console.error(`[FORENSIC] PLAYBACK_BLOCKED reason=AUDIO_CONTEXT_SUSPENDED`);
+                    if (socketRef.current?.readyState === WebSocket.OPEN) {
+                        socketRef.current.send(JSON.stringify({ type: 'audio_finished' }));
+                    }
+                    return;
+                }
+                
+                if (float32Data.length === 0) {
+                    console.warn(`[FORENSIC] PLAYBACK_SKIPPED reason=ZERO_LENGTH_CHUNK`);
+                    return;
+                }
                 const buffer = ctx.createBuffer(1, float32Data.length, 24000);
                 buffer.getChannelData(0).set(float32Data);
 
@@ -184,6 +261,7 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
                     nextStartTimeRef.current = currentTime + 0.02; 
                 }
 
+                console.log(`[FORENSIC] PLAYBACK_STARTED scheduled_at=${nextStartTimeRef.current.toFixed(3)} ctx_time=${currentTime.toFixed(3)} buffer_duration=${buffer.duration.toFixed(3)}s samples=${float32Data.length}`);
                 source.start(nextStartTimeRef.current);
                 nextStartTimeRef.current += buffer.duration;
 
@@ -191,8 +269,10 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
                 
                 source.onended = () => {
                   activeAudioNodesRef.current = activeAudioNodesRef.current.filter((n) => n !== source);
+                  console.log(`[FORENSIC] PLAYBACK_FINISHED remaining_nodes=${activeAudioNodesRef.current.length}`);
                   if (activeAudioNodesRef.current.length === 0) {
                     setIsSpeaking(false);
+                    console.log(`[FORENSIC] ALL_AUDIO_FINISHED sending audio_finished to backend`);
                     if (socketRef.current?.readyState === WebSocket.OPEN) {
                       socketRef.current.send(JSON.stringify({ type: 'audio_finished' }));
                     }
@@ -200,14 +280,25 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
                 };
                 
                 setIsSpeaking(true);
+            } else {
+                console.error(`[FORENSIC] PLAYBACK_SKIPPED reason=CTX_OR_ANALYSER_NULL ctx=${!!ctx} analyser=${!!analyserRef.current}`);
             }
             
           } else if (msg.type === 'tts_end') {
             logger.info(`🏁 [WS] Received tts_end for Turn ${msg.turn_id}`);
+            // Failsafe: if we receive tts_end and nothing is playing, the backend will deadlock waiting for audio_finished
+            if (activeAudioNodesRef.current.length === 0) {
+              setIsSpeaking(false);
+              if (socketRef.current?.readyState === WebSocket.OPEN) {
+                socketRef.current.send(JSON.stringify({ type: 'audio_finished' }));
+              }
+            }
           } else if (msg.type === 'user_transcript') {
             onTranscriptRef.current?.(msg.text);
           } else if (msg.type === 'agent_partial') {
             onAgentMessageRef.current?.(msg.text, !!msg.is_paragraph_end);
+          } else if (msg.type === 'metrics') {
+            setSystemMetrics(msg.data);
           } else if (msg.type === 'agent_message') {
             onAgentMessageRef.current?.(msg.text, true);
           } else if (msg.type === 'interrupt') {
@@ -225,6 +316,12 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
             logger.debug(`[Nexus WS] 🏓 Pong received in ${latency}ms`);
           } else if (msg.type === 'system_metrics') {
             setSystemMetrics(msg.data);
+          } else if (msg.type === 'log') {
+            if (logger[msg.level as keyof typeof logger]) {
+              (logger as any)[msg.level](`[Backend] ${msg.message}`);
+            } else {
+              logger.info(`[Backend] ${msg.message}`);
+            }
           }
         } catch (e) {
           logger.error("[Nexus WS] Message Parse Error:", e);
@@ -292,6 +389,10 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
         audioContextRef.current = ctx;
       }
       
+      if (connectionStateRef.current !== "connected") {
+        connect();
+      }
+      
       const audioCtx = audioContextRef.current;
       if (audioCtx.state === 'suspended') {
         await audioCtx.resume();
@@ -321,14 +422,32 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
       const micNode = new AudioWorkletNode(audioCtx, 'voice-processor');
       micWorkletRef.current = micNode;
 
+      let audioBuffer: Float32Array[] = [];
+      let audioBufferLength = 0;
+
       micNode.port.onmessage = (e) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
           const inputData = e.data; // Float32Array
-          const pcmData = new Int16Array(inputData.length);
-          for (let i = 0; i < inputData.length; i++) {
-            pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+          audioBuffer.push(inputData);
+          audioBufferLength += inputData.length;
+
+          if (audioBufferLength >= 4096) {
+            const combined = new Float32Array(audioBufferLength);
+            let offset = 0;
+            for (const buf of audioBuffer) {
+              combined.set(buf, offset);
+              offset += buf.length;
+            }
+            
+            const pcmData = new Int16Array(combined.length);
+            for (let i = 0; i < combined.length; i++) {
+              pcmData[i] = Math.max(-1, Math.min(1, combined[i])) * 0x7FFF;
+            }
+            socketRef.current.send(pcmData.buffer);
+            
+            audioBuffer = [];
+            audioBufferLength = 0;
           }
-          socketRef.current.send(pcmData.buffer);
         }
       };
 
@@ -379,6 +498,25 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     }
   }, []);
 
+  const updateSettings = useCallback((settings: any) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: 'settings',
+        ...settings
+      }));
+    }
+  }, []);
+
+  const testVoice = useCallback(async (text?: string) => {
+    console.log("[VOICE_STUDIO] Request sent", { readyState: socketRef.current?.readyState, text });
+    await ensureAudioContext();
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: 'test_voice', text }));
+    } else {
+      console.warn("[VOICE_STUDIO] WebSocket not open, cannot test voice");
+    }
+  }, [ensureAudioContext]);
+
   return {
     isConnected,
     isListening,
@@ -391,5 +529,7 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     stopListening,
     setMicMuted,
     sendTextMessage,
+    updateSettings,
+    testVoice,
   };
 }

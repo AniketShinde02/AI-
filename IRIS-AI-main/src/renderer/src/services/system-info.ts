@@ -10,6 +10,11 @@ export interface SystemStats {
     type: string
     uptime: string
   }
+  network: {
+    tx: number
+    rx: number
+    latency: number
+  }
 }
 
 export interface AppItem {
