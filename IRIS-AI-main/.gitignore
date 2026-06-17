@@ -24,3 +24,7 @@ versions.json
 versions.js
 versions.js
 agents
+tools.ts
+global
+IRISB.tsx
+AICoreSphere.tsx

@@ -1,4 +1,4 @@
-import IndexRoot from "./IndexRoot"
+import IndexRoot from './IRISRoot'
 
 const App = () => {
   return (
@@ -9,4 +9,3 @@ const App = () => {
 }
 
 export default App
-

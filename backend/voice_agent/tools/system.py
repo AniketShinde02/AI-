@@ -1,123 +1,40 @@
-import os
-import subprocess
 import logging
-import psutil
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List
+from core.pc_control import pc_controller
 
 logger = logging.getLogger("nexus.tools.system")
 
-# Security: Whitelist of safe base commands
-SAFE_COMMANDS = {"dir", "ls", "echo", "type", "cat", "ipconfig", "systeminfo", "tasklist", "ping", "uptime"}
-BLOCKED_KEYWORDS = {"rm", "del", "format", "mkfs", "shutdown", "reboot", "powershell", "kill"}
-
-async def run_command(command: str) -> str:
-    """
-    Executes a shell command on the host machine.
-    Includes security validation to prevent destructive operations.
-    """
-    base_cmd = command.split()[0].lower() if command.split() else ""
-    
-    # Simple safety check
-    if any(keyword in command.lower() for keyword in BLOCKED_KEYWORDS):
-        return f"Error: Command contains blocked keyword for safety."
-    
-    if base_cmd not in SAFE_COMMANDS:
-        logger.warning(f"⚠️  Unrecognized command blocked: {command}")
-        return f"Error: '{base_cmd}' is not in the allowed command whitelist."
-
-    logger.info(f"🖥  Executing system command: {command}")
+async def execute_pc_action(action: str, params: Dict[str, Any]) -> str:
+    """Wrapper for PC actions, meant to be called after permission validation."""
     try:
-        process = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=15
-        )
-        if process.returncode == 0:
-            return f"Success:\n{process.stdout[:1000]}" # Truncate long output
+        if action == "pc_open_app":
+            res = await pc_controller.open_app(params.get("app_name", ""))
+        elif action == "pc_close_app":
+            res = await pc_controller.close_app(params.get("app_name", ""))
+        elif action == "pc_type_text":
+            res = await pc_controller.type_text(params.get("text", ""))
+        elif action == "pc_press_shortcut":
+            res = await pc_controller.press_shortcut(params.get("keys", []))
+        elif action == "pc_take_screenshot":
+            res = await pc_controller.take_screenshot()
         else:
-            return f"Error (code {process.returncode}):\n{process.stderr[:500]}"
-    except subprocess.TimeoutExpired:
-        return "Error: Command timed out after 15 seconds."
+            return "Error: Unknown PC action."
+            
+        return res.get("message", res.get("error", "Unknown outcome"))
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error executing PC action: {e}"
 
-async def open_application(app_name: str) -> str:
-    """Opens a Windows application by name."""
-    logger.info(f"🚀 Opening application: {app_name}")
-    try:
-        # Resolve common app names
-        aliases = {
-            "browser": "msedge",
-            "chrome": "chrome",
-            "edge": "msedge",
-            "code": "code",
-            "vscode": "code",
-            "notepad": "notepad",
-            "calculator": "calc",
-            "calc": "calc",
-            "explorer": "explorer",
-            "terminal": "wt"
-        }
-        
-        target_app = aliases.get(app_name.lower(), app_name)
-        
-        # Simple start command for Windows
-        subprocess.Popen(f"start {target_app}", shell=True)
-        return f"Successfully launched '{target_app}'."
-    except Exception as e:
-        return f"Failed to open '{app_name}': {str(e)}"
-
-async def get_system_status() -> str:
-    """Get the current system resource usage."""
-    try:
-        cpu = psutil.cpu_percent(interval=0.5)
-        memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
-        
-        status = [
-            "🖥️ Nexus Host System Status:",
-            f"- CPU Usage: {cpu}%",
-            f"- RAM Usage: {memory.percent}% ({memory.used // (1024**3)}GB / {memory.total // (1024**3)}GB)",
-            f"- Disk Usage: {disk.percent}% ({disk.used // (1024**3)}GB / {disk.total // (1024**3)}GB)",
-            f"- Active Processes: {len(psutil.pids())}"
-        ]
-        return "\n".join(status)
-    except Exception as e:
-        return f"Failed to get system status: {str(e)}"
-
-# Define the tool metadata for the LLM
+# Define the tool metadata for the LLM Model Router
 SYSTEM_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "run_command",
-            "description": "Execute a shell command on the local Windows machine.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The exact shell command to run."
-                    }
-                },
-                "required": ["command"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "open_application",
+            "name": "pc_open_app",
             "description": "Open a Windows application or file.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "app_name": {
-                        "type": "string",
-                        "description": "The name of the app (e.g. 'notepad', 'chrome', 'calc')."
-                    }
+                    "app_name": {"type": "string", "description": "Name of the app (e.g. 'notepad', 'chrome')"}
                 },
                 "required": ["app_name"]
             }
@@ -126,8 +43,54 @@ SYSTEM_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "get_system_status",
-            "description": "Get current CPU, RAM, and Disk usage of the host machine.",
+            "name": "pc_close_app",
+            "description": "Close a running Windows application by name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_name": {"type": "string", "description": "Name of the app to close (e.g. 'notepad', 'chrome')"}
+                },
+                "required": ["app_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pc_type_text",
+            "description": "Simulate keyboard typing for the provided text.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The exact text to type"}
+                },
+                "required": ["text"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pc_press_shortcut",
+            "description": "Simulate a keyboard shortcut (e.g. ['ctrl', 'c']).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keys": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of keys to press together."
+                    }
+                },
+                "required": ["keys"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pc_take_screenshot",
+            "description": "Take a screenshot of the primary display.",
             "parameters": {
                 "type": "object",
                 "properties": {},

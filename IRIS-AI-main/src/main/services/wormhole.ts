@@ -1,3 +1,4 @@
+import { BrowserWindow } from 'electron'
 import { startTunnel } from 'untun'
 
 let activeTunnel: any = null
@@ -16,13 +17,15 @@ export async function openWormhole(port: number) {
 
     const tunnelUrl = await activeTunnel.getURL()
 
-    return {
-      success: true,
-      url: tunnelUrl,
-      password: null
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('wormhole-opened', { url: tunnelUrl })
     }
-  } catch (err) {
-    return { success: false, error: String(err) }
+
+    return `✅ Wormhole established successfully! Local port ${port} is now live globally at ${tunnelUrl}.`
+  } catch (err: any) {
+    console.error('[Wormhole Error]:', err)
+    return `❌ Failed to open wormhole: ${err.message}`
   }
 }
 
@@ -32,8 +35,14 @@ export async function closeWormhole() {
       await activeTunnel.close()
       activeTunnel = null
     }
-    return { success: true }
-  } catch (err) {
-    return { success: false, error: String(err) }
+
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('wormhole-closed')
+    }
+
+    return `✅ Wormhole closed successfully. Localhost is no longer exposed to the internet.`
+  } catch (err: any) {
+    return `❌ Failed to close wormhole: ${err.message}`
   }
 }

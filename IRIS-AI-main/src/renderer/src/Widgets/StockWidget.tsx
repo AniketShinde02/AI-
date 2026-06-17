@@ -14,12 +14,18 @@ export default function StockWidget() {
   const [stock, setStock] = useState<any>(null)
 
   useEffect(() => {
-    const handleEvent = (event: any) => {
-      setStock(event.detail)
+    if (!window.electron?.ipcRenderer) return
+
+    const handleStockIPC = (_event: any, data: any) => {
+      setStock(data)
       setIsVisible(true)
     }
-    window.addEventListener('show-stock', handleEvent)
-    return () => window.removeEventListener('show-stock', handleEvent)
+
+    window.electron.ipcRenderer.on('show-stock', handleStockIPC)
+
+    return () => {
+      window.electron.ipcRenderer.removeListener('show-stock', handleStockIPC)
+    }
   }, [])
 
   if (!isVisible || !stock) return null
@@ -55,7 +61,7 @@ export default function StockWidget() {
   }
 
   return (
-    <div className="fixed inset-0 z-9650 flex items-center justify-center p-10 bg-black/80 backdrop-blur-sm animate-in fade-in duration-500">
+    <div className="fixed inset-0 z-9650 flex items-center justify-center p-10 bg-black/80 backdrop-blur-sm">
       <motion.div
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -72,7 +78,7 @@ export default function StockWidget() {
               )}
             </div>
             <div>
-              <h2 className="text-2xl font-black tracking-widest text-white uppercase font-mono">
+              <h2 className="text-2xl font-black tracking-widest text-white uppercase window-drag font-mono">
                 {stock.isComparison ? `${stock.symbol1} vs ${stock.symbol2}` : stock.symbol1}
               </h2>
               <p className="text-[10px] text-zinc-500 font-mono mt-0.5 uppercase tracking-widest">
@@ -82,7 +88,7 @@ export default function StockWidget() {
           </div>
           <button
             onClick={() => setIsVisible(false)}
-            className="p-3 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl transition-all"
+            className="p-3 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl transition-all cursor-pointer"
           >
             <RiCloseLine size={20} />
           </button>
@@ -130,7 +136,7 @@ export default function StockWidget() {
           )}
         </div>
 
-        <div className="w-full h-72 min-h-62.5 px-4 pb-4">
+        <div className="w-full h-72 px-4 pb-4">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={stock.chartData}>
               <defs>

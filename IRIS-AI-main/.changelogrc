@@ -1,61 +1,52 @@
 {
-  "app_name": "IRIS AI",
-  "sections": [
+  "header": "# Changelog\n\nAll notable changes to the IRIS Voice-First Desktop Assistant will be documented in this file.",
+  "types": [
     {
-      "title": "🚨 BREAKING CHANGES",
-      "grep": "BREAKING"
+      "type": "feat",
+      "section": "✨ Features"
     },
     {
-      "title": "✨ Features",
-      "grep": "^feat"
+      "type": "fix",
+      "section": "🐛 Bug Fixes"
     },
     {
-      "title": "🐛 Bug Fixes",
-      "grep": "^fix"
+      "type": "perf",
+      "section": "⚡ Performance Improvements"
     },
     {
-      "title": "⚡ Performance Improvements",
-      "grep": "^perf"
+      "type": "security",
+      "section": "🛡️ Security Updates"
     },
     {
-      "title": "♻️ Refactoring",
-      "grep": "^refactor"
+      "type": "docs",
+      "section": "📖 Documentation",
+      "hidden": false
     },
     {
-      "title": "🛠️ Core & Build",
-      "grep": "^build|^ci|^chore"
+      "type": "refactor",
+      "section": "♻️ Code Refactoring",
+      "hidden": true
     },
     {
-      "title": "📚 Documentation",
-      "grep": "^docs"
+      "type": "chore",
+      "section": "🧹 Maintenance",
+      "hidden": true
     },
     {
-      "title": "🚨 Security",
-      "grep": "^security"
+      "type": "style",
+      "section": "💎 Styling",
+      "hidden": true
     },
     {
-      "title": "🧪 Tests",
-      "grep": "^test"
-    },
-    {
-      "title": "🎨 Style",
-      "grep": "^style"
-    },
-    {
-      "title": "🚀 Release",
-      "grep": "^release"
-    },
-    {
-      "title": "🔧 Miscellaneous",
-      "grep": "^misc"
-    },
-    {
-      "title": "➕ Additions",
-      "grep": "^add"
-    },
-    {
-      "title": "🔄 Changes",
-      "grep": "^change"
+      "type": "test",
+      "section": "🚨 Testing",
+      "hidden": true
     }
+  ],
+  "commitUrlFormat": "https://github.com/IRISX-AI/IRIS-AI/commit/{{hash}}",
+  "compareUrlFormat": "https://github.com/IRISX-AI/IRIS-AI/compare/{{previousTag}}...{{currentTag}}",
+  "issueUrlFormat": "https://github.com/IRISX-AI/IRIS-AI/issues/{{id}}",
+  "issuePrefixes": [
+    "#"
   ]
 }

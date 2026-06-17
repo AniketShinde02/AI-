@@ -19,6 +19,20 @@ import psutil
 import platform
 import random
 from speech_cleaner import cleaner as speech_cleaner
+from pydantic import BaseModel
+from fastapi import HTTPException
+from core.database import db
+
+try:
+    import pyautogui
+    import pygetwindow as gw
+    from PIL import ImageGrab
+except ImportError:
+    logging.warning("pyautogui or pygetwindow not installed. OS automation tools will be disabled.")
+    pyautogui = None
+    gw = None
+    ImageGrab = None
+
 
 # Re-use existing provider logic
 from providers.stt import GroqSTT
@@ -28,18 +42,22 @@ import torch # type: ignore
 from silero_vad import load_silero_vad, VADIterator # type: ignore
 
 # Import Backend Tools for Gemini Live Bridge
-from tools.system import run_command, open_application
+from tools.system import execute_pc_action
 from tools.task_tools import create_task, create_note
 from tools.memory_tools import update_preferences, get_user_memory, delete_user_preference
-from core.memory_manager import load_memory
+
 from tools.file_tools import read_file, write_file, read_directory
 from tools.third_party_tools import get_weather
 from core.rag_oracle import RAGOracle
 import core.rag_oracle as rag_oracle_module
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("nexus.ws")
+import subprocess
+import signal
+from collections import deque
+from core.gemini_live_manager import GeminiLiveSessionManager
+
+logger = logging.getLogger("nexus_ws")
 
 from dotenv import find_dotenv
 # Automatically find .env in parent directories
@@ -81,7 +99,11 @@ async def lifespan(app: FastAPI):
             gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
             groq_api_key=str(config.GROQ_API_KEY)
         )
-        logger.info(f"✅ Providers initialized. Silero VAD loaded. RAG Oracle initialized.")
+        import core.lance_memory as lance_memory_module
+        lance_memory_module.semantic_memory = lance_memory_module.SemanticMemory(
+            gemini_api_key=os.environ.get("GEMINI_API_KEY", "")
+        )
+        logger.info(f"✨ Providers initialized. Silero VAD loaded. RAG Oracle & Semantic Memory initialized.")
     except Exception as e:
         logger.error(f"❌ Critical failure during provider initialization: {e}")
         # We allow startup but session handlers must check readiness
@@ -99,6 +121,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.staticfiles import StaticFiles
+from fastapi import UploadFile, File
+import shutil
+import uuid
+from core.theme_generator import generate_theme_from_image
+
+BACKGROUNDS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "themes", "backgrounds")
+os.makedirs(BACKGROUNDS_DIR, exist_ok=True)
+app.mount("/backgrounds", StaticFiles(directory=BACKGROUNDS_DIR), name="backgrounds")
+
+@app.post("/api/theme/generate")
+async def generate_theme(image: UploadFile = File(...)):
+    """
+    Receives an image, saves it, and asks Gemini Vision to extract a dark-mode theme.
+    """
+    try:
+        # Save the uploaded image
+        ext = os.path.splitext(image.filename or ".png")[1]
+        filename = f"bg_{uuid.uuid4().hex[:8]}{ext}"
+        filepath = os.path.join(BACKGROUNDS_DIR, filename)
+        
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+            
+        # Get GEMINI_API_KEY from environment
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            return {"success": False, "error": "GEMINI_API_KEY not found in backend environment"}
+            
+        # Call Gemini Vision to generate theme
+        theme_json = await generate_theme_from_image(filepath, api_key)
+        
+        return {
+            "success": True,
+            "background_url": f"http://localhost:8001/backgrounds/{filename}",
+            "theme": theme_json
+        }
+    except Exception as e:
+        logger.error(f"Theme generation failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
 
 @app.get("/")
 async def root():
@@ -115,10 +179,154 @@ async def health_check():
         "vad": vad_model is not None,
     }}
 
+from typing import List, Dict, Any
+
 @app.get("/memory")
 async def get_memory_api():
     """Returns the long-term persistent user memory."""
-    return load_memory()
+    return await db.get_all_memory()
+
+@app.delete("/memory/{category}/{key}")
+async def delete_memory_api(category: str, key: str):
+    """Deletes a specific memory entry."""
+    await db.delete_memory(category, key)
+    return {"status": "success"}
+
+# --- Agent API ---
+class AgentSchema(BaseModel):
+    id: str
+    name: str
+    status: str = "idle"
+    description: str = ""
+    color: str = "#00FFFF"
+    runtime: str = "0.0s"
+    calls: int = 0
+
+@app.get("/api/agents")
+async def get_agents():
+    """Returns all available sub-agents."""
+    return await db.get_agents()
+
+@app.post("/api/agents")
+async def create_agent(agent: AgentSchema):
+    """Creates a new sub-agent."""
+    await db.create_agent(agent.model_dump())
+    return {"status": "success", "agent_id": agent.id}
+
+@app.put("/api/agents/{agent_id}")
+async def update_agent(agent_id: str, agent: AgentSchema):
+    """Updates an existing sub-agent."""
+    await db.update_agent(agent_id, agent.model_dump())
+    return {"status": "success"}
+
+@app.delete("/api/agents/{agent_id}")
+async def delete_agent(agent_id: str):
+    """Deletes a sub-agent."""
+    await db.delete_agent(agent_id)
+    return {"status": "success"}
+
+# --- Workflow API ---
+from typing import List
+
+class WorkflowSchema(BaseModel):
+    id: str
+    name: str
+    trigger: str
+    actions: List[str]
+    status: str = "draft"
+    runs: int = 0
+    lastRun: str = "Never"
+
+@app.get("/api/workflows")
+async def get_workflows():
+    """Returns all available workflows."""
+    return await db.get_workflows()
+
+@app.post("/api/workflows")
+async def create_workflow(workflow: WorkflowSchema):
+    """Creates a new workflow."""
+    await db.create_workflow(workflow.model_dump())
+    return {"status": "success", "workflow_id": workflow.id}
+
+@app.put("/api/workflows/{workflow_id}")
+async def update_workflow(workflow_id: str, workflow: WorkflowSchema):
+    """Updates an existing workflow."""
+    await db.update_workflow(workflow_id, workflow.model_dump())
+    return {"status": "success"}
+
+@app.delete("/api/workflows/{workflow_id}")
+async def delete_workflow(workflow_id: str):
+    """Deletes a workflow."""
+    await db.delete_workflow(workflow_id)
+    return {"status": "success"}
+
+# --- RAG Oracle API ---
+class RAGIngestRequest(BaseModel):
+    dir_path: str
+
+class RAGQueryRequest(BaseModel):
+    query: str
+
+@app.post("/api/rag/ingest")
+async def rag_ingest(req: RAGIngestRequest):
+    if rag_oracle_module.oracle_instance:
+        result = await rag_oracle_module.oracle_instance.ingest_codebase(req.dir_path)
+        return result
+    return {"success": False, "error": "RAG Oracle not initialized"}
+
+@app.post("/api/rag/query")
+async def rag_query(req: RAGQueryRequest):
+    if rag_oracle_module.oracle_instance:
+        result = await rag_oracle_module.oracle_instance.consult_oracle(req.query)
+        return result
+    return {"success": False, "error": "RAG Oracle not initialized"}
+
+# --- Scrapper OS Bridge API ---
+from core.scrapper_os import scrapper_os
+
+@app.get("/api/scrapper-os/health")
+async def scrapper_health():
+    """Check if Scrapper OS is online and reachable."""
+    return await scrapper_os.check_health()
+
+@app.get("/api/scrapper-os/scrapers")
+async def list_scrapers():
+    """List all available scrapers."""
+    return await scrapper_os.list_scrapers()
+
+class RunScraperRequest(BaseModel):
+    scraper_id: str
+    params: Optional[Dict[str, Any]] = None
+
+@app.post("/api/scrapper-os/run-scraper")
+async def run_scraper(req: RunScraperRequest):
+    """Trigger a specific scraper."""
+    return await scrapper_os.run_scraper(req.scraper_id, req.params)
+
+@app.get("/api/voices")
+async def get_available_voices():
+    """Returns available TTS voices for the Voice Studio UI."""
+    return {
+        "voices": {
+            "edge": [
+                {"id": "en-US-AriaNeural",   "name": "Aria",    "provider": "edge", "gender": "female", "lang": "en-US"},
+                {"id": "en-US-GuyNeural",    "name": "Guy",     "provider": "edge", "gender": "male",   "lang": "en-US"},
+                {"id": "en-US-JennyNeural",  "name": "Jenny",   "provider": "edge", "gender": "female", "lang": "en-US"},
+                {"id": "en-US-SaraNeural",   "name": "Sarah",   "provider": "edge", "gender": "female", "lang": "en-US"},
+                {"id": "en-US-DavisNeural",  "name": "Davis",   "provider": "edge", "gender": "male",   "lang": "en-US"},
+                {"id": "en-GB-SoniaNeural",  "name": "Sonia",   "provider": "edge", "gender": "female", "lang": "en-GB"},
+                {"id": "en-IN-NeerjaNeural", "name": "Neerja",  "provider": "edge", "gender": "female", "lang": "en-IN"},
+                {"id": "hi-IN-SwaraNeural",  "name": "Swara",   "provider": "edge", "gender": "female", "lang": "hi-IN"},
+            ],
+            "gemini": [
+                {"id": "Puck",    "name": "Puck",    "provider": "gemini", "gender": "male",   "lang": "en"},
+                {"id": "Charon",  "name": "Charon",  "provider": "gemini", "gender": "male",   "lang": "en"},
+                {"id": "Kore",    "name": "Kore",    "provider": "gemini", "gender": "female", "lang": "en"},
+                {"id": "Fenrir",  "name": "Fenrir",  "provider": "gemini", "gender": "male",   "lang": "en"},
+                {"id": "Aoede",   "name": "Aoede",   "provider": "gemini", "gender": "female", "lang": "en"},
+            ]
+        }
+    }
 
 @app.get("/api/history/{session_id}")
 async def get_session_history(session_id: str):
@@ -130,6 +338,91 @@ async def get_session_history(session_id: str):
     if not session:
         return {"history": []}
     return {"history": list(session.conversation_history)}
+
+# --- OS Automation Endpoints (Ported from daemon.py) ---
+class MouseMove(BaseModel):
+    x: int
+    y: int
+
+class MouseClick(BaseModel):
+    button: str = "left"
+
+class KeyboardType(BaseModel):
+    text: str
+
+class KeyboardPress(BaseModel):
+    keys: list[str]
+
+class WindowFocus(BaseModel):
+    title: str
+
+@app.post("/mouse/move")
+async def move_mouse(req: MouseMove):
+    if not pyautogui:
+        raise HTTPException(status_code=501, detail="pyautogui not installed")
+    await asyncio.to_thread(pyautogui.moveTo, req.x, req.y, duration=0.2)
+    return {"status": "success", "action": "mouse_move", "x": req.x, "y": req.y}
+
+@app.post("/mouse/click")
+async def click_mouse(req: MouseClick):
+    if not pyautogui:
+        raise HTTPException(status_code=501, detail="pyautogui not installed")
+    await asyncio.to_thread(pyautogui.click, button=req.button)
+    return {"status": "success", "action": "mouse_click", "button": req.button}
+
+@app.post("/keyboard/type")
+async def type_keyboard(req: KeyboardType):
+    if not pyautogui:
+        raise HTTPException(status_code=501, detail="pyautogui not installed")
+    await asyncio.to_thread(pyautogui.write, req.text, interval=0.01)
+    return {"status": "success", "action": "keyboard_type"}
+
+@app.post("/keyboard/press")
+async def press_keyboard(req: KeyboardPress):
+    if not pyautogui:
+        raise HTTPException(status_code=501, detail="pyautogui not installed")
+    await asyncio.to_thread(pyautogui.hotkey, *req.keys)
+    return {"status": "success", "action": "keyboard_press", "keys": req.keys}
+
+@app.get("/window/list")
+async def list_windows():
+    if not gw:
+        raise HTTPException(status_code=501, detail="pygetwindow not installed")
+    def _get_titles():
+        return [t for t in gw.getAllTitles() if t.strip()] # type: ignore
+    titles = await asyncio.to_thread(_get_titles)
+    return {"windows": titles}
+
+@app.post("/window/focus")
+async def focus_window(req: WindowFocus):
+    if not gw:
+        raise HTTPException(status_code=501, detail="pygetwindow not installed")
+    def _focus():
+        win = gw.getWindowsWithTitle(req.title)
+        if not win:
+            raise Exception("Window not found")
+        win[0].activate()
+    try:
+        await asyncio.to_thread(_focus)
+        return {"status": "success", "window": req.title}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/screenshot")
+async def take_screenshot():
+    if not ImageGrab:
+        raise HTTPException(status_code=501, detail="Pillow ImageGrab not installed")
+    def _grab():
+        screenshot = ImageGrab.grab()
+        screenshot.thumbnail((1280, 720))
+        buffer = io.BytesIO()
+        screenshot.save(buffer, format="JPEG", quality=70)
+        return base64.b64encode(buffer.getvalue()).decode("utf-8")
+    try:
+        img_str = await asyncio.to_thread(_grab)
+        return {"status": "success", "image_base64": img_str}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/execute-tool")
 async def execute_tool(request: dict):
@@ -147,12 +440,9 @@ async def execute_tool(request: dict):
             # Plug into Central Tool Registry
             if name == "search_web":
                 results.append({"query": args.get("query"), "status": "simulated_success", "snippet": "Nexus search results dummy payload."})
-            elif name == "run_command":
-                out = await run_command(args.get("command", ""))
-                results.append({"command": args.get("command"), "output": out})
-            elif name == "open_application":
-                out = await open_application(args.get("app_name", ""))
-                results.append({"app_name": args.get("app_name"), "output": out})
+            if name in ["pc_open_app", "pc_close_app", "pc_type_text", "pc_press_shortcut", "pc_take_screenshot"]:
+                out = await execute_pc_action(name, args)
+                results.append({"action": name, "output": out})
             elif name == "create_task":
                 out = await create_task(args.get("title", ""), args.get("priority", "medium"), args.get("due_date"))
                 results.append({"title": args.get("title"), "output": out})
@@ -208,8 +498,9 @@ class SessionState(Enum):
     SPEAKING = "speaking" # AI is outputting audio
 
 class VoiceSession:
-    def __init__(self, websocket: WebSocket):
+    def __init__(self, websocket: WebSocket, engine: str = "nexus"):
         self.websocket = websocket
+        self.engine = engine
         self.audio_buffer = bytearray()
         self.state = SessionState.IDLE
         
@@ -234,8 +525,7 @@ class VoiceSession:
         self.silence_threshold = 0.4      # Was 1.2s
         self.min_speech_duration = 0.15   # Catch short words like "yes/no"
         self.barge_in_threshold = 0.6     # Sustained user speech required to interrupt AI
-        self.ambient_noise_level: float = 0.0
-        
+        self.ambient_noise_level: float = 0.015  # Hardened RMS energy threshold to block static
         # Latency tracking
         self.turn_start_time: float = 0.0
         self.stt_latency: float = 0.0
@@ -280,6 +570,73 @@ class VoiceSession:
         self.vad_preroll_buffer: Deque[bytes] = deque(maxlen=8) # ~0.5s context
         self.recent_ai_outputs: Deque[str] = deque(maxlen=3) # Phase 8 Echo Cancellation
         self.conversation_history: Deque[dict] = deque(maxlen=16) # 8 rolling turns
+
+        # --- Gemini Live Integration ---
+        self.gemini_manager = None
+        if self.engine == "gemini_live":
+            self.gemini_manager = GeminiLiveSessionManager(
+                websocket=self.websocket,
+                system_instruction="You are Nexus. Keep responses extremely short. Use a natural, casual Hinglish tone with humor. No conversational filler."
+            )
+
+    async def connect_gemini(self):
+        if self.gemini_manager:
+            async def on_agent_message(text):
+                await self.safe_send_json({"type": "agent_message", "text": text})
+                self.conversation_history.append({"role": "assistant", "content": text})
+            async def on_disconnect():
+                logger.warning("🔄 Falling back to Nexus STT (Groq) engine")
+                self.engine = "nexus" # Failover to local pipeline
+            await self.gemini_manager.connect(on_agent_message, on_disconnect)
+
+    async def extract_and_save_memory(self, user_msg: str, ai_msg: str, turn_id: int = 0):
+        """Background task to extract and save user preferences without blocking voice response."""
+        try:
+            # 1. Store the literal conversation turn in Semantic LanceDB
+            import core.lance_memory as lance_memory_module
+            if lance_memory_module.semantic_memory:
+                await lance_memory_module.semantic_memory.add_memory(
+                    text=f"User: {user_msg}\nAssistant: {ai_msg}",
+                    metadata={"type": "conversation_turn", "turn_id": turn_id, "timestamp": time.time()}
+                )
+
+            if llm_provider is None: return
+            
+            from tools.memory_tools import MEMORY_TOOLS, update_preferences
+            import json
+            
+            # 2. We use a fast call to check if the user expressed a preference or rule
+            messages = [
+                {"role": "system", "content": "You are a memory extractor. If the user explicitly states a preference, a rule for how you should behave, a fact about themselves, or a request to remember something, call the update_preferences tool. If not, output 'NO_PREF'."},
+                {"role": "user", "content": f"User: {user_msg}\nAssistant: {ai_msg}"}
+            ]
+            
+            resp = await llm_provider.client.chat.completions.create( # type: ignore
+                messages=messages, # type: ignore
+                model="llama-3.1-8b-instant",
+                tools=MEMORY_TOOLS, # type: ignore
+                tool_choice="auto",
+                temperature=0.1
+            )
+            
+            msg = resp.choices[0].message
+            if msg.tool_calls:
+                for tool_call in msg.tool_calls:
+                    if tool_call.function.name == "update_preferences":
+                        args = json.loads(tool_call.function.arguments)
+                        if "preferences" in args:
+                            res = await update_preferences(args["preferences"])
+                            logger.info(f"🧠 [Memory Updated] {res}")
+        except Exception as e:
+            logger.error(f"❌ [Memory Extractor] Error: {e}")
+
+    async def enqueue_tts(self, text: str, turn_id: int, is_last: bool = False):
+        """Phase 6: Adds semantic chunks to the TTS queue and triggers processing."""
+        self.tts_queue.put_nowait({
+            "text": text,
+            "turn_id": turn_id,
+            "index": self.current_chunk_index + 1
+        })
 
     async def tts_worker(self):
         """Background worker to synthesize and send audio from the queue sequentially."""
@@ -343,7 +700,7 @@ class VoiceSession:
                         kwargs["language"] = "en"
                         
                     tts_start_time = time.perf_counter()
-                    audio_gen = await tts_router.stream_audio(text, provider=provider_name, **kwargs)
+                    audio_gen = tts_router.stream_audio(text, provider=provider_name, **kwargs)
                     if audio_gen:
                         audio_buffer = b""
                         # 6400 bytes = 200ms of audio @ 16kHz s16le
@@ -559,8 +916,15 @@ class VoiceSession:
 
     def sanitize_for_tts(self, text: str) -> str:
         """Phase 9: Clean text to prevent phonemizer mismatches."""
-        # Remove emojis and symbols
-        text = re.sub(r'[^\w\s\.,\?!\u0900-\u097f]', ' ', text)
+        # Remove emojis and symbols, but keep dashes and standard punctuation for natural pauses
+        text = re.sub(r'[^\w\s\.,\?\!\-\u0900-\u097f]', ' ', text)
+        
+        # Explicit formatting for Edge TTS natural delivery:
+        # Convert explicit "hmm..." to slower SSML-friendly or natural text pauses. 
+        # (Edge TTS handles ellipses and dashes very well natively)
+        text = text.replace("...", ", ") # Sometimes ellipses are skipped, comma forces a pause
+        text = text.replace(" - ", ", ") # Convert dash-breaks to commas for consistent pacing
+        
         # Collapse multiple spaces
         text = re.sub(r'\s+', ' ', text).strip()
         
@@ -639,7 +1003,11 @@ class VoiceSession:
 
             if speech_dict:
                 if 'start' in speech_dict:
-                    if self.state != SessionState.LISTENING:
+                    # --- HARDENED ENERGY GATE ---
+                    if rms_energy < self.ambient_noise_level:
+                        # Suppress false start triggers on room noise
+                        speech_dict = {}
+                    elif self.state != SessionState.LISTENING:
                         if self.debounce_task:
                             self.debounce_task.cancel()
                             self.debounce_task = None
@@ -753,7 +1121,7 @@ class VoiceSession:
                         logger.error("❌ [Pipeline] TTS providers failed to become ready in time.")
                         return
 
-                    audio_gen = await tts_router.stream_audio(
+                    audio_gen = tts_router.stream_audio(
                         text,
                         provider="edge",
                         gender=self.selected_persona,
@@ -989,10 +1357,11 @@ class VoiceSession:
         try:
             full_ai_text = ""
             current_sentence = ""
-            sent_count = 0
             
             from prompts import get_nexus_system_prompt
-            system_prompt = get_nexus_system_prompt()
+            memory_data = await db.get_all_memory()
+            memory_context = json.dumps(memory_data, indent=2) if any(memory_data.values()) else "{}"
+            system_prompt = get_nexus_system_prompt(memory_context)
 
             if llm_provider is None:
                 raise RuntimeError("LLM provider not initialized")
@@ -1023,8 +1392,8 @@ class VoiceSession:
                     yield chunk.text or ""
             
             try:
-                groq_stream = await llm_provider.client.chat.completions.create(
-                    messages=messages,
+                groq_stream = await llm_provider.client.chat.completions.create( # type: ignore
+                    messages=messages, # type: ignore
                     model=llm_provider.model,
                     temperature=0.7,
                     stream=True
@@ -1052,75 +1421,45 @@ class VoiceSession:
 
                     # Check semantic boundary
                     last_char = content.rstrip()[-1] if content.strip() else ""
-                    # Check semantic boundary
-                    
                     is_punctuation_boundary = last_char in SENTENCE_ENDS
-                    is_long_enough = True # Always flush on paragraph boundary
                     is_hard_break = last_char == "\n"
-                    
-                    is_boundary = is_hard_break or (is_punctuation_boundary and is_long_enough)
-
-                    # Safety valve: force flush if buffer gets too large
+                    is_boundary = is_hard_break or is_punctuation_boundary
                     is_long = len(current_sentence) >= MAX_BUFFER_CHARS
 
                     if is_boundary or is_long:
                         text_to_queue = current_sentence.strip()
-                        # Filter out internal monologues/thoughts enclosed in asterisks (e.g., **Acknowledge and Respond**)
                         text_to_queue = re.sub(r'\*+.*?\*+', '', text_to_queue).strip()
                         
                         if text_to_queue and re.search(r'[a-zA-Z\u0900-\u097f]', text_to_queue):
-                            sent_count += 1
-                            if sent_count == 1:
-                                self.llm_latency = time.perf_counter() - llm_start_time
-
-                            await self.safe_send_json({
-                                "type": "agent_partial",
-                                "text": text_to_queue,
-                                "turn_id": turn_id
-                            })
-                            
+                            await self.safe_send_json({"type": "agent_partial", "text": text_to_queue, "turn_id": turn_id})
                             self.recent_ai_outputs.append(text_to_queue)
-
-                            self.tts_queue.put_nowait({
-                                "text": text_to_queue,
-                                "turn_id": turn_id,
-                                "index": sent_count
-                            })
+                            await self.enqueue_tts(text_to_queue, turn_id=turn_id)
                             current_sentence = ""
 
-
-            # Final flush
+            # Final flush — any remaining text in the buffer
             if current_sentence.strip():
                 text_to_queue = current_sentence.strip()
                 text_to_queue = re.sub(r'\*+.*?\*+', '', text_to_queue).strip()
-                
                 if text_to_queue and re.search(r'[a-zA-Z\u0900-\u097f]', text_to_queue):
-                    sent_count += 1
-                    logger.info(f"📝 [LLM] Turn {turn_id} Final: '{text_to_queue[:60]}...'")
-                    await self.safe_send_json({
-                        "type": "agent_partial",
-                        "text": text_to_queue,
-                        "is_paragraph_end": True,
-                        "turn_id": turn_id
-                    })
-                    
+                    await self.safe_send_json({"type": "agent_partial", "text": text_to_queue, "turn_id": turn_id})
                     self.recent_ai_outputs.append(text_to_queue)
+                    await self.enqueue_tts(text_to_queue, turn_id=turn_id)
 
-                    await self.tts_queue.put({
-                        "text": text_to_queue,
-                        "turn_id": turn_id,
-                        "index": sent_count
-                    })
-
+            # Sentinel to signal TTS worker end-of-stream
             await self.tts_queue.put({
                 "text": "",
                 "turn_id": turn_id,
                 "is_sentinel": True
             })
 
-            self.conversation_history.append({"role": "assistant", "content": full_ai_text})
-            await self.safe_send_json({"type": "agent_message", "text": full_ai_text})
-            logger.info(f"🤖 Nexus Full Response: {full_ai_text}")
+            self.llm_latency = time.perf_counter() - llm_start_time
+            logger.info(f"⚡ [LLM] Turn {turn_id} completed in {self.llm_latency:.2f}s")
+            self.conversation_history.append({"role": "assistant", "content": full_ai_text.strip()})
+            await self.safe_send_json({"type": "agent_message", "text": full_ai_text.strip(), "is_final": True})
+            logger.info(f"🤖 Nexus Full Response: {full_ai_text[:100]}...")
+
+            # Background memory extraction
+            asyncio.create_task(self.extract_and_save_memory(transcript, full_ai_text.strip(), turn_id=turn_id))
             
         except Exception as e:
             logger.error(f"❌ LLM Pipeline Error: {e}")
@@ -1148,12 +1487,11 @@ async def websocket_endpoint(websocket: WebSocket):
         old_session.is_connected = False
         logger.info(f"♻️ Replacing previous session {session_id} with a fresh one to restart worker tasks")
         
-    session = VoiceSession(websocket)
+    session = VoiceSession(websocket, engine="nexus")
     if session_id:
         active_sessions[session_id] = session
         logger.info(f"🆕 Created session {session_id}")
 
-    
     try:
         # 5. Startup Greeting
         await session.greet()
@@ -1175,6 +1513,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 await session.process_audio(data["bytes"])
             elif "text" in data and data["text"] is not None:
                 msg = json.loads(data["text"])
+                if msg.get("type") == "vision_frame":
+                    if session.gemini_manager and session.gemini_manager.is_connected:
+                        await session.gemini_manager.send_video_frame(msg.get("data"))
+                    continue
+
                 if msg.get("type") == "ping":
                     await session.safe_send_json({
                         "type": "pong",
@@ -1226,7 +1569,80 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"❌ WebSocket Error: {e}", exc_info=True)
     finally:
         await session.stop()
+        if session.gemini_manager:
+            await session.gemini_manager.close()
         logger.info("🔌 Session cleaned up")
+
+@app.websocket("/ws/gemini-live")
+async def gemini_live_websocket_endpoint(websocket: WebSocket):
+    session_id = websocket.query_params.get("session_id")
+    logger.info(f"🔌 Incoming Gemini Live WS from {websocket.client}")
+    await websocket.accept()
+    
+    if session_id and session_id in active_sessions:
+        old_session = active_sessions[session_id]
+        old_session.is_connected = False
+        
+    session = VoiceSession(websocket, engine="gemini_live")
+    if session_id:
+        active_sessions[session_id] = session
+
+    try:
+        try:
+            await session.connect_gemini()
+        except Exception as e:
+            logger.error(f"❌ Gemini Live connection failed: {e}. Falling back to local pipeline.")
+            session.engine = "nexus" # Graceful failover, don't disconnect client
+
+        # Same loop as /ws/nexus
+        while session.is_connected:
+            try:
+                data = await websocket.receive()
+            except (WebSocketDisconnect, RuntimeError):
+                break
+            
+            if "disconnect" in data:
+                break
+            elif "bytes" in data and data["bytes"] is not None:
+                if session.engine == "gemini_live" and session.gemini_manager and session.gemini_manager.is_connected:
+                    await session.gemini_manager.send_audio(data["bytes"])
+                else:
+                    await session.process_audio(data["bytes"]) # Failover path
+            elif "text" in data and data["text"] is not None:
+                msg = json.loads(data["text"])
+                if msg.get("type") == "vision_frame":
+                    if session.gemini_manager and session.gemini_manager.is_connected:
+                        await session.gemini_manager.send_video_frame(msg.get("data"))
+                    continue
+                if msg.get("type") == "ping":
+                    await session.safe_send_json({"type": "pong", "timestamp": msg.get("timestamp")})
+                    continue
+                if msg.get("type") == "audio_finished":
+                    session.agent_is_speaking = False
+                    if session.state == SessionState.SPEAKING:
+                        session._change_state(SessionState.IDLE)
+                        session.post_tts_guard_until = time.time() + 1.2
+                    continue
+                if msg.get("type") == "settings":
+                    session.selected_persona = msg.get("persona") or "female"
+                    session.selected_provider = msg.get("ttsProvider") or "edge"
+                    session.selected_language = msg.get("language") or "auto"
+                    continue
+                if "text" in msg:
+                    if session.engine == "gemini_live" and session.gemini_manager and session.gemini_manager.is_connected:
+                        await session.gemini_manager.send_text(msg["text"])
+                    else:
+                        session.current_turn_id += 1
+                        asyncio.create_task(session.run_llm_and_tts(msg["text"], turn_id=session.current_turn_id))
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error(f"❌ WS Error: {e}", exc_info=True)
+    finally:
+        await session.stop()
+        if session.gemini_manager:
+            await session.gemini_manager.close()
+
 
 if __name__ == "__main__":
     import uvicorn

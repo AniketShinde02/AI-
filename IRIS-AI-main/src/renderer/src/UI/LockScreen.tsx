@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  RiShieldKeyholeLine,
   RiShieldCheckLine,
   RiFingerprintLine,
   RiLockPasswordLine,
@@ -45,13 +44,11 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
   const [time, setTime] = useState(new Date().toLocaleTimeString())
 
-  // Clock
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000)
     return () => clearInterval(timer)
   }, [])
 
-  // Initial Vault Check
   useEffect(() => {
     if (window.electron?.ipcRenderer) {
       window.electron.ipcRenderer
@@ -69,7 +66,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     return () => stopCamera()
   }, [])
 
-  // Mode Switcher Logic
   useEffect(() => {
     if (authMode === 'face' && !isLoading && !isAuthorized) {
       startHardware()
@@ -241,7 +237,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       className="flex flex-col items-center justify-center w-screen h-screen bg-black relative overflow-hidden select-none font-sans"
       onClick={() => authMode === 'pin' && !isAuthorized && inputRef.current?.focus()}
     >
-      {/* Background Ambience */}
       <div
         className={`absolute inset-0 transition-colors duration-1000 bg-[radial-gradient(circle_at_center,var(--tw-gradient-stops))] ${
           error
@@ -252,7 +247,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         }`}
       />
 
-      {/* Top Status Bar */}
       <div className="absolute top-0 w-full h-14 border-b border-white/5 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between px-8 z-50 text-xs font-mono tracking-widest text-zinc-400 uppercase">
         <div className="flex items-center gap-6">
           <span className="flex items-center gap-2">
@@ -275,7 +269,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         </div>
       </div>
 
-      {/* Main Lock Container */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -288,7 +281,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
               : 'border-white/10 bg-zinc-950/60 shadow-2xl'
         }`}
       >
-        {/* Header Title */}
         <div className="text-center w-full">
           <h1
             className={`text-2xl font-bold tracking-wider flex items-center justify-center gap-3 uppercase transition-colors ${
@@ -300,7 +292,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
             {headerText}
           </h1>
 
-          {/* Sub-status pill */}
           <div className="flex items-center justify-center w-full mt-4">
             <div
               className={`px-4 py-2 rounded-lg border backdrop-blur-md flex items-center gap-2 transition-all ${
@@ -325,10 +316,8 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
           </div>
         </div>
 
-        {/* Dynamic Center Content (Face / PIN / Success) */}
         <div className="h-70 flex items-center justify-center w-full relative">
           <AnimatePresence mode="wait">
-            {/* SUCCESS STATE */}
             {isAuthorized && (
               <motion.div
                 key="authorized-view"
@@ -361,7 +350,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
               </motion.div>
             )}
 
-            {/* FACE SCANNER STATE */}
             {!isAuthorized && authMode === 'face' && (
               <motion.div
                 key="face-view"
@@ -388,7 +376,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                       ref={laserRef}
                       className="absolute left-0 w-full h-0.5 bg-emerald-400 shadow-[0_0_15px_#34d399]"
                     />
-                    {/* Corner accents */}
                     <div className="absolute top-4 left-4 w-6 h-6 border-t-2 border-l-2 border-emerald-500/70 rounded-tl-lg" />
                     <div className="absolute top-4 right-4 w-6 h-6 border-t-2 border-r-2 border-emerald-500/70 rounded-tr-lg" />
                     <div className="absolute bottom-4 left-4 w-6 h-6 border-b-2 border-l-2 border-emerald-500/70 rounded-bl-lg" />
@@ -398,7 +385,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
               </motion.div>
             )}
 
-            {/* PIN ENTRY STATE */}
             {!isAuthorized && authMode === 'pin' && (
               <motion.div
                 key="pin-view"
@@ -440,7 +426,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
           </AnimatePresence>
         </div>
 
-        {/* Bottom Toggle Button */}
         {!isAuthorized && (
           <motion.button
             whileHover={{ scale: 1.02 }}
@@ -465,7 +450,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
           </motion.button>
         )}
 
-        {/* Hidden Input for PIN capturing */}
         <input
           ref={inputRef}
           type="text"
@@ -479,7 +463,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         />
       </motion.div>
 
-      {/* Footer Branding */}
       <div className="absolute bottom-8 flex flex-col items-center gap-1 z-50">
         <span className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">
           IRIS Core OS

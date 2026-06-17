@@ -1,54 +1,17 @@
 "use client";
 
-import { Bot, Zap, Clock, Activity, ChevronRight, Shield } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bot, Zap, Clock, Activity, ChevronRight, Shield, Plus } from "lucide-react";
 
-const AGENTS = [
-  {
-    id: "parent_delegate",
-    name: "parent_delegate_task",
-    status: "active",
-    description: "Top-level orchestrator. Decomposes complex instructions into sub-tasks and delegates.",
-    color: "#00FFFF",
-    runtime: "0.0s",
-    calls: 3,
-  },
-  {
-    id: "web_search",
-    name: "web_search",
-    status: "active",
-    description: "Real-time web intelligence. Executes Tavily queries and synthesizes results.",
-    color: "#6137FF",
-    runtime: "0.8s",
-    calls: 12,
-  },
-  {
-    id: "query_memory",
-    name: "query_memory",
-    status: "idle",
-    description: "Retrieves relevant context from persistent memory store.",
-    color: "#10b981",
-    runtime: "0.2s",
-    calls: 7,
-  },
-  {
-    id: "run_command",
-    name: "run_command",
-    status: "standby",
-    description: "System automation agent. Executes shell commands with sandboxing.",
-    color: "#f59e0b",
-    runtime: "—",
-    calls: 0,
-  },
-  {
-    id: "rag_oracle",
-    name: "rag_oracle",
-    status: "standby",
-    description: "Semantic retrieval from indexed knowledge base using vector similarity.",
-    color: "#ec4899",
-    runtime: "—",
-    calls: 0,
-  },
-];
+interface Agent {
+  id: string;
+  name: string;
+  status: string;
+  description: string;
+  color: string;
+  runtime: string;
+  calls: number;
+}
 
 const statusConfig: Record<string, { label: string; glow: string }> = {
   active: { label: "ACTIVE", glow: "#00FFFF" },
@@ -58,6 +21,61 @@ const statusConfig: Record<string, { label: string; glow: string }> = {
 };
 
 export default function AgentsPage() {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchAgents = () => {
+    fetch("http://localhost:8001/api/agents")
+      .then((res) => res.json())
+      .then((data) => {
+        setAgents(data);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch agents", err);
+        setIsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchAgents();
+  }, []);
+
+  const handleCreateAgent = async () => {
+    const id = `agent_${Math.random().toString(36).substr(2, 9)}`;
+    const newAgent = {
+      id,
+      name: `new_agent_${id.substr(0,4)}`,
+      status: "idle",
+      description: "A newly created agent instance.",
+      color: "#ec4899",
+      runtime: "0.0s",
+      calls: 0
+    };
+    await fetch("http://localhost:8001/api/agents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newAgent)
+    });
+    fetchAgents();
+  };
+
+  const handleToggleStatus = async (agent: Agent) => {
+    const newStatus = agent.status === "active" ? "idle" : "active";
+    await fetch(`http://localhost:8001/api/agents/${agent.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...agent, status: newStatus })
+    });
+    fetchAgents();
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await fetch(`http://localhost:8001/api/agents/${id}`, { method: "DELETE" });
+    fetchAgents();
+  };
+
   return (
     <div className="h-full flex flex-col overflow-hidden p-4 gap-4">
       {/* Header */}
@@ -71,16 +89,22 @@ export default function AgentsPage() {
             <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Deployable Intelligence Modules</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="px-3 py-1 bg-[#00FFFF]/10 border border-[#00FFFF]/30 clip-cut-sm">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[#00FFFF]">
-              {AGENTS.filter((a) => a.status === "active").length} Active
-            </span>
-          </div>
-          <div className="px-3 py-1 bg-white/5 border border-white/10 clip-cut-sm">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
-              {AGENTS.length} Total
-            </span>
+        <div className="flex items-center gap-4">
+          <button onClick={handleCreateAgent} className="flex items-center gap-2 px-3 py-1.5 bg-[#6137FF]/20 hover:bg-[#6137FF]/40 border border-[#6137FF]/50 transition-colors clip-cut-sm">
+            <Plus size={12} className="text-[#6137FF]" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-[#6137FF]">New Agent</span>
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="px-3 py-1 bg-[#00FFFF]/10 border border-[#00FFFF]/30 clip-cut-sm">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-[#00FFFF]">
+                {agents.filter((a) => a.status === "active").length} Active
+              </span>
+            </div>
+            <div className="px-3 py-1 bg-white/5 border border-white/10 clip-cut-sm">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
+                {agents.length} Total
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -88,8 +112,8 @@ export default function AgentsPage() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 shrink-0">
         {[
-          { label: "Total Calls", value: AGENTS.reduce((a, b) => a + b.calls, 0), icon: Activity, color: "#6137FF" },
-          { label: "Active Agents", value: AGENTS.filter((a) => a.status === "active").length, icon: Zap, color: "#00FFFF" },
+          { label: "Total Calls", value: agents.reduce((a, b) => a + b.calls, 0), icon: Activity, color: "#6137FF" },
+          { label: "Active Agents", value: agents.filter((a) => a.status === "active").length, icon: Zap, color: "#00FFFF" },
           { label: "Avg Runtime", value: "0.3s", icon: Clock, color: "#10b981" },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-[#06060c] border clip-cut p-4 flex items-center gap-3" style={{ borderColor: `${color}20` }}>
@@ -107,7 +131,7 @@ export default function AgentsPage() {
       {/* Agent Cards */}
       <div className="flex-1 overflow-y-auto scroll-hide">
         <div className="grid grid-cols-1 gap-3">
-          {AGENTS.map((agent) => {
+          {agents.map((agent) => {
             const sc = statusConfig[agent.status] || statusConfig.standby;
             return (
               <div
@@ -149,7 +173,21 @@ export default function AgentsPage() {
                       </div>
                     </div>
                   </div>
-                  <ChevronRight size={16} className="text-zinc-700 group-hover:text-zinc-400 transition-colors shrink-0 mt-3" />
+                  <div className="flex flex-col gap-2 shrink-0">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleToggleStatus(agent); }}
+                      className="px-3 py-1.5 border hover:bg-white/5 transition-colors text-[9px] font-bold uppercase tracking-widest clip-cut-sm flex items-center justify-center min-w-[80px]"
+                      style={{ color: agent.status === 'active' ? '#ff3366' : '#00FFFF', borderColor: agent.status === 'active' ? '#ff336640' : '#00FFFF40' }}
+                    >
+                      {agent.status === 'active' ? 'Stop' : 'Start'}
+                    </button>
+                    <button 
+                      onClick={(e) => handleDelete(e, agent.id)}
+                      className="px-3 py-1.5 border border-zinc-800 hover:border-zinc-500 hover:bg-white/5 transition-colors text-[9px] font-bold uppercase tracking-widest text-zinc-500 hover:text-white clip-cut-sm flex items-center justify-center"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             );

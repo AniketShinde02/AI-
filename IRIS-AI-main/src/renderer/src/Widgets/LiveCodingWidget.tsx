@@ -23,57 +23,40 @@ export default function LiveCodingWidget() {
   }, [monaco])
 
   useEffect(() => {
-    const handleStartCoding = async (e: any) => {
-      const { prompt, file_name } = e.detail
-      setFilename(file_name)
-      setIsVisible(true)
+    if (!window.electron?.ipcRenderer) return
+
+    const handleOpenWidget = (_event: any, data: { filename: string }) => {
+      setFilename(data.filename)
+      setCode('// Boss, connection established. Initializing IRIS Neural Forge...\n')
+      setFilePath('')
       setIsGenerating(true)
-
-      const geminiKey = localStorage.getItem('iris_custom_api_key') || ''
-
-      if (!geminiKey.trim()) {
-        setCode(
-          '// ❌ SYSTEM ERROR: Missing Gemini API Key.\n// Please configure it in the Command Center Vault (Settings Tab).'
-        )
-        setIsGenerating(false)
-        return
-      }
-
-      setCode('// Initializing IRIS Neural Forge...\n')
-
-      const result = await window.electron.ipcRenderer.invoke('start-live-coding', {
-        prompt,
-        filename: file_name,
-        geminiKey
-      })
-
-      if (result.success) setFilePath(result.filePath)
-      setIsGenerating(false)
+      setIsVisible(true)
     }
 
-    const handleOpenVSCode = () => {
-      if (filePath) window.electron.ipcRenderer.invoke('open-in-vscode', filePath)
-    }
-
-    const handleCodeChunk = (_e: any, chunkText: string) => {
+    const handleCodeChunk = (_event: any, chunkText: string) => {
       setCode((prev) => prev + chunkText)
     }
 
-    window.addEventListener('ai-start-coding', handleStartCoding)
-    window.addEventListener('ai-open-vscode', handleOpenVSCode)
+    const handleComplete = (_event: any, data: { filePath: string }) => {
+      setIsGenerating(false)
+      if (data.filePath) setFilePath(data.filePath)
+    }
+
+    window.electron.ipcRenderer.on('open-coding-widget', handleOpenWidget)
     window.electron.ipcRenderer.on('live-code-chunk', handleCodeChunk)
+    window.electron.ipcRenderer.on('coding-complete', handleComplete)
 
     return () => {
-      window.removeEventListener('ai-start-coding', handleStartCoding)
-      window.removeEventListener('ai-open-vscode', handleOpenVSCode)
-      window.electron.ipcRenderer.removeAllListeners('live-code-chunk')
+      window.electron.ipcRenderer.removeListener('open-coding-widget', handleOpenWidget)
+      window.electron.ipcRenderer.removeListener('live-code-chunk', handleCodeChunk)
+      window.electron.ipcRenderer.removeListener('coding-complete', handleComplete)
     }
-  }, [filePath])
+  }, [])
 
   if (!isVisible) return null
 
   return (
-    <div className="absolute inset-0 z-999 flex items-center justify-center bg-black/60 backdrop-blur-sm p-10">
+    <div className="absolute inset-0 z-9999 flex items-center justify-center bg-black/60 backdrop-blur-sm p-10">
       <div className="w-full max-w-4xl h-[70vh] flex flex-col bg-[#0a0a0a] border border-emerald-500/30 rounded-xl shadow-[0_0_50px_rgba(16,185,129,0.1)] overflow-hidden">
         <div className="h-12 bg-black border-b border-white/5 flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
@@ -105,14 +88,22 @@ export default function LiveCodingWidget() {
         <div className="flex-1 relative pt-4 bg-[#050505]">
           <Editor
             height="100%"
-            language={filename.endsWith('.py') ? 'python' : 'typescript'}
+            language={
+              filename.endsWith('.py')
+                ? 'python'
+                : filename.endsWith('.ts') || filename.endsWith('.tsx')
+                  ? 'typescript'
+                  : 'javascript'
+            }
             theme="iris-dark"
             value={code}
             options={{
               readOnly: true,
               minimap: { enabled: false },
               fontSize: 14,
-              fontFamily: "'Fira Code', monospace"
+              fontFamily: "'Fira Code', monospace",
+              scrollBeyondLastLine: false,
+              smoothScrolling: true
             }}
           />
         </div>

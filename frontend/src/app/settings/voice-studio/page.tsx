@@ -158,17 +158,15 @@ export default function VoiceStudioPage() {
               <h2 className="text-[10px] font-quantico font-bold uppercase tracking-widest text-white">TTS Provider</h2>
             </div>
             <div className="flex flex-col gap-2">
-              {(() => { console.log("Rendering provider selection button list"); return null; })()}
               {[
-                { value: "auto", label: "Auto (Router Default)", badge: "DYNAMIC" },
-                { value: "gemini", label: "Gemini TTS", badge: "24kHz PCM" },
-                { value: "edge", label: "Edge TTS", badge: "MICROSOFT" },
+                { value: "live", label: "Live Mode (Gemini WebSocket)", badge: "MULTIMODAL" },
+                { value: "edge", label: "Standard Mode (Edge TTS)", badge: "TEXT CHAT" },
               ].map((provider) => (
                 <button
                   key={provider.value}
                   onClick={() => setTtsProvider(provider.value)}
                   className={`flex items-center justify-between p-3 border clip-cut-sm text-left transition-all ${
-                    currentProvider === provider.value
+                    (ttsProvider === provider.value) || (ttsProvider === "gemini" && provider.value === "live")
                       ? "border-[#00FFFF]/50 bg-[#00FFFF]/5 text-white"
                       : "border-white/5 text-zinc-400 hover:border-white/15 hover:text-white"
                   }`}
@@ -180,10 +178,10 @@ export default function VoiceStudioPage() {
                 </button>
               ))}
             </div>
-            {currentProvider === "auto" && (
-                <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-mono clip-cut-sm flex gap-2">
+            {ttsProvider === "live" && (
+                <div className="mt-4 p-3 bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[10px] font-mono clip-cut-sm flex gap-2">
                     <ShieldAlert size={14} className="shrink-0" />
-                    Auto mode uses the Nexus TTS Router to dynamically select the best provider based on language and speed requirements.
+                    Live Mode bypasses standard TTS routing and connects directly to Gemini Multimodal Live via WebSockets.
                 </div>
             )}
           </div>

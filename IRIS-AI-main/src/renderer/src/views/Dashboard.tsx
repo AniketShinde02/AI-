@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Camera, Mic, MicOff, Phone, PhoneOff, Monitor, X } from 'lucide-react'
 import RightPanel from '@renderer/components/UI/RightPanel'
 import LeftPanels from '@renderer/components/UI/LeftPanels'
-import AICore from '@renderer/components/UI/AICore'
+import AICore from '@renderer/components/UI/AICoreSphere'
 import { Status } from '@renderer/types/panel'
 
 export default function Dashboard({

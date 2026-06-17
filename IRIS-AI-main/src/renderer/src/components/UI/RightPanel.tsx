@@ -59,7 +59,6 @@ export default function RightPanel() {
 
   return (
     <div className="h-full min-h-0 flex flex-col bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-      {/* Header */}
       <div className="px-5 py-4 border-b border-white/5 flex justify-between items-center shrink-0">
         <h2 className="text-sm font-semibold text-white/80 tracking-wide">Conversation</h2>
         <div className="flex items-center gap-2">
@@ -71,7 +70,6 @@ export default function RightPanel() {
         </div>
       </div>
 
-      {/* Messages area with custom slim scrollbar */}
       <div
         ref={scrollRef}
         className="flex-1 min-h-0 p-4 overflow-y-auto flex flex-col gap-4 scroll-smooth
@@ -81,7 +79,6 @@ export default function RightPanel() {
           [&::-webkit-scrollbar-thumb]:rounded-full
           hover:[&::-webkit-scrollbar-thumb]:bg-green-500/40"
       >
-        {/* Empty state */}
         {chatHistory.length === 0 && activeModelText === '' && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-4 opacity-60">
             <svg
@@ -101,7 +98,6 @@ export default function RightPanel() {
           </div>
         )}
 
-        {/* Chat messages */}
         {chatHistory.map((msg, idx) => (
           <div
             key={idx}
@@ -119,7 +115,6 @@ export default function RightPanel() {
           </div>
         ))}
 
-        {/* Live streaming model message */}
         {activeModelText && (
           <div className="flex justify-start">
             <div className="max-w-[80%] p-3.5 rounded-2xl bg-white/5 text-gray-200 border border-white/5 rounded-bl-md text-sm leading-relaxed shadow-lg">

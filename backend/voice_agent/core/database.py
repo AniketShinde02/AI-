@@ -3,7 +3,7 @@ import os
 import json
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger("nexus.database")
@@ -25,6 +25,8 @@ class NexusDatabase:
 
     def _init_db(self):
         with self._get_conn() as conn:
+            # Enable WAL mode for better concurrency and write performance
+            conn.execute("PRAGMA journal_mode=WAL;")
             cursor = conn.cursor()
             
             # Users
@@ -35,7 +37,74 @@ class NexusDatabase:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
+            # Agents
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS agents (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    status TEXT,
+                    description TEXT,
+                    color TEXT,
+                    runtime TEXT,
+                    calls INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Agent Runs
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS agent_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    agent_id TEXT,
+                    task TEXT,
+                    result TEXT,
+                    duration_ms INTEGER,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(agent_id) REFERENCES agents(id)
+                )
+            """)
+
+            # User Memory
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_memory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    category TEXT,
+                    key TEXT,
+                    value JSON,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(category, key)
+                )
+            """)
+
+            # Agent Memory
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS agent_memory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    agent_id TEXT,
+                    key TEXT,
+                    value JSON,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(agent_id) REFERENCES agents(id)
+                )
+            """)
+
+            # Workflows
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS workflows (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    trigger TEXT,
+                    actions JSON,
+                    status TEXT,
+                    runs INTEGER DEFAULT 0,
+                    last_run TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Settings
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
@@ -54,6 +123,43 @@ class NexusDatabase:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            """)
+
+            # Capabilities (Tool Registry & Permissions)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS capabilities (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    description TEXT,
+                    category TEXT,
+                    permissions_required BOOLEAN,
+                    requires_approval BOOLEAN,
+                    enabled BOOLEAN DEFAULT 1
+                )
+            """)
+
+            # User Permissions for Capabilities
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_permissions (
+                    user_id TEXT,
+                    capability_id TEXT,
+                    state TEXT, -- 'Always Allow', 'Deny'
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, capability_id),
+                    FOREIGN KEY(capability_id) REFERENCES capabilities(id)
+                )
+            """)
+
+            # Tool Audit Logs
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tool_audit_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tool_id TEXT,
+                    parameters_passed JSON,
+                    result_status TEXT,
+                    permission_state TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
 
@@ -147,11 +253,11 @@ class NexusDatabase:
                 cursor.execute("""
                     INSERT INTO messages (session_id, role, content, metadata, timestamp) 
                     VALUES (?, ?, ?, ?, ?)
-                """, (session_id, role, content, json.dumps(metadata) if metadata else None, datetime.utcnow().isoformat()))
+                """, (session_id, role, content, json.dumps(metadata) if metadata else None, datetime.now(timezone.utc).isoformat()))
                 
                 cursor.execute("""
                     UPDATE sessions SET updated_at = ? WHERE id = ?
-                """, (datetime.utcnow().isoformat(), session_id))
+                """, (datetime.now(timezone.utc).isoformat(), session_id))
                 conn.commit()
                 
         await asyncio.to_thread(_save)
@@ -227,6 +333,181 @@ class NexusDatabase:
             with self._get_conn() as conn:
                 cursor = conn.cursor()
                 cursor.execute("INSERT INTO notes (workspace_id, title, content) VALUES (?, ?, ?)", (workspace_id, title, content))
+                conn.commit()
+        await asyncio.to_thread(_save)
+
+    # --- AGENT METHODS ---
+    async def get_agents(self) -> List[Dict[str, Any]]:
+        def _fetch():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, name, status, description, color, runtime, calls FROM agents ORDER BY name ASC")
+                rows = cursor.fetchall()
+                return [{"id": r[0], "name": r[1], "status": r[2], "description": r[3], "color": r[4], "runtime": r[5], "calls": r[6]} for r in rows]
+        return await asyncio.to_thread(_fetch)
+
+    async def create_agent(self, agent: Dict[str, Any]):
+        def _save():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO agents (id, name, status, description, color, runtime, calls) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (agent["id"], agent["name"], agent.get("status", "idle"), agent.get("description", ""), agent.get("color", "#00FFFF"), agent.get("runtime", "0.0s"), agent.get("calls", 0)))
+                conn.commit()
+        await asyncio.to_thread(_save)
+
+    async def update_agent(self, agent_id: str, agent: Dict[str, Any]):
+        def _update():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE agents 
+                    SET name = ?, status = ?, description = ?, color = ?, runtime = ?, calls = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (agent["name"], agent["status"], agent["description"], agent["color"], agent["runtime"], agent["calls"], agent_id))
+                conn.commit()
+        await asyncio.to_thread(_update)
+
+    async def delete_agent(self, agent_id: str):
+        def _delete():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
+                conn.commit()
+        await asyncio.to_thread(_delete)
+
+    # --- WORKFLOW METHODS ---
+    async def get_workflows(self) -> List[Dict[str, Any]]:
+        def _fetch():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, name, trigger, actions, status, runs, last_run FROM workflows ORDER BY name ASC")
+                rows = cursor.fetchall()
+                return [{"id": r[0], "name": r[1], "trigger": r[2], "actions": json.loads(r[3]), "status": r[4], "runs": r[5], "lastRun": r[6]} for r in rows]
+        return await asyncio.to_thread(_fetch)
+
+    async def create_workflow(self, workflow: Dict[str, Any]):
+        def _save():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO workflows (id, name, trigger, actions, status, runs, last_run) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (workflow["id"], workflow["name"], workflow["trigger"], json.dumps(workflow["actions"]), workflow.get("status", "draft"), workflow.get("runs", 0), workflow.get("lastRun", "Never")))
+                conn.commit()
+        await asyncio.to_thread(_save)
+
+    async def update_workflow(self, workflow_id: str, workflow: Dict[str, Any]):
+        def _update():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE workflows 
+                    SET name = ?, trigger = ?, actions = ?, status = ?, runs = ?, last_run = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (workflow["name"], workflow["trigger"], json.dumps(workflow["actions"]), workflow["status"], workflow["runs"], workflow["lastRun"], workflow_id))
+                conn.commit()
+        await asyncio.to_thread(_update)
+
+    async def delete_workflow(self, workflow_id: str):
+        def _delete():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM workflows WHERE id = ?", (workflow_id,))
+                conn.commit()
+        await asyncio.to_thread(_delete)
+
+    # --- USER MEMORY METHODS ---
+    async def get_all_memory(self) -> Dict[str, Any]:
+        def _fetch():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT category, key, value FROM user_memory")
+                rows = cursor.fetchall()
+                mem = {}
+                for category, key, value in rows:
+                    if category not in mem:
+                        mem[category] = {}
+                    mem[category][key] = json.loads(value)
+                return mem
+        return await asyncio.to_thread(_fetch)
+
+    async def update_memory(self, category: str, key: str, value: Any):
+        def _update():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO user_memory (category, key, value) 
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(category, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+                """, (category, key, json.dumps(value)))
+                conn.commit()
+        await asyncio.to_thread(_update)
+
+    async def delete_memory(self, category: str, key: str):
+        def _delete():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM user_memory WHERE category = ? AND key = ?", (category, key))
+                conn.commit()
+        await asyncio.to_thread(_delete)
+
+    # --- CAPABILITIES & PERMISSIONS ---
+    async def register_capability(self, cap: Dict[str, Any]):
+        def _save():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO capabilities (id, name, description, category, permissions_required, requires_approval, enabled)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                    name=excluded.name, description=excluded.description, category=excluded.category,
+                    permissions_required=excluded.permissions_required, requires_approval=excluded.requires_approval
+                """, (cap['id'], cap['name'], cap['description'], cap.get('category', 'System'), cap.get('permissions_required', False), cap.get('requires_approval', False), cap.get('enabled', True)))
+                conn.commit()
+        await asyncio.to_thread(_save)
+
+    async def get_capability(self, cap_id: str) -> Optional[Dict[str, Any]]:
+        def _fetch():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, name, description, category, permissions_required, requires_approval, enabled FROM capabilities WHERE id=?", (cap_id,))
+                row = cursor.fetchone()
+                if row:
+                    return {"id": row[0], "name": row[1], "description": row[2], "category": row[3], "permissions_required": bool(row[4]), "requires_approval": bool(row[5]), "enabled": bool(row[6])}
+                return None
+        return await asyncio.to_thread(_fetch)
+
+    async def get_user_permission(self, user_id: str, cap_id: str) -> Optional[str]:
+        def _fetch():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT state FROM user_permissions WHERE user_id=? AND capability_id=?", (user_id, cap_id))
+                row = cursor.fetchone()
+                return row[0] if row else None
+        return await asyncio.to_thread(_fetch)
+
+    async def set_user_permission(self, user_id: str, cap_id: str, state: str):
+        def _save():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO user_permissions (user_id, capability_id, state, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(user_id, capability_id) DO UPDATE SET state=excluded.state, updated_at=CURRENT_TIMESTAMP
+                """, (user_id, cap_id, state))
+                conn.commit()
+        await asyncio.to_thread(_save)
+
+    async def log_tool_audit(self, tool_id: str, parameters_passed: Dict[str, Any], result_status: str, permission_state: str):
+        def _save():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO tool_audit_logs (tool_id, parameters_passed, result_status, permission_state)
+                    VALUES (?, ?, ?, ?)
+                """, (tool_id, json.dumps(parameters_passed), result_status, permission_state))
                 conn.commit()
         await asyncio.to_thread(_save)
 

@@ -38,7 +38,7 @@
 }
 
 html, body {
-  background-color: #06060c;
+  background-color: var(--background);
   color: rgba(255, 255, 255, 0.85);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   margin: 0;
@@ -46,6 +46,18 @@ html, body {
   height: 100vh;
   user-select: none;
   @apply antialiased;
+}
+
+html.has-custom-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--global-bg-image);
+  background-size: cover;
+  background-position: center;
+  opacity: 0.15; /* Keep it subtle so it doesn't break contrast */
+  pointer-events: none;
 }
 
 /* Base structural clip-path for Shadow Monarch UI */

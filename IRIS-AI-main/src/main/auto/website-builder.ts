@@ -1,11 +1,12 @@
-import { BrowserWindow, app } from 'electron'
+import { BrowserWindow, app, safeStorage } from 'electron'
 import path from 'path'
 import fs from 'fs/promises'
 import { GoogleGenAI } from '@google/genai'
+import fsSync from 'fs'
 
 let previewWin: BrowserWindow | null = null
 
-export async function buildAnimatedWebsite({ prompt, geminiKey }) {
+export async function buildAnimatedWebsite({ prompt }) {
   try {
     previewWin = new BrowserWindow({
       width: 1280,
@@ -18,6 +19,20 @@ export async function buildAnimatedWebsite({ prompt, geminiKey }) {
         contextIsolation: true
       }
     })
+
+    let geminiKey = ''
+    const secureConfigPath = path.join(app.getPath('userData'), 'iris_secure_vault.json')
+
+    if (fsSync.existsSync(secureConfigPath)) {
+      try {
+        const data = JSON.parse(fsSync.readFileSync(secureConfigPath, 'utf8'))
+        if (safeStorage.isEncryptionAvailable()) {
+          geminiKey = safeStorage.decryptString(Buffer.from(data.gemini, 'base64'))
+        } else {
+          geminiKey = Buffer.from(data.gemini, 'base64').toString('utf8')
+        }
+      } catch (e) {}
+    }
 
     const shellHtml = `
       <html>
@@ -75,7 +90,7 @@ CRITICAL RULES:
 OUTPUT ONLY RAW HTML.`
 
     const response = await ai.models.generateContentStream({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3.5-flash',
       contents: `${sysPrompt}\n\nUSER PROMPT: ${prompt}`
     })
 

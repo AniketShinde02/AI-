@@ -91,7 +91,7 @@ export default function Home() {
   };
 
   return (
-    <div className="main-grid h-full w-full relative z-10">
+    <div className="grid grid-cols-[280px_1fr_360px] gap-3 h-full w-full relative z-10">
       {/* LEFT COLUMN: SYSTEM HUB */}
       <aside className="flex flex-col gap-3 overflow-y-auto scroll-hide h-full py-2 pr-1">
         

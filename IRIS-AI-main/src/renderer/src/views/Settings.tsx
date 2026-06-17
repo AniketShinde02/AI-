@@ -25,7 +25,6 @@ interface SettingsProps {
 
 type TabType = 'updates' | 'keys' | 'security'
 
-// --- REUSABLE UI COMPONENTS ---
 function GlassPanel({
   children,
   className = ''
@@ -58,11 +57,11 @@ function ProgressBar({ progress }: { progress: number }) {
 export default function SettingsView({ isSystemActive }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<TabType>('updates')
 
-  // States
-  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('iris_custom_api_key') || '')
-  const [groqKey, setGroqKey] = useState(localStorage.getItem('iris_groq_api_key') || '')
-  const [hfKey, setHfKey] = useState(localStorage.getItem('iris_hf_api_key') || '')
-  const [tailvyKey, setTailvyKey] = useState(localStorage.getItem('iris_tailvy_api_key') || '')
+  // Initialize as empty strings, NO localStorage
+  const [geminiKey, setGeminiKey] = useState('')
+  const [groqKey, setGroqKey] = useState('')
+  const [hfKey, setHfKey] = useState('')
+  const [tavilyKey, settavilyKey] = useState('')
 
   const [isSecurityUnlocked, setIsSecurityUnlocked] = useState(false)
   const [authPin, setAuthPin] = useState('')
@@ -84,37 +83,49 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
   const [downloadProgress, setDownloadProgress] = useState(0)
 
   useEffect(() => {
-    if (window.electron?.ipcRenderer) {
-      window.electron.ipcRenderer
-        .invoke('check-vault-status')
-        .then((res) => setFaceCount(res?.faceCount || 0))
-      window.electron.ipcRenderer.invoke('get-app-version').then((v) => setAppVersion(v))
+    if (!window.electron?.ipcRenderer) return undefined
 
-      window.electron.ipcRenderer.on('updater-event', (_e, { status, data, error }) => {
-        if (status === 'checking') setUpdateStatus('checking')
-        if (status === 'available') {
-          setUpdateStatus('available')
-          setUpdateVersion(data.version)
-          setUpdateNotes(data.releaseNotes || 'Bug fixes and performance improvements.')
-        }
-        if (status === 'not-available') {
-          setUpdateStatus('idle')
-          setUpdateNotes('Your system is currently up to date.')
-        }
-        if (status === 'downloading') {
-          setUpdateStatus('downloading')
-          setDownloadProgress(Math.round(data.percent))
-        }
-        if (status === 'downloaded') setUpdateStatus('ready')
-        if (status === 'error') {
-          setUpdateStatus('error')
-          setUpdateNotes(`Update failed: ${error}`)
-        }
-      })
+    window.electron.ipcRenderer.invoke('secure-get-keys').then((keys: any) => {
+      if (keys) {
+        setGeminiKey(keys.geminiKey || '')
+        setGroqKey(keys.groqKey || '')
+        setHfKey(keys.hfKey || '')
+        settavilyKey(keys.tavilyKey || '')
+      }
+    })
+
+    window.electron.ipcRenderer
+      .invoke('check-vault-status')
+      .then((res: any) => setFaceCount(res?.faceCount || 0))
+
+    window.electron.ipcRenderer.invoke('get-app-version').then((v: string) => setAppVersion(v))
+
+    const handleUpdaterEvent = (_e: any, { status, data, error }: any) => {
+      if (status === 'checking') setUpdateStatus('checking')
+      if (status === 'available') {
+        setUpdateStatus('available')
+        setUpdateVersion(data.version)
+        setUpdateNotes(data.releaseNotes || 'Bug fixes and performance improvements.')
+      }
+      if (status === 'not-available') {
+        setUpdateStatus('idle')
+        setUpdateNotes('Your system is currently up to date.')
+      }
+      if (status === 'downloading') {
+        setUpdateStatus('downloading')
+        setDownloadProgress(Math.round(data.percent))
+      }
+      if (status === 'downloaded') setUpdateStatus('ready')
+      if (status === 'error') {
+        setUpdateStatus('error')
+        setUpdateNotes(`Update failed: ${error}`)
+      }
     }
+
+    window.electron.ipcRenderer.on('updater-event', handleUpdaterEvent)
+
     return () => {
-      if (window.electron?.ipcRenderer)
-        window.electron.ipcRenderer.removeAllListeners('updater-event')
+      window.electron.ipcRenderer.removeListener('updater-event', handleUpdaterEvent)
     }
   }, [])
 
@@ -123,17 +134,19 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
   const installUpdate = () => window.electron.ipcRenderer.invoke('install-update')
 
   const saveApiKeys = async () => {
-    localStorage.setItem('iris_custom_api_key', geminiKey)
-    localStorage.setItem('iris_groq_api_key', groqKey)
-    localStorage.setItem('iris_hf_api_key', hfKey)
-    localStorage.setItem('iris_tailvy_api_key', tailvyKey)
-
     if (window.electron?.ipcRenderer) {
       try {
-        await window.electron.ipcRenderer.invoke('secure-save-keys', { groqKey, geminiKey })
-      } catch (e) {}
+        await window.electron.ipcRenderer.invoke('secure-save-keys', {
+          groqKey,
+          geminiKey,
+          hfKey,
+          tavilyKey
+        })
+        alert('API Keys securely encrypted and saved to Vault. You can now Use this!.')
+      } catch (e) {
+        alert('Failed to save keys to the secure vault.')
+      }
     }
-    alert('API Keys saved successfully. Restart the application to apply changes.')
   }
 
   const unlockSecurityModule = async () => {
@@ -199,7 +212,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
     }
   }
 
-  // Common Clean CSS classes
   const inputContainerClass =
     'flex items-center bg-black/40 border border-white/10 rounded-lg px-4 py-3 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all duration-200 w-full'
   const labelClass = 'text-sm text-zinc-300 font-medium flex items-center gap-2 mb-2'
@@ -218,7 +230,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
-        {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-white/10">
           <div className="flex items-center gap-4">
             <div className="relative flex items-center justify-center h-14 w-14 rounded-xl bg-zinc-900 border border-white/10 shadow-lg">
@@ -237,7 +248,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
             </div>
           </div>
 
-          {/* TAB DOCK */}
           <div className="flex bg-zinc-900/80 p-1.5 rounded-xl border border-white/10 backdrop-blur-md shadow-xl overflow-x-auto scrollbar-none">
             {tabConfigs.map((tab) => (
               <motion.button
@@ -257,10 +267,8 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
           </div>
         </div>
 
-        {/* CONTENT AREA */}
         <div className="relative min-h-125">
           <AnimatePresence mode="wait">
-            {/* --- TAB 1: UPDATES --- */}
             {activeTab === 'updates' && (
               <motion.div
                 key="updates"
@@ -270,7 +278,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
                 transition={{ duration: 0.2 }}
                 className="grid grid-cols-1 md:grid-cols-12 gap-6 absolute w-full"
               >
-                {/* Main Update Panel */}
                 <GlassPanel className="md:col-span-7 p-8 flex flex-col justify-center">
                   <div className="flex justify-between items-center mb-8">
                     <span className={titleClass}>
@@ -282,7 +289,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
                   </div>
 
                   <div className="flex-1 flex flex-col justify-center w-full">
-                    {/* State: IDLE / ERROR */}
                     {(updateStatus === 'idle' || updateStatus === 'error') && (
                       <div className="flex flex-col items-center text-center gap-4">
                         <div className="h-16 w-16 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-2">
@@ -304,7 +310,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
                       </div>
                     )}
 
-                    {/* State: CHECKING */}
                     {updateStatus === 'checking' && (
                       <div className="flex flex-col items-center text-center gap-6 py-8">
                         <RiRefreshLine className="text-white animate-spin" size={40} />
@@ -314,7 +319,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
                       </div>
                     )}
 
-                    {/* State: AVAILABLE OR DOWNLOADING (The Pop-Up Card) */}
                     {(updateStatus === 'available' || updateStatus === 'downloading') && (
                       <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
@@ -356,7 +360,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
                       </motion.div>
                     )}
 
-                    {/* State: READY */}
                     {updateStatus === 'ready' && (
                       <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
@@ -383,7 +386,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
                   </div>
                 </GlassPanel>
 
-                {/* Release Notes */}
                 <GlassPanel className="md:col-span-5 p-0 flex flex-col h-full max-h-100">
                   <div className="bg-white/5 border-b border-white/10 px-6 py-4 flex items-center gap-3">
                     <RiInformationLine className="text-zinc-400" size={18} />
@@ -400,7 +402,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
               </motion.div>
             )}
 
-            {/* --- TAB 2: API KEYS --- */}
             {activeTab === 'keys' && (
               <motion.div
                 key="keys"
@@ -467,8 +468,8 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
                       <div className={inputContainerClass}>
                         <input
                           type="password"
-                          value={tailvyKey}
-                          onChange={(e) => setTailvyKey(e.target.value)}
+                          value={tavilyKey}
+                          onChange={(e) => settavilyKey(e.target.value)}
                           placeholder="tvly-..."
                           className="bg-transparent border-none outline-none text-base text-white w-full placeholder:text-zinc-600"
                         />
@@ -488,7 +489,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
               </motion.div>
             )}
 
-            {/* --- TAB 3: SECURITY --- */}
             {activeTab === 'security' && (
               <motion.div
                 key="security"
@@ -499,7 +499,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
                 className="w-full absolute"
               >
                 <GlassPanel className="p-0 overflow-hidden min-h-100">
-                  {/* Lock Screen Overlay */}
                   <AnimatePresence>
                     {!isSecurityUnlocked && (
                       <motion.div
@@ -543,7 +542,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
                   </AnimatePresence>
 
                   <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
-                    {/* Master PIN Settings */}
                     <div className="flex flex-col h-full">
                       <span className={`${titleClass} mb-6`}>
                         <RiLock2Line className="text-zinc-400" size={20} /> App Master PIN
@@ -575,7 +573,6 @@ export default function SettingsView({ isSystemActive }: SettingsProps) {
                       </div>
                     </div>
 
-                    {/* Biometric Settings */}
                     <div className="flex flex-col h-full border-t md:border-t-0 md:border-l border-white/10 pt-8 md:pt-0 md:pl-8">
                       <div className="flex justify-between items-center mb-6 border-b border-white/5 pb-4">
                         <span className={titleClass}>

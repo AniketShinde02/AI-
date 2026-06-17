@@ -6,6 +6,8 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   main: {
     build: {
+      sourcemap: false,
+      minify: true,
       bytecode: {
         transformArrowFunctions: true,
         removeBundleJS: true
@@ -14,6 +16,8 @@ export default defineConfig({
   },
   preload: {
     build: {
+      sourcemap: false,
+      minify: true,
       bytecode: {
         transformArrowFunctions: true,
         removeBundleJS: true
@@ -27,6 +31,18 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [react(), tailwindcss()]
+    plugins: [react(), tailwindcss()],
+    build: {
+      sourcemap: false,
+      minify: 'esbuild',
+      cssMinify: true,
+      rollupOptions: {
+        output: {
+          chunkFileNames: 'assets/[hash].js',
+          entryFileNames: 'assets/[hash].js',
+          assetFileNames: 'assets/[hash][extname]'
+        }
+      }
+    }
   }
 })

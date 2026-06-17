@@ -62,7 +62,7 @@ export async function createWidget({ htmlCode, width, height }) {
       activeWidgets = activeWidgets.filter((w) => w !== widgetWin)
       fs.unlink(filePath).catch(() => {})
     })
-
+    
     return { success: true }
   } catch (error) {
     return { success: false, error: String(error) }

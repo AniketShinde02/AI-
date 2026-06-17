@@ -29,12 +29,18 @@ export default function WeatherWidget() {
   const [weather, setWeather] = useState<WeatherData | null>(null)
 
   useEffect(() => {
-    const handleEvent = (event: any) => {
-      setWeather(event.detail)
+    if (!window.electron?.ipcRenderer) return
+
+    const handleWeatherIPC = (_event: any, data: WeatherData) => {
+      setWeather(data)
       setIsVisible(true)
     }
-    window.addEventListener('show-weather', handleEvent)
-    return () => window.removeEventListener('show-weather', handleEvent)
+
+    window.electron.ipcRenderer.on('show-weather', handleWeatherIPC)
+
+    return () => {
+      window.electron.ipcRenderer.removeListener('show-weather', handleWeatherIPC)
+    }
   }, [])
 
   if (!isVisible || !weather) return null
@@ -86,7 +92,7 @@ export default function WeatherWidget() {
   }
 
   return (
-    <div className="fixed inset-0 z-9050 flex items-center justify-center p-10 bg-black/80 backdrop-blur-sm animate-in fade-in duration-500">
+    <div className="fixed inset-0 z-9050 flex items-center justify-center p-10 bg-black/80 backdrop-blur-sm">
       <motion.div
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -95,7 +101,7 @@ export default function WeatherWidget() {
       >
         <button
           onClick={() => setIsVisible(false)}
-          className="absolute top-6 right-6 z-50 p-3 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full text-white transition-all"
+          className="absolute top-6 right-6 z-50 p-3 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full text-white transition-all cursor-pointer"
         >
           <RiCloseLine size={24} />
         </button>

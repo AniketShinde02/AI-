@@ -1,7 +1,7 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useRef, useMemo } from 'react'
 import * as THREE from 'three'
-import { irisService } from '@renderer/services/Iris-voice-ai'
+import { irisService } from '@renderer/services/IRIS_AI'
 
 const CustomParticleSphere = ({ count = 3000 }) => {
   const mesh = useRef<THREE.Points>(null)

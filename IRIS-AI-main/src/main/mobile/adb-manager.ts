@@ -1,13 +1,12 @@
 import { app } from 'electron'
 import { exec } from 'child_process'
-import util from 'util'
 import fs from 'fs/promises'
 import path from 'path'
+import { promisify } from 'util'
 
-const execAsync = util.promisify(exec)
+const execAsync = promisify(exec)
 
 let activeDevice: { ip: string; port: string } | null = null
-
 
 function getPaths() {
   const dirPath = path.join(app.getPath('userData'), 'Connected Devices')
@@ -38,7 +37,6 @@ async function saveDeviceToHistory(ip: string, port: string, model: string) {
   } catch (e) {}
 }
 
-
 export async function getAdbHistory() {
   try {
     const { historyPath } = getPaths()
@@ -51,6 +49,11 @@ export async function getAdbHistory() {
 
 export async function connectAdb({ ip, port }: { ip: string; port: string }) {
   try {
+    await execAsync(`adb kill-server`).catch(() => {})
+    await execAsync(`adb start-server`).catch(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
     const { stdout } = await execAsync(`adb connect ${ip}:${port}`)
 
     if (
@@ -64,7 +67,9 @@ export async function connectAdb({ ip, port }: { ip: string; port: string }) {
           `adb -s ${ip}:${port} shell getprop ro.product.model`
         )
         await saveDeviceToHistory(ip, port, modelOut.trim().toUpperCase() || 'UNKNOWN DEVICE')
-      } catch (e) {}
+      } catch (e) {
+        console.error('Model fetch failed, but uplink secured.')
+      }
 
       return { success: true }
     }
@@ -89,7 +94,7 @@ export async function takeAdbScreenshot() {
   if (!activeDevice) return { success: false }
   return new Promise((resolve) => {
     exec(
-      `adb -s ${activeDevice?.ip}:${!activeDevice?.port} exec-out screencap -p`,
+      `adb -s ${activeDevice?.ip}:${activeDevice?.port} exec-out screencap -p`,
       { encoding: 'buffer', maxBuffer: 1024 * 1024 * 20 },
       (error, stdout) => {
         if (error) {
@@ -183,15 +188,12 @@ export async function getMobileInfoAi() {
 
 export async function openAdbApp(packageName: string) {
   if (!activeDevice) return { success: false, error: 'No phone connected.' }
-
   try {
     const target = `-s ${activeDevice.ip}:${activeDevice.port}`
-
     if (packageName === 'android.media.action.STILL_IMAGE_CAMERA') {
       await execAsync(`adb ${target} shell am start -a android.media.action.STILL_IMAGE_CAMERA`)
       return { success: true }
     }
-
     await execAsync(
       `adb ${target} shell monkey -p ${packageName} -c android.intent.category.LAUNCHER 1`
     )
@@ -203,15 +205,12 @@ export async function openAdbApp(packageName: string) {
 
 export async function closeAdbApp(packageName: string) {
   if (!activeDevice) return { success: false, error: 'No phone connected.' }
-
   try {
     const target = `-s ${activeDevice.ip}:${activeDevice.port}`
-
     if (packageName === 'android.media.action.STILL_IMAGE_CAMERA') {
       await execAsync(`adb ${target} shell am force-stop com.google.android.GoogleCamera`)
       return { success: true }
     }
-
     await execAsync(`adb ${target} shell am force-stop ${packageName}`)
     return { success: true }
   } catch (e: any) {
@@ -415,6 +414,149 @@ export async function toggleAdbHardware({ setting, state }: { setting: string; s
     }
 
     return { success: false, error: `I don't know how to toggle: ${setting}` }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+}
+
+export async function executeCameraControl({
+  mode = 'photo',
+  lens = 'back',
+  duration = 10
+}: {
+  mode?: 'photo' | 'video'
+  lens?: 'front' | 'back'
+  duration?: number
+}) {
+  if (!activeDevice) return { success: false, error: 'No phone connected.' }
+  const target = `-s ${activeDevice.ip}:${activeDevice.port}`
+
+  try {
+    const galleryDirectory = path.join(app.getPath('userData'), 'Gallery')
+    await fs.mkdir(galleryDirectory, { recursive: true })
+
+    await execAsync(`adb ${target} shell input keyevent KEYCODE_WAKEUP`)
+
+    const mediaFilterCmd = `grep -i -e '\\.jpg$' -e '\\.jpeg$' -e '\\.mp4$'`
+    const { stdout: beforeFileStr } = await execAsync(
+      `adb ${target} shell "ls -t /sdcard/DCIM/Camera 2>/dev/null | ${mediaFilterCmd} | head -n 1"`
+    ).catch(() => ({ stdout: '' }))
+    const oldFile = beforeFileStr.trim()
+
+    const { stdout: resolveOut } = await execAsync(
+      `adb ${target} shell cmd package resolve-activity -a android.media.action.STILL_IMAGE_CAMERA`
+    ).catch(() => ({ stdout: '' }))
+
+    const pkgMatch = resolveOut.match(/packageName=([^\s]+)/)
+    if (pkgMatch && pkgMatch[1]) {
+      await execAsync(`adb ${target} shell am force-stop ${pkgMatch[1]}`).catch(() => {})
+    } else {
+      await execAsync(`adb ${target} shell am force-stop com.google.android.GoogleCamera`).catch(
+        () => {}
+      )
+      await execAsync(`adb ${target} shell am force-stop com.sec.android.app.camera`).catch(
+        () => {}
+      )
+      await execAsync(`adb ${target} shell am force-stop com.android.camera`).catch(() => {})
+    }
+
+    const isFront = lens === 'front'
+    const intentAction =
+      mode === 'video'
+        ? 'android.media.action.VIDEO_CAMERA'
+        : 'android.media.action.STILL_IMAGE_CAMERA'
+
+    const extras = isFront
+      ? `--ei android.intent.extras.CAMERA_FACING 1 --ez android.intent.extra.USE_FRONT_CAMERA true --ez frontcamera true --ez com.google.assistant.extra.USE_FRONT_CAMERA true --ei camera.extras.camera.facing 1`
+      : `--ei android.intent.extras.CAMERA_FACING 0 --ez android.intent.extra.USE_FRONT_CAMERA false --ez frontcamera false --ei camera.extras.camera.facing 0`
+
+    await execAsync(`adb ${target} shell am start -a ${intentAction} ${extras}`)
+
+    await new Promise((r) => setTimeout(r, 4500))
+
+    if (mode === 'video') {
+      await execAsync(`adb ${target} shell input keyevent KEYCODE_CAMERA`)
+
+      await new Promise((r) => setTimeout(r, 1500))
+
+      await new Promise((r) => setTimeout(r, duration * 1000))
+
+      await execAsync(`adb ${target} shell input keyevent KEYCODE_CAMERA`)
+
+      await new Promise((r) => setTimeout(r, 4000))
+    } else {
+      await execAsync(`adb ${target} shell input keyevent KEYCODE_CAMERA`)
+      await new Promise((r) => setTimeout(r, 2500))
+    }
+
+    let cleanFileName = ''
+    let attempts = 0
+    while (attempts < 10) {
+      await new Promise((r) => setTimeout(r, 1000))
+
+      const { stdout: latestFileStr } = await execAsync(
+        `adb ${target} shell "ls -t /sdcard/DCIM/Camera 2>/dev/null | ${mediaFilterCmd} | head -n 1"`
+      ).catch(() => ({ stdout: '' }))
+
+      const newFile = latestFileStr.trim()
+
+      if (newFile && newFile !== oldFile) {
+        cleanFileName = newFile
+        break
+      }
+      attempts++
+    }
+
+    if (!cleanFileName) {
+      await execAsync(`adb ${target} shell input keyevent KEYCODE_HOME`)
+      return { success: false, error: 'Hardware timeout. File failed to save to device disk.' }
+    }
+
+    const extension = cleanFileName.split('.').pop() || (mode === 'video' ? 'mp4' : 'jpg')
+    const timestamp = Date.now()
+    const targetFilename = `IRIS_Capture_${timestamp}.${extension}`
+    const pcPath = path.join(galleryDirectory, targetFilename)
+
+    await execAsync(`adb ${target} pull "/sdcard/DCIM/Camera/${cleanFileName}" "${pcPath}"`)
+
+    await execAsync(`adb ${target} shell input keyevent KEYCODE_HOME`)
+
+    return {
+      success: true,
+      galleryItem: {
+        filename: targetFilename,
+        displayName: `${mode} Capture (${lens})`,
+        path: pcPath,
+        url: `file://${pcPath}`,
+        createdAt: new Date(timestamp)
+      }
+    }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+}
+
+export async function pushClipboardToMobile(text: string) {
+  if (!activeDevice) return { success: false, error: 'No phone connected.' }
+  const target = `-s ${activeDevice.ip}:${activeDevice.port}`
+  try {
+    const escapedText = text.replace(/ /g, '%s')
+    await execAsync(`adb ${target} shell input text "${escapedText}"`)
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+}
+
+export async function deployApkToMobile(apkPath: string, packageName: string) {
+  if (!activeDevice) return { success: false, error: 'No phone connected.' }
+  const target = `-s ${activeDevice.ip}:${activeDevice.port}`
+  try {
+    await execAsync(`adb ${target} install -r "${apkPath}"`)
+    await execAsync(
+      `adb ${target} shell monkey -p ${packageName} -c android.intent.category.LAUNCHER 1`
+    )
+    return { success: true }
   } catch (e: any) {
     return { success: false, error: e.message }
   }

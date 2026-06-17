@@ -14,6 +14,7 @@ import { Providers } from "@/components/Providers";
 import { VoiceProvider } from "@/contexts/VoiceContext";
 import { NexusStreamProvider } from "@/components/NexusStreamProvider";
 import { NexusProvider } from "@/contexts/NexusContext";
+import { ThemeProvider } from "@/themes/ThemeProvider";
 import { cn } from "@/lib/utils";
 import { TopNav } from "@/components/layout/TopNav";
 
@@ -32,20 +33,22 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("font-sans", geist.variable, quantico.variable)}>
       <body className={`${inter.className} antialiased bg-[#06060c] text-white`} suppressHydrationWarning={true}>
-        <Providers>
-          <VoiceProvider>
-            <NexusStreamProvider>
-              <NexusProvider>
-                <div className="flex flex-col h-screen overflow-hidden max-w-[1800px] mx-auto w-full relative z-10">
-                  <TopNav />
-                  <div className="flex-1 overflow-hidden">
-                    {children}
+        <ThemeProvider>
+          <Providers>
+            <VoiceProvider>
+              <NexusStreamProvider>
+                <NexusProvider>
+                  <div className="flex flex-col h-screen overflow-hidden max-w-[1800px] mx-auto w-full relative z-10">
+                    <TopNav />
+                    <div className="flex-1 overflow-hidden">
+                      {children}
+                    </div>
                   </div>
-                </div>
-              </NexusProvider>
-            </NexusStreamProvider>
-          </VoiceProvider>
-        </Providers>
+                </NexusProvider>
+              </NexusStreamProvider>
+            </VoiceProvider>
+          </Providers>
+        </ThemeProvider>
       </body>
     </html>
   );

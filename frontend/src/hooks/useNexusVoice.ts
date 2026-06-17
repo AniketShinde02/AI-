@@ -94,6 +94,22 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     }
   }, [persona, ttsProvider, language, voiceEngine, isConnected]);
 
+  // Intercept Vision frames from GeminiVision and send them via WS
+  useEffect(() => {
+    const handleVisionFrame = (e: any) => {
+      const frameBase64 = e.detail?.frame;
+      if (frameBase64 && socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify({
+          type: "vision_frame",
+          mime_type: "image/jpeg",
+          data: frameBase64
+        }));
+      }
+    };
+    window.addEventListener("nexus_vision_frame", handleVisionFrame);
+    return () => window.removeEventListener("nexus_vision_frame", handleVisionFrame);
+  }, []);
+
   const disconnect = useCallback(() => {
     logger.info("[Nexus WS] Disconnecting...");
     connectionStateRef.current = "disconnected";
@@ -340,9 +356,23 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
         }
       }
 
+      // RC-2 FIX: Always reset listening state on disconnect — prevents OFFLINE+LISTENING invalid state
       setIsConnected(false);
       setIsListening(false);
+      setIsSpeaking(false);
       isConnectingRef.current = false;
+
+      // Stop mic hardware stream if active — prevents ghost mic capture
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(t => t.stop());
+        micStreamRef.current = null;
+      }
+      if (micWorkletRef.current) {
+        micWorkletRef.current.disconnect();
+        micWorkletRef.current = null;
+      }
+      setMicCaptured(false);
+      workletLoadedRef.current = null;
 
       if (isIntentional) {
         connectionStateRef.current = "idle";
@@ -389,8 +419,19 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
         audioContextRef.current = ctx;
       }
       
+      // RC-2 FIX: Connect WS first, then wait for it before starting mic
       if (connectionStateRef.current !== "connected") {
         connect();
+        // Wait up to 5s for WS to open before activating mic
+        let waited = 0;
+        while (connectionStateRef.current !== "connected" && waited < 50) {
+          await new Promise(r => setTimeout(r, 100));
+          waited++;
+        }
+        if (connectionStateRef.current !== "connected") {
+          logger.warn("[Nexus Voice] WS not connected after 5s, deferring mic start");
+          return;
+        }
       }
       
       const audioCtx = audioContextRef.current;
@@ -516,6 +557,14 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
       console.warn("[VOICE_STUDIO] WebSocket not open, cannot test voice");
     }
   }, [ensureAudioContext]);
+
+  useEffect(() => {
+    return () => {
+      if (socketRef.current && (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING)) {
+        socketRef.current.close(1000, "Component unmounted");
+      }
+    };
+  }, []);
 
   return {
     isConnected,

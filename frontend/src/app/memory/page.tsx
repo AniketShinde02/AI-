@@ -27,6 +27,17 @@ export default function MemoryPage() {
     }
   };
 
+  const handleDelete = async (category: string, key: string) => {
+    try {
+      await fetch(`http://localhost:8001/memory/${encodeURIComponent(category)}/${encodeURIComponent(key)}`, {
+        method: "DELETE"
+      });
+      fetchMemory();
+    } catch (err) {
+      console.error("Failed to delete memory", err);
+    }
+  };
+
   useEffect(() => {
     fetchMemory();
   }, []);
@@ -124,7 +135,7 @@ export default function MemoryPage() {
                   </div>
                   <p className="text-[12px] text-zinc-300 font-sans leading-relaxed truncate">{entry.value}</p>
                 </div>
-                <button className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-[#ff3366] p-1">
+                <button onClick={() => handleDelete(entry.category, entry.key)} className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-[#ff3366] p-1">
                   <Trash2 size={12} />
                 </button>
               </div>

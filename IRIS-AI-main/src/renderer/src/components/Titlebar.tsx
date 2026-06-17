@@ -29,10 +29,8 @@ export default function TitleBar() {
 
   return (
     <div className="w-full h-12 flex items-center justify-between bg-[#08080a] backdrop-blur-3xl border-b border-white/5 drag-region select-none z-50 relative">
-      {/* ── Sub-Pixel Top Edge Highlight for Glass Effect ── */}
       <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
 
-      {/* ── LEFT: Brand & Platform Controls ── */}
       <div className="flex items-center h-full min-w-37.5 pl-4 no-drag">
         {isMac ? (
           <div className="flex items-center gap-2 group/mac">
@@ -66,22 +64,18 @@ export default function TitleBar() {
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            {/* ── CENTER: The HUD Status Pill ── */}
             <div className="flex items-center gap-3 bg-black/60 backdrop-blur-md border border-white/10 rounded-full px-4 py-1.5 shadow-[0_4px_20px_rgba(0,0,0,0.4)] pointer-events-none">
-              {/* Pulsing Core */}
               <div className="relative flex items-center justify-center w-2 h-2">
                 <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40 animate-ping" />
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400 shadow-[0_0_8px_#34d399]" />
               </div>
 
-              {/* Status Text */}
               <span className="text-[8.6px] font-mono tracking-[0.2em] text-zinc-300 uppercase">
                 Desktop Voice Assistant
               </span>
 
               <span className="text-[10px] text-zinc-700">|</span>
 
-              {/* Animated Waveform Icon */}
               <div className="flex items-center gap-1.5 text-emerald-400">
                 <RiPulseLine size={12} className="animate-pulse" />
                 <span className="text-[9px] font-mono tracking-widest font-bold uppercase drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]">
@@ -93,7 +87,6 @@ export default function TitleBar() {
         )}
       </div>
 
-      {/* ── RIGHT: Windows Controls / Mac Spacer ── */}
       <div className="flex h-full min-w-37.5 justify-end no-drag">
         {!isMac ? (
           <div className="flex h-full items-center">

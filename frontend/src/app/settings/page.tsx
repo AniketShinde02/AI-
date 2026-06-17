@@ -1,17 +1,61 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, Shield, Mic, Volume2, Cpu, Zap, Globe, Save } from "lucide-react";
+import { Settings, Shield, Mic, Volume2, Cpu, Zap, Globe, Save, Palette, Image as ImageIcon, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useNexus } from "@/contexts/NexusContext";
+import { useTheme } from "@/themes/ThemeProvider";
 
 export default function SettingsPage() {
-  const { selectedModel, setSelectedModel, persona, setPersona, ttsProvider, setTtsProvider, language, setLanguage, voiceEngine, setVoiceEngine } = useNexus();
+  const { selectedModel, setSelectedModel, persona, setPersona, language, setLanguage, voiceEngine, setVoiceEngine } = useNexus();
+  const { theme, setThemeId, setCustomTheme, availableThemes } = useTheme();
   const [saved, setSaved] = useState(false);
+  const [generatingTheme, setGeneratingTheme] = useState(false);
 
   const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setGeneratingTheme(true);
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+      const res = await fetch("http://localhost:8001/api/theme/generate", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success && data.theme) {
+        // Build the theme tokens, merging with default or current structure
+        const currentTokens = { ...theme };
+        currentTokens.colors = {
+          ...currentTokens.colors,
+          primary: data.theme.primary || currentTokens.colors.primary,
+          secondary: data.theme.secondary || currentTokens.colors.secondary,
+          accent: data.theme.accent || currentTokens.colors.accent,
+          background: data.theme.background || currentTokens.colors.background,
+          card: data.theme.surface || currentTokens.colors.card,
+          foreground: data.theme.text || currentTokens.colors.foreground,
+          cardForeground: data.theme.text || currentTokens.colors.cardForeground,
+          border: data.theme.border || currentTokens.colors.border,
+        };
+        // Inject custom theme with the background image URL
+        setCustomTheme(currentTokens, data.background_url);
+      } else {
+        console.error("Theme generation failed:", data.error);
+      }
+    } catch (err) {
+      console.error("Failed to upload image for theme", err);
+    } finally {
+      setGeneratingTheme(false);
+      if (e.target) e.target.value = ''; // Reset input
+    }
   };
 
   return (
@@ -181,6 +225,62 @@ export default function SettingsPage() {
                   </span>
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Appearance & Themes */}
+          <div className="col-span-2 bg-[#06060c] border border-[#ff00ff]/20 clip-cut p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Palette size={14} className="text-[#ff00ff]" />
+              <h2 className="text-[10px] font-quantico font-bold uppercase tracking-widest text-white">Appearance & Theme Engine</h2>
+            </div>
+            
+            <div className="flex flex-col md:flex-row gap-6">
+              {/* Presets */}
+              <div className="flex-1">
+                <h3 className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-3">Theme Presets</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {availableThemes.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setThemeId(t.id)}
+                      className={`p-3 border clip-cut-sm text-left transition-all ${
+                        theme.id === t.id && t.id !== 'custom'
+                          ? "border-[#ff00ff]/50 bg-[#ff00ff]/10 text-white"
+                          : "border-white/5 text-zinc-400 hover:border-white/15 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold capitalize">{t.name}</span>
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: t.colors.primary }} />
+                      </div>
+                    </button>
+                  ))}
+                  {theme.id === 'custom' && (
+                    <div className="col-span-2 p-3 border border-[#00FFFF]/50 bg-[#00FFFF]/10 clip-cut-sm text-left flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-white">AI Custom Theme Active</span>
+                      <div className="flex gap-1">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: theme.colors.primary }} />
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: theme.colors.accent }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* AI Generator */}
+              <div className="flex-1 bg-black/40 border border-white/5 p-4 clip-cut-sm flex flex-col justify-center items-center text-center gap-3">
+                <ImageIcon size={24} className="text-[#00FFFF]" />
+                <div>
+                  <h3 className="text-[11px] font-bold text-white mb-1">Dynamic AI Theme</h3>
+                  <p className="text-[9px] font-mono text-zinc-400">Upload an image (e.g. anime character, superhero) to generate a full Nexus theme layout powered by Gemini Vision.</p>
+                </div>
+                <label className={`mt-2 px-4 py-2 border border-[#00FFFF]/30 bg-[#00FFFF]/10 hover:bg-[#00FFFF]/20 text-[#00FFFF] text-[10px] font-bold uppercase tracking-widest clip-cut cursor-pointer flex items-center gap-2 transition-colors ${generatingTheme ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {generatingTheme ? <Loader2 size={12} className="animate-spin" /> : <Palette size={12} />}
+                  {generatingTheme ? "Analyzing Image..." : "Upload Image"}
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={generatingTheme} />
+                </label>
+              </div>
             </div>
           </div>
 

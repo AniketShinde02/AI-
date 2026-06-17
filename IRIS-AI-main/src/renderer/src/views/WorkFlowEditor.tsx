@@ -390,7 +390,6 @@ function Editor() {
 
   return (
     <div className="flex h-full w-full bg-[#050505] relative overflow-hidden font-sans">
-      {/* --- SIDEBAR: MODULE LIBRARY --- */}
       <div
         className={`h-full bg-zinc-950/80 backdrop-blur-2xl border-r border-white/5 flex flex-col transition-all duration-300 ease-in-out z-40 shrink-0 ${
           isSidebarOpen ? 'w-72' : 'w-0 overflow-hidden border-none'
@@ -442,9 +441,7 @@ function Editor() {
         </div>
       </div>
 
-      {/* --- MAIN CANVAS AREA --- */}
       <div className="flex-1 flex flex-col relative" onDrop={onDrop} onDragOver={onDragOver}>
-        {/* FLOATING HUD TOOLBAR */}
         <div className="absolute top-6 left-6 z-50 flex items-center gap-2 bg-zinc-950/90 backdrop-blur-xl border border-white/10 p-1.5 rounded-2xl shadow-2xl">
           <Tooltip
             id="global-tooltip"
@@ -458,7 +455,6 @@ function Editor() {
             }}
           />
 
-          {/* Toggle Sidebar */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -472,7 +468,6 @@ function Editor() {
 
           <div className="w-px h-6 bg-white/10 mx-1" />
 
-          {/* Canvas Actions */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -490,7 +485,6 @@ function Editor() {
 
           <div className="w-px h-6 bg-white/10 mx-1" />
 
-          {/* Macro Name Input */}
           <div className="flex items-center bg-black/50 border border-white/5 rounded-xl px-3 py-1.5 focus-within:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/50 transition-all w-64">
             <RiSettings4Line size={14} className="text-zinc-500 mr-2 shrink-0" />
             <input
@@ -502,7 +496,6 @@ function Editor() {
             />
           </div>
 
-          {/* Execution Controls */}
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.95 }}
@@ -522,7 +515,6 @@ function Editor() {
           </motion.button>
         </div>
 
-        {/* REACT FLOW CANVAS */}
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -533,7 +525,6 @@ function Editor() {
           className="bg-[#050505]"
           fitView
         >
-          {/* Extremely subtle, professional dot grid */}
           <Background color="#ffffff" gap={24} size={1} style={{ opacity: 0.03 }} />
           <Controls className="react-flow__controls bg-zinc-900 border-white/10 fill-zinc-400" />
         </ReactFlow>

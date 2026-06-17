@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 
 export default function ImageWidget() {
   const [isVisible, setIsVisible] = useState(false)
@@ -9,11 +9,11 @@ export default function ImageWidget() {
   const [statusText, setStatusText] = useState('')
   const [debugMsg, setDebugMsg] = useState('')
 
-  const abortControllerRef = useRef<AbortController | null>(null)
-
   useEffect(() => {
-    const handleEvent = (event: any) => {
-      const { url, prompt, loading, error, errorMessage } = event.detail
+    if (!window.electron?.ipcRenderer) return
+
+    const handleIPCEvent = async (_event: any, data: any) => {
+      const { base64, prompt, loading, error, errorMessage } = data
 
       setPrompt(prompt)
 
@@ -33,58 +33,37 @@ export default function ImageWidget() {
         return
       }
 
-      if (url) {
-        downloadAndAutoSave(url, prompt)
+      if (base64) {
+        setImageSrc(base64)
+        setLoading(false)
+        setHasError(false)
+        setStatusText('SAVING TO GALLERY...')
+
+        try {
+          await window.electron.ipcRenderer.invoke('save-image-to-gallery', {
+            title: prompt,
+            base64Data: base64
+          })
+          setStatusText('SAVED TO GALLERY ✔️')
+        } catch (err) {
+          console.error('Failed to save to gallery:', err)
+          setStatusText('RENDERED (SAVE FAILED)')
+        }
       }
     }
 
-    window.addEventListener('image-gen', handleEvent)
-    return () => window.removeEventListener('image-gen', handleEvent)
+    window.electron.ipcRenderer.on('image-gen', handleIPCEvent)
+
+    return () => {
+      window.electron.ipcRenderer.removeListener('image-gen', handleIPCEvent)
+    }
   }, [])
-
-  const downloadAndAutoSave = async (url: string, currentPrompt: string) => {
-    if (abortControllerRef.current) abortControllerRef.current.abort()
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-
-    try {
-      setStatusText('DOWNLOADING & SAVING...')
-
-      const response = await fetch(url, { signal: controller.signal })
-      if (!response.ok) throw new Error(`Download Error: ${response.status}`)
-
-      const blob = await response.blob()
-
-      const objectUrl = URL.createObjectURL(blob)
-      setImageSrc(objectUrl)
-      setLoading(false)
-      setHasError(false)
-
-      const reader = new FileReader()
-      reader.readAsDataURL(blob)
-      reader.onloadend = async () => {
-        const base64data = reader.result
-
-        await window.electron.ipcRenderer.invoke('save-image-to-gallery', {
-          title: currentPrompt,
-          base64Data: base64data
-        })
-
-        setStatusText('SAVED TO GALLERY ✔️')
-      }
-    } catch (err: any) {
-      if (err.name === 'AbortError') return
-      setHasError(true)
-      setDebugMsg('Failed to download/save image.')
-      setLoading(false)
-    }
-  }
 
   if (!isVisible) return null
 
   return (
-    <div className="fixed inset-0 z-9050 flex items-center justify-center bg-black/90 backdrop-blur-md p-10 animate-in fade-in zoom-in duration-300">
-      <div className="relative max-w-5xl max-h-[85vh] border-2 border-orange-500/50 rounded-3xl overflow-hidden shadow-[0_0_100px_rgba(249,115,22,0.2)] bg-black">
+    <div className="fixed inset-0 z-9050 flex items-center justify-center bg-black/90 backdrop-blur-md p-10">
+      <div className="relative max-w-5xl max-h-[85vh] border-2 border-orange-500/50 rounded-3xl overflow-hidden shadow-[0_0_100px_rgba(249,115,22,0.2)] bg-black flex flex-col">
         <div className="absolute top-0 left-0 w-full z-10 p-4 flex justify-between items-start pointer-events-none">
           <div className="bg-black/80 backdrop-blur border border-orange-500/50 px-4 py-2 rounded-lg pointer-events-auto">
             <h2 className="text-orange-400 font-bold tracking-widest text-xs uppercase font-mono">
@@ -93,13 +72,13 @@ export default function ImageWidget() {
           </div>
           <button
             onClick={() => setIsVisible(false)}
-            className="bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white border border-red-500 px-4 py-2 rounded-lg font-bold pointer-events-auto transition-all"
+            className="bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white border border-red-500 px-4 py-2 rounded-lg font-bold pointer-events-auto transition-all cursor-pointer"
           >
             CLOSE
           </button>
         </div>
 
-        <div className="relative w-full h-full flex items-center justify-center min-w-200 min-h-125">
+        <div className="relative w-full h-full flex items-center justify-center min-w-125 min-h-100">
           {loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4">
               <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
@@ -120,14 +99,14 @@ export default function ImageWidget() {
           )}
 
           {!loading && !hasError && imageSrc && (
-            <div className="relative w-full h-full flex items-center justify-center">
+            <div className="relative w-full h-full flex items-center justify-center bg-zinc-950">
               <img
                 src={imageSrc}
-                alt="Generated"
-                className="w-full h-auto max-h-full object-contain animate-in fade-in duration-1000"
+                alt={prompt}
+                className="w-full h-auto max-h-full object-contain"
               />
-              <div className="absolute bottom-4 right-4 bg-green-500/20 text-green-400 border border-green-500/50 px-3 py-1 rounded-full text-xs font-bold font-mono animate-in slide-in-from-bottom-2 fade-in duration-700 delay-500">
-                💾 SAVED TO GALLERY
+              <div className="absolute bottom-4 right-4 bg-green-500/20 text-green-400 border border-green-500/50 px-3 py-1 rounded-full text-xs font-bold font-mono">
+                {statusText.includes('✔️') ? '💾 SAVED TO GALLERY' : '💾 SAVING...'}
               </div>
             </div>
           )}

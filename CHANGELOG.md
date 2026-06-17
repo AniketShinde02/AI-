@@ -5,6 +5,141 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) + Semant
 
 ---
 
+## [2026-06-17] - Phase 5-10 Structural Foundations & Gemini Live Transport Bridge
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Architecture**: Introduced new core foundation files to support the shift towards a Multi-Agent OS router architecture.
+- **Backend (Model Router)**: Added `core/model_router.py` to route tasks dynamically between Groq (Fast tasks, Coding) and Gemini (Live Conversation, Vision, Deep Research).
+- **Backend (Gemini Live)**: Created `core/gemini_live_manager.py` to establish bidirectional audio transport with the Gemini Multimodal Live API.
+- **Backend (Capabilities)**: Created `core/capabilities.py` for the unified Capability Registry (explicit permissions for tools like file_read, open_app, etc.).
+- **Backend (PC Control)**: Added `core/pc_control.py` layer to abstract desktop automation actions securely.
+- **Backend (Scrapper OS)**: Added `core/scrapper_os.py` bridge to integrate seamlessly with the external `Scrapper OS` repository (`AI-OS-3-scrapping-agents`).
+- **Frontend (UI Components)**: Added `GeminiVision.tsx` and `LiveStatusWindow.tsx` components to surface multimodal vision and status events.
+
+### Notes
+- **Pending**: Voice state machine (OFFLINE/LISTENING deadlock) requires fixing before full integration of the Gemini Live transport layer.
+
+---
+
+## [2026-06-17] - Nexus Dynamic Theme Engine (Phase 4)
+
+### Added
+- **Backend (Theme API)**: Added `/api/theme/generate` endpoint that uses `google-genai` (Gemini Vision 1.5 Flash) to dynamically extract dark-mode optimized JSON palettes from uploaded images.
+- **Backend (Static Serving)**: Mounted static files serving to host dynamically uploaded theme background images from `data/themes/backgrounds`.
+- **Frontend (UI)**: Added an Appearance & Theme Engine block in the Settings UI allowing for Image Upload.
+- **Frontend (ThemeProvider)**: Extended React context with `setCustomTheme` to inject dynamically generated palettes and CSS variables at runtime.
+
+### Changed
+- **CSS**: Modified `globals.css` to inject `--global-bg-image` onto the `html.has-custom-bg::before` pseudo-element for custom wallpapers.
+
+---
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Architecture**: `ARCHITECTURE_FREEZE.md` outlining immutable core design patterns and boundaries.
+- **Backend (DB)**: Configured SQLite in WAL mode (`nexus.db`) for high-concurrency real-time reads/writes.
+- **Backend (Agent System)**: Added `/api/agents` CRUD endpoints in FastAPI `ws_main.py` mapped to SQLite `agents` table.
+- **Backend (Automation)**: Added `/api/workflows` CRUD endpoints mapped to SQLite `workflows` table.
+- **Backend (Memory)**: Migrated `user_memory.json` to persistent SQLite `user_memory` table and added `DELETE /memory/{category}/{key}` endpoint.
+- **Backend (RAG)**: Formally validated `rag_oracle.py` (Local Caching + Google Embeddings + Groq LLaMA) and exposed via `/api/rag/ingest` and `/api/rag/query`.
+- **Backend (Bridge)**: Added `ScrapperOSBridge` class and `/api/scrapper-os/*` proxy routes to securely interact with external Scrapper OS without CORS.
+- **Documentation**: Generated `PRODUCTION_READINESS_REPORT.md` and `SCRAPPER_OS_BRIDGE.md`.
+
+### Changed
+- **Frontend (Agents)**: Replaced mock UI `AGENTS` array with dynamic React `useState/useEffect` fetching from real SQLite backend (`page.tsx`).
+- **Frontend (Automation)**: Wired Mission UI directly to the real `workflows` API endpoint with dynamic state management and functional toggle/delete buttons.
+- **Frontend (Memory)**: Wired delete buttons in `MemoryPage` to hit the real backend API.
+- **Frontend (Layouts)**: Centralized component-driven layouts via `DashboardLayoutRenderer` instead of manually hardcoded grids.
+
+---
+
+## [2026-06-16] - Final Validation & Hardening Session
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Fixed
+- **CRITICAL**: `SyntaxError: unmatched '}'` at `ws_main.py:1244` — corrupted final-flush block rebuilt with proper buffer drain, sentinel, `agent_message`, and background memory extraction.
+- **CRITICAL**: `ReferenceError: voiceEngine is not defined` — `voiceEngine` was missing from `useNexus()` destructuring in `page.tsx:51`. Frontend 500 error resolved.
+- **HIGH**: `/api/voices` returning 404 — Added `GET /api/voices` endpoint to `ws_main.py` with Edge TTS (8 voices) and Gemini TTS (5 voices) response. Voice Studio `VOICE MODEL` panel will now populate.
+- **HIGH**: `NotAllowedError` in `GeminiVision.tsx` not handled — wrapped in typed `catch (error)` with explicit `error.name === 'NotAllowedError'` distinction and clear UI status.
+- **HIGH**: WebSocket Code 1006 on Fast Refresh — added unmount cleanup `useEffect` in `useNexusVoice.ts` sending `ws.close(1000, "Component unmounted")`.
+
+### Verified (Browser Screenshots)
+- Dashboard, Chat, Trace, Memory, Agents, Automation, Settings, Voice Studio — all 8 pages load correctly.
+- Backend HTTP 200 + WebSocket CONNECTED confirmed.
+- Single remaining browser console error before fix: `/api/voices 404` (now fixed).
+
+### Added
+- `FEATURE_VALIDATION_REPORT.md` — complete feature inventory with status.
+- `PRODUCTION_BLOCKERS.md` — all bugs categorized by severity with root cause.
+- `CODEBASE_CLEANUP_REPORT.md` — dead code, unused files, archive candidates.
+- `ROADMAP_STATUS_REPORT.md` — Phase 0–10 audit with evidence and release decision.
+
+### Notes
+- Release Decision: `NOT_READY_FOR_PRODUCTION` / `READY_FOR_PHASE_5_10_CONTINUATION`
+- Blockers remaining: Auth layer, rate limiting, Automation/Agents backend wiring, RAG Oracle ingestion.
+
+---
+
+## [2026-06-16] - Agentic Daily Needs ML Memory Adaptation
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Background Memory Extraction**: Implemented asynchronous ML preference extraction (`extract_and_save_memory`) in `ws_main.py` using Llama 3.1 8B. It autonomously reads post-turn conversation contexts and executes the `update_preferences` tool without blocking ultra-fast voice TTS latency.
+- **Dynamic Prompt Injection**: Updated `prompts.py` to auto-inject the persistent JSON memory object (from `core/memory_manager.py`) directly into the Nexus System Prompt on every voice interaction.
+
+### Changed
+- Dropped the heavy Vector DB/KNN architectural proposal in favor of a fast, local JSON approach, directly aligning with IRIS AI and Stonic AI design patterns for a "smaller replica" daily-needs agent.
+- Answered user questions confirming Gemini Live vs Groq fallback behaviors and Vision (Camera/Screen Share) routing capabilities.
+
+---
+
+## [2026-06-16] - Architecture Consolidation & UI Decluttering
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Single Backend Architecture**: Consolidated OS automation tools (`pyautogui`, `pygetwindow`) into `ws_main.py` natively using `asyncio.to_thread()`, completely removing the need for a secondary `daemon.py` process on port 8002.
+- **Orb Vision Toggle**: Added a singular `Camera` toggle inside the Orb controls that dynamically cycles the active input source (`Off` → `Camera` → `Screen Share` → `Off`).
+
+### Changed
+- **UI Simplification (Option B)**: Completely deleted the clunky `Optics_Link` floating windows from the left dashboard column.
+- **Dynamic Vision Surface**: Repurposed the main "AI Assistant" thinking area in the center column. When the Vision toggle is activated, the static AI greeting smoothly transforms into the live WebRTC video feed, eliminating UI clutter and providing a focused, premium software experience.
+
+### Removed
+- **Deleted `windows_agent/daemon.py`**: Reduced technical debt and port contention.
+
+## [2026-06-16] - Phases 5 to 10: Multi-Modal Vision & Desktop Automation
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Live Status Window**: Added a scrolling console in the frontend dashboard (`page.tsx`) to surface real-time actions and status events securely decoupled via CustomEvents.
+- **Gemini Vision Component**: Integrated native WebRTC `<video>` tags for user Camera and Screen Share directly into the `Optics_Link` panel.
+- **Background Frame Extraction**: Natively extracts 1 FPS JPEG frames via HTML5 Canvas from the active WebRTC stream and dispatches them without blocking the UI thread.
+- **Gemini Live Multimodal Session Manager**: Created `core/gemini_live_manager.py` to seamlessly establish and maintain bidirectional `AsyncLiveSession` connections to Google's Gemini Multimodal Live API.
+- **Desktop Companion Daemon**: Built a standalone `windows_agent/daemon.py` using FastAPI to expose secure OS-level endpoints (mouse, keyboard, window focus, screenshots) via `pyautogui` and `pygetwindow` bypassing Electron's technical debt.
+
+### Changed
+- **WebSocket Transport Upgrade**: Updated `useNexusVoice.ts` to multiplex PCM audio byte streams alongside JSON-encoded Base64 JPEG payloads over a single `ws://localhost:8001` connection.
+- **Backend Failover Architecture**: Refactored `ws_main.py`'s `VoiceSession` to natively construct the `GeminiLiveSessionManager`. If Gemini drops or rate-limits, it triggers an instant graceful degrade to the local Groq + EdgeTTS fallback pipeline (Mode B).
+
 ## [2026-06-16] - Phase 5: Voice Stack Stabilization & Humanization
 
 ### Author

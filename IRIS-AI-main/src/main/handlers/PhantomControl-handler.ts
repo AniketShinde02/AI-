@@ -201,6 +201,7 @@ export default function registerPhantomKeyboard() {
       phantomWindow.setBounds({ width: bounds.width, height: height, x: bounds.x, y: bounds.y })
     }
   })
+  
 
   ipcMain.on('phantom-execute-stream', async (event, promptText) => {
     if (!event) return

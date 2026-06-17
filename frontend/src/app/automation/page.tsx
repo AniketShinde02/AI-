@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Workflow, Plus, Play, Pause, Trash2, ChevronRight, Zap, Clock, CheckCircle } from "lucide-react";
 
 interface Mission {
@@ -13,36 +13,6 @@ interface Mission {
   lastRun: string;
 }
 
-const SAMPLE_MISSIONS: Mission[] = [
-  {
-    id: "m1",
-    name: "Morning Briefing",
-    trigger: "Daily at 08:00",
-    actions: ["Fetch news headlines", "Check calendar", "Summarize emails", "Read aloud"],
-    status: "active",
-    runs: 14,
-    lastRun: "Today, 08:00",
-  },
-  {
-    id: "m2",
-    name: "Web Research Pipeline",
-    trigger: "On voice command: 'research [topic]'",
-    actions: ["Web search", "Summarize results", "Save to memory"],
-    status: "active",
-    runs: 37,
-    lastRun: "2 hrs ago",
-  },
-  {
-    id: "m3",
-    name: "System Health Monitor",
-    trigger: "Every 30 minutes",
-    actions: ["Check CPU/RAM", "Alert if threshold exceeded"],
-    status: "paused",
-    runs: 88,
-    lastRun: "Yesterday",
-  },
-];
-
 const statusColors: Record<string, string> = {
   active: "#00FFFF",
   paused: "#f59e0b",
@@ -50,16 +20,59 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AutomationPage() {
-  const [missions, setMissions] = useState<Mission[]>(SAMPLE_MISSIONS);
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const toggleMission = (id: string) => {
-    setMissions((prev) =>
-      prev.map((m) =>
-        m.id === id
-          ? { ...m, status: m.status === "active" ? "paused" : "active" }
-          : m
-      )
-    );
+  const fetchMissions = () => {
+    fetch("http://localhost:8001/api/workflows")
+      .then((res) => res.json())
+      .then((data) => {
+        setMissions(data);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch workflows", err);
+        setIsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchMissions();
+  }, []);
+
+  const handleCreateMission = async () => {
+    const id = `mission_${Math.random().toString(36).substr(2, 9)}`;
+    const newMission = {
+      id,
+      name: `New Mission ${id.substr(0, 4)}`,
+      trigger: "Manual",
+      actions: ["Execute default task"],
+      status: "draft",
+      runs: 0,
+      lastRun: "Never"
+    };
+    await fetch("http://localhost:8001/api/workflows", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newMission)
+    });
+    fetchMissions();
+  };
+
+  const toggleMission = async (mission: Mission) => {
+    const newStatus = mission.status === "active" ? "paused" : "active";
+    await fetch(`http://localhost:8001/api/workflows/${mission.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...mission, status: newStatus })
+    });
+    fetchMissions();
+  };
+
+  const deleteMission = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await fetch(`http://localhost:8001/api/workflows/${id}`, { method: "DELETE" });
+    fetchMissions();
   };
 
   return (
@@ -75,7 +88,7 @@ export default function AutomationPage() {
             <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Mission Builder & Pipeline Control</p>
           </div>
         </div>
-        <button className="flex items-center gap-2 px-3 py-2 bg-[#6137FF] hover:bg-[#7b5cff] text-white text-[9px] font-bold uppercase tracking-widest clip-cut transition-all shadow-[0_0_15px_rgba(97,55,255,0.3)]">
+        <button onClick={handleCreateMission} className="flex items-center gap-2 px-3 py-2 bg-[#6137FF] hover:bg-[#7b5cff] text-white text-[9px] font-bold uppercase tracking-widest clip-cut transition-all shadow-[0_0_15px_rgba(97,55,255,0.3)]">
           <Plus size={12} />
           New Mission
         </button>
@@ -154,7 +167,7 @@ export default function AutomationPage() {
 
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => toggleMission(mission.id)}
+                      onClick={(e) => { e.stopPropagation(); toggleMission(mission); }}
                       className="w-8 h-8 flex items-center justify-center border clip-cut-sm transition-all hover:border-[#00FFFF]/40"
                       style={{
                         background: mission.status === "active" ? "#ff336620" : "#00FFFF20",
@@ -165,7 +178,7 @@ export default function AutomationPage() {
                     >
                       {mission.status === "active" ? <Pause size={12} /> : <Play size={12} />}
                     </button>
-                    <button className="w-8 h-8 flex items-center justify-center border border-white/5 text-zinc-600 hover:text-[#ff3366] hover:border-[#ff3366]/30 clip-cut-sm transition-all">
+                    <button onClick={(e) => deleteMission(e, mission.id)} className="w-8 h-8 flex items-center justify-center border border-white/5 text-zinc-600 hover:text-[#ff3366] hover:border-[#ff3366]/30 clip-cut-sm transition-all">
                       <Trash2 size={12} />
                     </button>
                   </div>

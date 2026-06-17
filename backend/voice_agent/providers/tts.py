@@ -47,7 +47,8 @@ logger = logging.getLogger("nexus.tts.router")
 class TTSProviderRouter(TTS):
     """
     Simplified TTS Architecture:
-    - Gemini: Primary and Only Active Provider
+    - Edge TTS: Primary and Only Active REST Provider
+    - Gemini Live: Bypasses this entirely via WebRTC/WebSocket
     """
     def __init__(self, config_obj):
         super().__init__(provider_name="TTSProviderRouter")
@@ -55,18 +56,11 @@ class TTSProviderRouter(TTS):
         self.providers: Dict[str, TTS] = {}
         self.status = ProviderStatus.UNINITIALIZED
 
-        # 1. Initialize Gemini (Premium / Mode 1)
-        try:
-            from .tts_gemini import GeminiTTS
-            self.providers["gemini"] = GeminiTTS()
-            logger.info("✅ [TTS] GeminiTTS initialized as Primary provider.")
-        except Exception as e:
-            logger.error(f"❌ Failed to init GeminiTTS: {e}")
-
-        # 2. Initialize Edge TTS (Fallback)
+        # 1. Initialize Edge TTS (Primary for Standard Voice/Chat)
         try:
             from .tts_edge import EdgeTTS
             self.providers["edge"] = EdgeTTS()
+            logger.info("✅ [TTS] EdgeTTS initialized as Primary REST provider.")
         except Exception as e:
             logger.error(f"❌ Failed to init EdgeTTS: {e}")
 
@@ -93,57 +87,53 @@ class TTSProviderRouter(TTS):
     async def stream_audio(
         self,
         text: str,
-        provider: str = "gemini",
+        provider: str = "edge",
         **kwargs
     ) -> AsyncIterator[PcmData]:
         """
-        Routes text to Gemini TTS.
+        Routes text to Edge TTS. Returns detailed diagnostics.
         """
         async def _gen():
-            base_chain = ["edge"]
-            chain = [provider] + [p for p in base_chain if p != provider]
-
-            provider_used = None
+            chain = ["edge"]
             fallback_occurred = False
-            provider_errors = {}
 
             for p_key in chain:
                 if not self.validate_provider(p_key):
                     continue
-
-                if fallback_occurred:
-                    logger.info(f"[TTS] Provider Fallback: Trying {p_key}")
 
                 p_instance = self.providers[p_key]
 
                 try:
                     logger.info(f"[TTS] Provider Selected: {p_key}")
 
-                    yield {"provider": p_key, "fallback": fallback_occurred, "voice": kwargs.get("voice", "unknown")}
+                    # Diagnostic yield for frontend truth
+                    yield {
+                        "provider": p_key,
+                        "fallback": fallback_occurred,
+                        "voice": kwargs.get("voice", "unknown")
+                    }
 
+                    bytes_generated = 0
                     async for data in p_instance.stream_audio(text, **kwargs):
+                        bytes_generated += len(data.samples) if hasattr(data, 'samples') else 0
                         yield data
 
-                    provider_used = p_key
-                    logger.info(f"[TTS] Provider Success: {p_key}")
-                    break  # Success — stop fallback chain
+                    if bytes_generated == 0:
+                        logger.warning(f"[TTS] Provider {p_key} succeeded but generated 0 bytes.")
+
+                    logger.info(f"[TTS] Provider Success: {p_key}. Bytes: {bytes_generated}")
+                    break  # Success
 
                 except Exception as e:
-                    import traceback
-                    err_str = traceback.format_exc()
-                    logger.error(f"[TTS] Provider Failed: {p_key}. Error: {e}")
-                    with open("DEBUG_FORENSICS.txt", "a", encoding="utf-8") as f: f.write(f"[TTS Router Error] {p_key} failed: {e}\n{err_str}\n")
+                    logger.error(f"[TTS] Provider '{p_key}' failed: {e}")
                     fallback_occurred = True
-                    provider_errors[p_key] = str(e)
-                    # Mark this provider degraded so validate_provider skips it next time
-                    if hasattr(p_instance, "status"):
-                        setattr(p_instance, "status", ProviderStatus.FAILED)
 
-            if not provider_used:
-                logger.critical("🆘 [TTS Router] All providers in chain failed!")
-                raise RuntimeError(f"All TTS providers failed — no audio produced. Errors: {provider_errors}")
+            if bytes_generated == 0:
+                logger.critical("[TTS Router] Provider failed to generate bytes!")
+                yield {"error": "All providers failed or generated 0 bytes."}
 
-        return _gen()
+        async for item in _gen():
+            yield item
 
     async def close(self):
         for p in self.providers.values():

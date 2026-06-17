@@ -17,7 +17,7 @@ export async function getGallery() {
 
     const files = fs
       .readdirSync(galleryDir)
-      .filter((file) => /\.(png|jpg|jpeg|webp|gif)$/i.test(file))
+      .filter((file) => /\.(png|jpg|jpeg|webp|gif|mp4)$/i.test(file))
 
     return files
       .map((file) => {

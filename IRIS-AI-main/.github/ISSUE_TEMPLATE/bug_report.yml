@@ -1,113 +1,127 @@
 name: Bug Report
-description: Report system defects, Electron crashes, IPC failures, and execution bugs.
+description: Report system crashes, execution failures, or UI defects in the IRIS Desktop Assistant.
 title: '[Bug]: '
 labels:
   - bug
+  - triage
 body:
   - type: markdown
     attributes:
       value: |
-        ### 🚨 Anomaly Detected
-        Thanks for filing this report. To help us patch the neural forge quickly, keep every answer concise, reproducible, and grounded in observed evidence. Include terminal logs or Electron console outputs whenever possible.
+        ### Submit a Bug Report
+        Thank you for taking the time to report an issue. To help our engineering team resolve this efficiently, please provide concise, reproducible steps and include terminal logs or Electron console outputs where applicable.
+
+  - type: dropdown
+    id: access_tier
+    attributes:
+      label: Access Tier
+      description: Which version of IRIS are you currently running? (Crucial for isolating backend vs. frontend issues).
+      options:
+        - Free Tier (Public UI Shell Only)
+        - IRIS Insider ($15/mo - Local Execution)
+        - IRIS Builder / Alpha ($30-$50/mo)
+    validations:
+      required: true
+
   - type: dropdown
     id: bug_type
     attributes:
-      label: Bug type
-      description: Choose the category that best matches this anomaly.
+      label: Bug Category
+      description: Select the category that best matches this issue.
       options:
-        - Regression (Worked in a previous version, now fails)
-        - Crash (Electron app exits, white-screens, or hangs)
-        - Execution Failure (Tool triggers but fails to affect the OS)
-        - UI/React Bug (Visual glitches, state issues)
+        - Application Crash (App unexpectedly exits, hangs, or white-screens)
+        - Execution Failure (Voice command triggers, but native action fails)
+        - Voice/Audio Processing (Mic routing, transcription, or TTS issues)
+        - User Interface (Visual glitches, layout breaks, state issues)
+        - Regression (Worked in a previous build, but now fails)
     validations:
       required: true
+
   - type: dropdown
-    id: release_blocker
+    id: severity
     attributes:
-      label: Release blocker
-      description: Choose `Yes` only if this completely breaks core system functionality (e.g., app won't boot, keyboard injection freezes OS).
+      label: Severity
+      description: How deeply does this impact your workflow?
       options:
-        - 'No'
-        - 'Yes'
+        - Low (Minor visual bug or annoyance, core functions work)
+        - Medium (A specific tool or command fails, but the app is usable)
+        - High (Core voice engine or major automation sequences are broken)
+        - Critical (Application refuses to boot or completely freezes the host OS)
     validations:
       required: true
+
   - type: textarea
     id: summary
     attributes:
-      label: Summary
-      description: One-sentence statement of what is broken, based on observed evidence.
-      placeholder: 'Example: After upgrading to 1.2.0, Phantom Typer fails to inject text into VS Code and throws an IPC timeout.'
+      label: Issue Summary
+      description: A clear and concise description of what is broken.
+      placeholder: 'Example: After upgrading to 1.2.0, the voice command for opening VS Code fails and returns an IPC timeout error in the console.'
     validations:
       required: true
+
   - type: textarea
     id: repro
     attributes:
-      label: Steps to reproduce
-      description: Provide the shortest deterministic repro path supported by direct observation.
+      label: Steps to Reproduce
+      description: Provide the exact sequence of actions required to trigger the bug.
       placeholder: |
-        1. Start IRIS packaged .exe on Windows 11.
-        2. Focus on VS Code and press `Ctrl+Alt+Space`.
-        3. Speak command "Write a python script".
-        4. Observe no text injected and check Electron console for `ipcRenderer timeout`.
+        1. Launch the IRIS packaged .exe on Windows 11.
+        2. Click the microphone icon to activate the listening state.
+        3. Speak the command: "Open Spotify".
+        4. Observe the widget hanging on 'Executing...', followed by a timeout error.
     validations:
       required: true
+
   - type: textarea
     id: expected
     attributes:
-      label: Expected behavior
-      description: What should the system have done?
-      placeholder: 'In version 1.1.0, the agent successfully typed the generated python script into the active window via nut.js.'
+      label: Expected Behavior
+      description: What should the system have done under normal operating conditions?
+      placeholder: 'The application should have parsed the voice intent and successfully launched the local Spotify executable.'
     validations:
       required: true
+
   - type: textarea
     id: actual
     attributes:
-      label: Actual behavior
-      description: Describe only the observed result, including user-visible errors and terminal output.
-      placeholder: "Nothing is typed. The floating widget hangs on 'Executing...', and the backend throws `nut.js execution context lost`."
+      label: Actual Behavior
+      description: Describe what actually happened, including any user-visible error messages.
+      placeholder: "The action fails silently in the UI. Checking the developer tools reveals: `Uncaught Error: spawn ENOENT`."
     validations:
       required: true
+
   - type: input
     id: version
     attributes:
-      label: IRIS version
-      description: Exact version/build tested (check your package.json or releases).
+      label: IRIS Version
+      description: The exact application version or build number (Check package.json or the Settings panel).
       placeholder: '1.2.0'
     validations:
       required: true
+
   - type: input
     id: os
     attributes:
-      label: Operating system
-      description: OS and exact version where this occurs (Crucial for OS-level automation bugs).
-      placeholder: 'Windows 11 (23H2) / macOS 14.4 / Ubuntu 24.04'
+      label: Operating System
+      description: Your specific OS and version (Crucial for hardware/desktop automation bugs).
+      placeholder: 'Windows 11 (23H2) / macOS 14.4 (Apple Silicon) / Ubuntu 24.04'
     validations:
       required: true
-  - type: input
-    id: install_method
-    attributes:
-      label: Install method
-      description: How IRIS was launched.
-      placeholder: 'npm run dev / Packaged Windows .exe / Docker Compose (Web Interface)'
-    validations:
-      required: true
-  - type: input
-    id: module
-    attributes:
-      label: Affected Module / Tool
-      description: Which part of the IRIS system is failing?
-      placeholder: 'Phantom Typer / Local RAG (LanceDB) / ADB Mobile Link / Screen Peeler'
-    validations:
-      required: true
+
   - type: textarea
     id: logs
     attributes:
-      label: Logs, screenshots, and evidence
-      description: Paste your Electron main process logs, React console errors, or attach screenshots. (Strip out any API keys before pasting!)
+      label: Logs, Screenshots, and Evidence
+      description: Paste relevant Electron main process logs, React console errors, or attach screenshots. **CRITICAL: Ensure all API Keys are redacted before posting.**
       render: shell
+      placeholder: |
+        Paste logs here...
+
   - type: textarea
-    id: additional_information
+    id: additional_context
     attributes:
-      label: Additional information
-      description: Add any remaining context. If this is a regression, include the last known good version.
-      placeholder: 'Last known good version was 1.1.0. Temporary workaround is manually copying the text from the web interface.'
+      label: Additional Context
+      description: Add any remaining context. If this is a regression, please specify the last known good version.
+      placeholder: 'Last known good version was 1.1.0. The bug seems to trigger more frequently when multiple monitors are connected.'
+    validations:
+      required: false

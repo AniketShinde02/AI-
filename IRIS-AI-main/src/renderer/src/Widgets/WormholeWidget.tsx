@@ -7,25 +7,31 @@ export default function WormholeWidget() {
   const [url, setUrl] = useState('')
 
   useEffect(() => {
-    const handleOpen = (e: any) => {
-      setUrl(e.detail.url)
+    if (!window.electron?.ipcRenderer) return
+
+    const handleOpen = (_event: any, data: { url: string }) => {
+      setUrl(data.url)
       setIsVisible(true)
     }
-    const handleClose = () => setIsVisible(false)
 
-    window.addEventListener('wormhole-opened', handleOpen)
-    window.addEventListener('wormhole-closed', handleClose)
+    const handleClose = () => {
+      setIsVisible(false)
+      setUrl('')
+    }
+
+    window.electron.ipcRenderer.on('wormhole-opened', handleOpen)
+    window.electron.ipcRenderer.on('wormhole-closed', handleClose)
 
     return () => {
-      window.removeEventListener('wormhole-opened', handleOpen)
-      window.removeEventListener('wormhole-closed', handleClose)
+      window.electron.ipcRenderer.removeListener('wormhole-opened', handleOpen)
+      window.electron.ipcRenderer.removeListener('wormhole-closed', handleClose)
     }
   }, [])
 
   if (!isVisible) return null
 
   return (
-    <div className="absolute inset-0 z-999 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300 p-8">
+    <div className="absolute inset-0 z-9999 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300 p-8">
       <div className="w-full max-w-3xl bg-[#050505] border border-emerald-500/30 rounded-2xl shadow-[0_0_80px_rgba(16,185,129,0.15)] overflow-hidden flex flex-col relative">
         <div className="h-14 bg-emerald-500/10 border-b border-emerald-500/20 flex items-center justify-between px-6">
           <div className="flex items-center gap-3">
@@ -36,7 +42,7 @@ export default function WormholeWidget() {
           </div>
           <button
             onClick={() => setIsVisible(false)}
-            className="text-zinc-500 hover:text-red-400 transition-colors p-2 hover:bg-white/5 rounded-full"
+            className="text-zinc-500 hover:text-red-400 transition-colors p-2 hover:bg-white/5 rounded-full cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
