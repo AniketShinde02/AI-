@@ -117,11 +117,12 @@ async def lifespan(app: FastAPI):
             groq_api_key=str(config.GROQ_API_KEY)
         )
         
-        log_stage("6. Initializing Lance Memory... (Lazy loading configured)")
-        # import core.lance_memory as lance_memory_module
-        # lance_memory_module.semantic_memory = lance_memory_module.SemanticMemory(
-        #     gemini_api_key=os.environ.get("GEMINI_API_KEY", "")
-        # )
+        log_stage("6. Initializing Lance Memory...")
+        import core.lance_memory as lance_memory_module
+        # Initialize globally so first query isn't slow
+        lance_memory_module.semantic_memory = lance_memory_module.SemanticMemory(
+            gemini_api_key=os.environ.get("GEMINI_API_KEY", "")
+        )
         
         log_stage("7. Registering capabilities...")
         from core.capabilities import registry
@@ -131,9 +132,16 @@ async def lifespan(app: FastAPI):
             ("pc_take_screenshot", "Take Screenshot", "Capture the primary display", "screenshots", False, False),
             ("pc_type_text", "Type Text", "Simulate keyboard typing", "keyboard", False, False),
             ("pc_press_shortcut", "Press Shortcut", "Simulate a keyboard shortcut", "keyboard", False, False),
+            ("run_scrapper_task", "Run ScrapperOS Task", "Trigger an external web scraper", "automation", True, True),
+            ("list_available_scrapers", "List Scrapers", "Fetch available web scrapers", "automation", False, False),
+            ("check_scrapper_health", "Scrapper Health", "Check if ScrapperOS is online", "automation", False, False),
         ]
         for cap_id, name, desc, cat, req_perm, req_approval in _caps:
             await registry.register_tool(cap_id, name, desc, cat, req_perm, req_approval, enabled=True)
+            
+        log_stage("8. Running App Discovery...")
+        from core.app_discovery import run_discovery
+        asyncio.create_task(run_discovery())
         
         log_stage("[SUCCESS] Providers initialized successfully!")
     except Exception as e:

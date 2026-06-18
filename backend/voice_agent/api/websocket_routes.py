@@ -103,6 +103,26 @@ async def websocket_endpoint(websocket: WebSocket):
                         msg["text"], 
                         turn_id=session.current_turn_id
                     ))
+                    
+                if msg.get("type") == "grant_permission":
+                    tool_id = msg.get("tool_id")
+                    decision = msg.get("decision")  # "Allow Once", "Always Allow", "Deny"
+                    logger.info(f"🛡️ Received capability decision: {tool_id} -> {decision}")
+                    from core.capabilities import registry as cap_registry
+                    from core.database import db
+                    
+                    if decision == "Allow Once":
+                        cap_registry.grant_session_permission("default_user", tool_id, "Allow Session")
+                    elif decision == "Deny":
+                        # If they deny once, we might store it in session or db
+                        cap_registry.grant_session_permission("default_user", tool_id, "Deny")
+                    elif decision == "Always Allow":
+                        await db.set_user_permission("default_user", tool_id, "Always Allow")
+                        
+                    # Tell user they can try again
+                    confirm_text = "Permission updated. Please repeat your request."
+                    await session.safe_send_json({"type": "agent_message", "text": confirm_text, "is_final": True})
+                    await session.enqueue_tts(confirm_text, turn_id=session.current_turn_id)
     except WebSocketDisconnect:
         logger.info("🔌 WebSocket disconnected cleanly")
     except Exception as e:
@@ -130,9 +150,12 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
     try:
         try:
             await session.connect_gemini()
+            # Inform frontend which engine is active
+            await session.safe_send_json({"type": "engine_mode", "mode": "gemini_live"})
         except Exception as e:
             logger.error(f"❌ Gemini Live connection failed: {e}. Falling back to local pipeline.")
-            session.engine = "nexus" # Graceful failover, don't disconnect client
+            session.engine = "nexus"  # Graceful failover, don't disconnect client
+            await session.safe_send_json({"type": "engine_mode", "mode": "groq"})
 
         # Same loop as /ws/nexus
         while session.is_connected:
@@ -179,7 +202,14 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                     session.selected_language = msg.get("language") or "auto"
                     continue
                 if "text" in msg:
-                    if session.engine == "gemini_live" and session.gemini_manager and session.gemini_manager.is_connected:
+                    txt = msg["text"].lower().strip()
+                    is_action = False
+                    # Action keywords + common typos like "opem"
+                    action_kws = getattr(session, "_ACTION_KEYWORDS", ("open ", "launch ", "start ", "run ", "close ", "kill ", "quit ", "screenshot", "type ", "press ", "click "))
+                    if any(txt.startswith(kw) for kw in action_kws) or txt.startswith("opem "):
+                        is_action = True
+
+                    if session.engine == "gemini_live" and session.gemini_manager and session.gemini_manager.is_connected and not is_action:
                         await session.gemini_manager.send_text(msg["text"], turn_complete=True)
                     else:
                         session.current_turn_id += 1

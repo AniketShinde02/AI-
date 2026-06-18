@@ -100,6 +100,8 @@ export default function SettingsPage() {
                 { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (Fast)", badge: "GROQ" },
                 { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", badge: "GOOGLE" },
                 { value: "deepseek-chat", label: "DeepSeek Chat", badge: "DEEPSEEK" },
+                { value: "mistral-large-latest", label: "Mistral Large", badge: "MISTRAL" },
+                { value: "pixtral-large-2411", label: "Pixtral Large", badge: "MISTRAL" },
               ].map((model) => (
                 <button
                   key={model.value}

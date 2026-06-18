@@ -22,6 +22,8 @@ const MODELS = [
   { id: "llama-3.1-8b-instant",     label: "Llama 3.1 8B",   badge: "Instant"  },
   { id: "mixtral-8x7b-32768",       label: "Mixtral 8×7B",   badge: "Long ctx" },
   { id: "gemma2-9b-it",             label: "Gemma 2 9B",     badge: "Light"    },
+  { id: "mistral-large-latest",     label: "Mistral Large",  badge: "Mistral"  },
+  { id: "pixtral-large-2411",       label: "Pixtral Large",  badge: "Mistral"  },
 ];
 
 const PERSONAS = [

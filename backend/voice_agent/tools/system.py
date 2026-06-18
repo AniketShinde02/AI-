@@ -4,7 +4,7 @@ from core.pc_control import pc_controller
 
 logger = logging.getLogger("nexus.tools.system")
 
-async def execute_pc_action(action: str, params: Dict[str, Any]) -> str:
+async def execute_pc_action(action: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """Wrapper for PC actions, meant to be called after permission validation."""
     try:
         if action == "pc_open_app":
@@ -18,14 +18,14 @@ async def execute_pc_action(action: str, params: Dict[str, Any]) -> str:
         elif action == "pc_take_screenshot":
             res = await pc_controller.take_screenshot()
         else:
-            return "Error: Unknown PC action."
+            return {"success": False, "verified": False, "result": "", "error": "Error: Unknown PC action."}
             
-        return res.get("message", res.get("error", "Unknown outcome"))
+        return res
     except Exception as e:
-        return f"Error executing PC action: {e}"
+        return {"success": False, "verified": False, "result": "", "error": f"Error executing PC action: {e}"}
 
 # Define the tool metadata for the LLM Model Router
-SYSTEM_TOOLS = [
+SYSTEM_TOOLS: List[Dict[str, Any]] = [
     {
         "type": "function",
         "function": {
@@ -99,3 +99,16 @@ SYSTEM_TOOLS = [
         }
     }
 ]
+
+async def get_dynamic_system_tools() -> List[Dict[str, Any]]:
+    import copy
+    from core.app_discovery import get_all_apps
+    tools = copy.deepcopy(SYSTEM_TOOLS)
+    try:
+        apps = await get_all_apps()
+        if apps:
+            app_list = ", ".join(apps)
+            tools[0]["function"]["description"] = f"Open a Windows application or file. Available applications installed locally: {app_list}."
+    except Exception as e:
+        logger.error(f"Failed to inject dynamic app inventory: {e}")
+    return tools

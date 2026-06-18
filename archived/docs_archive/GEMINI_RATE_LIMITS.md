@@ -3,14 +3,48 @@
 ## Overview
 To prevent `429 Too Many Requests` or `Quota Exceeded` errors, the system must respect the rate limits of the Google Gemini API. Since Nexus uses the Gemini API heavily for Text-To-Speech (TTS), limits can be exhausted quickly if multiple sentences are streamed sequentially without pacing.
 
-## Rate Limits Table (Free Tier)
+## Rate Limits Table (Free Tier & Live Status)
 
-| Model Name | Requests Per Minute (RPM) | Tokens Per Minute (TPM) | Requests Per Day (RPD) |
-| :--- | :--- | :--- | :--- |
-| **Gemini 2.5 Flash / 1.5 Flash** | 15 RPM | 1,000,000 TPM | 1,500 RPD |
-| **Gemini 1.5 Pro** | 2 RPM | 32,000 TPM | 50 RPD |
-| **Gemini 1.0 Pro** | 15 RPM | 32,000 TPM | 1,500 RPD |
-| **Text Embedding** | 1,500 RPM | N/A | 1,500 RPD |
+| Model Name | Category | Requests Per Minute (RPM) | Tokens Per Minute (TPM) | Requests Per Day (RPD) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Gemini 3.5 Flash-001** | Multimodal (large text/audio) | 25.0 RPM | 4,000,000 TPM | 1,000 RPD |
+| **Gemini 3.5 Pro-001** | Text & multimodal | 5.0 RPM | 100,000 TPM | 50.0 RPD |
+| **Dall-E** | Images | 5.0 RPM | N/A | 5.0 RPD |
+| **Imagen 3 Generate** | Images | 5.0 RPM | N/A | 5.0 RPD |
+| **Imagen 3 Edit** | Images | 5.0 RPM | N/A | 5.0 RPD |
+| **Imagen 3 Edit (Inpainting/Outpainting)** | Images | 5.0 RPM | N/A | 5.0 RPD |
+| **Gemini 2.5 Pro** | Text & multimodal | 2.0 RPM | 32,000 TPM | 50.0 RPD |
+| **Gemini 2.5 Flash** | Multimodal (large text/audio) | 15.0 RPM | 1,000,000 TPM | 1,500 RPD |
+| **Gemini 2.5 Flash-Lite** | Multimodal (large text/audio) | 30.0 RPM | 2,000,000 TPM | 2,000 RPD |
+| **Gemini 2.0 Pro** | Text & multimodal | 2.0 RPM | 32,000 TPM | 50.0 RPD |
+| **Gemini 2.0 Flash** | Multimodal (large text/audio) | 15.0 RPM | 1,000,000 TPM | 1,500 RPD |
+| **Gemini 2.0 Flash-Lite** | Multimodal (large text/audio) | 30.0 RPM | 2,000,000 TPM | 2,000 RPD |
+| **Gemini 2.0 Flash-Thinking** | Text & multimodal | 10.0 RPM | 7,500,000 TPM | 1,500 RPD |
+| **Gemini 1.5 Pro-002** | Text & multimodal | 2.0 RPM | 32,000 TPM | 50.0 RPD |
+| **Gemini 1.5 Flash-002** | Multimodal (large text/audio) | 15.0 RPM | 1,000,000 TPM | 1,500 RPD |
+| **Gemini 1.5 Pro-001** | Text & multimodal | 2.0 RPM | 32,000 TPM | 50.0 RPD |
+| **Gemini 1.5 Flash-001** | Multimodal (large text/audio) | 15.0 RPM | 1,000,000 TPM | 1,500 RPD |
+| **Gemini 1.5 Pro** | Text & multimodal | 2.0 RPM | 32,000 TPM | 50.0 RPD |
+| **Gemini 1.5 Flash** | Multimodal (large text/audio) | 15.0 RPM | 1,000,000 TPM | 1,500 RPD |
+| **Gemini 1.0 Pro-001** | Text & multimodal | 15.0 RPM | 32,000 TPM | 1,500 RPD |
+| **Gemini 1.0 Pro** | Text & multimodal | 15.0 RPM | 32,000 TPM | 1,500 RPD |
+| **Gemini Embedding 004** | Embeddings | 1,500.0 RPM | 9,000,000 TPM | 3,000 RPD |
+| **Gemini Embedding 004 (Batch)** | Embeddings | 3.0 RPM | 9,000,000 TPM | 3,000 RPD |
+| **Gemini Semantic Retriever (API Key)** | Semantic Search | 10.0 RPM | 9,000,000 TPM | 3,000 RPD |
+| **Gemini Semantic Retriever (OAuth)** | Semantic Search | 30.0 RPM | 9,000,000 TPM | 3,000 RPD |
+| **Gemini 1.5 DE** | Text & multimodal | 20.0 RPM | 1,000,000 TPM | 2,000 RPD |
+| **Gemini 1.5 SE** | Text & multimodal | 20.0 RPM | 1,000,000 TPM | 2,000 RPD |
+| **Imagen 4 AI Generate** | Text-to-image/video generation | N/A | N/A | 3,000 RPD |
+| **Imagen 4 Generate** | Text-to-image/video generation | N/A | N/A | 3,000 RPD |
+| **Imagen 4 Ultra Generate** | Text-to-image/video generation | N/A | N/A | 50.0 RPD |
+| **AQA Model** | Text-and-code models | 10.0 RPM | 5.0 TPM | 20.0 RPD |
+| **AQA Model 2** | Text-and-code models | 10.0 RPM | 5.0 TPM | 20.0 RPD |
+| **The Off-API-Models v2** | Text-and-code models | 10.0 RPM | 5.0 TPM | 20.0 RPD |
+| **The Off-API-Models v3** | Text-and-code models | 10.0 RPM | 5.0 TPM | 20.0 RPD |
+| **Data Extraction v1** | Text-and-code models | 20.0 RPM | N/A | 20.0 RPD |
+| **Gemini 2.5 Flash-Lite (Voice)** | Voice | 30.0 RPM | 2,000,000 TPM | 2,000 RPD |
+| **Gemini 1.5 Flash-Lite (Voice)** | Voice | 30.0 RPM | 2,000,000 TPM | 2,000 RPD |
+| **Gemini 2.0 Live Prototype** | Voice | 30.0 RPM | 2,000,000 TPM | 2,000 RPD |
 
 *Note: Paid tiers have significantly higher limits.*
 

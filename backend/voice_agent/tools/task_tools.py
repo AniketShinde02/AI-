@@ -6,7 +6,7 @@ logger = logging.getLogger("nexus.tools.tasks")
 # This will be injected by the LLM runner
 memory_engine = None
 
-async def create_task(title: str, priority: str = "medium", due_date: str = None) -> str:
+async def create_task(title: str, priority: str = "medium", due_date: str = None) -> Dict[str, Any]:
     """
     Creates a new task in the user's task list.
     Args:
@@ -15,7 +15,7 @@ async def create_task(title: str, priority: str = "medium", due_date: str = None
         due_date: Optional due date string.
     """
     if not memory_engine:
-        return "Error: Memory engine not initialized."
+        return {"success": False, "verified": False, "result": "", "error": "Error: Memory engine not initialized."}
 
     task_data = {
         "title": title,
@@ -26,9 +26,9 @@ async def create_task(title: str, priority: str = "medium", due_date: str = None
     
     logger.info(f"📌 Creating task: {title} ({priority})")
     await memory_engine.save_task(task_data)
-    return f"Success: Task '{title}' has been created and added to your list."
+    return {"success": True, "verified": True, "result": f"Success: Task '{title}' has been created and added to your list.", "error": None}
 
-async def create_note(title: str, content: str) -> str:
+async def create_note(title: str, content: str) -> Dict[str, Any]:
     """
     Saves a new note or memo.
     Args:
@@ -36,7 +36,7 @@ async def create_note(title: str, content: str) -> str:
         content: The full content or body of the note.
     """
     if not memory_engine:
-        return "Error: Memory engine not initialized."
+        return {"success": False, "verified": False, "result": "", "error": "Error: Memory engine not initialized."}
 
     note_data = {
         "title": title,
@@ -46,7 +46,7 @@ async def create_note(title: str, content: str) -> str:
     
     logger.info(f"🗒️ Saving note: {title}")
     await memory_engine.save_note(note_data)
-    return f"Success: Note '{title}' has been saved."
+    return {"success": True, "verified": True, "result": f"Success: Note '{title}' has been saved.", "error": None}
 
 # Tool definitions for the LLM
 TASK_TOOLS = [

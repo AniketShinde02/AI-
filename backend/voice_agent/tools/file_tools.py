@@ -6,29 +6,29 @@ from pathlib import Path
 
 logger = logging.getLogger("nexus.tools.files")
 
-async def read_file(file_path: str) -> str:
+async def read_file(file_path: str) -> Dict[str, Any]:
     """Read the text content of a file."""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
-        return f"File Content:\n{content[:2000]}" # Truncate long files
+        return {"success": True, "verified": True, "result": f"File Content:\n{content[:2000]}", "error": None}
     except Exception as e:
-        return f"Error reading file: {str(e)}"
+        return {"success": False, "verified": False, "result": "", "error": f"Error reading file: {str(e)}"}
 
-async def write_file(file_name: str, content: str) -> str:
+async def write_file(file_name: str, content: str) -> Dict[str, Any]:
     """Write text to a file (creates or overwrites)."""
     try:
         with open(file_name, 'w', encoding='utf-8') as f:
             f.write(content)
-        return f"Successfully wrote to {file_name}"
+        return {"success": True, "verified": True, "result": f"Successfully wrote to {file_name}", "error": None}
     except Exception as e:
-        return f"Error writing file: {str(e)}"
+        return {"success": False, "verified": False, "result": "", "error": f"Error writing file: {str(e)}"}
 
-async def read_directory(directory_path: str) -> str:
+async def read_directory(directory_path: str) -> Dict[str, Any]:
     """Scan a directory to see what files are inside."""
     try:
         if not os.path.isdir(directory_path):
-            return f"Error: {directory_path} is not a valid directory."
+            return {"success": False, "verified": False, "result": "", "error": f"Error: {directory_path} is not a valid directory."}
         
         items = os.listdir(directory_path)
         output = [f"Contents of {directory_path}:"]
@@ -41,9 +41,9 @@ async def read_directory(directory_path: str) -> str:
         if len(items) > 50:
             output.append("... (truncated)")
             
-        return "\n".join(output)
+        return {"success": True, "verified": True, "result": "\n".join(output), "error": None}
     except Exception as e:
-        return f"Error reading directory: {str(e)}"
+        return {"success": False, "verified": False, "result": "", "error": f"Error reading directory: {str(e)}"}
 
 IGNORE_FOLDERS = {
     'node_modules', 'appdata', 'program files', 'windows',
@@ -79,7 +79,7 @@ def _native_search_sync(keywords: List[str], target_dir: str, max_results: int =
         
     return found_files
 
-async def search_files(keywords: List[str], search_root: str = "home") -> str:
+async def search_files(keywords: List[str], search_root: str = "home") -> Dict[str, Any]:
     """
     Search for files locally using a native crawler.
     """
@@ -100,11 +100,12 @@ async def search_files(keywords: List[str], search_root: str = "home") -> str:
         found = await asyncio.to_thread(_native_search_sync, keywords, base_dir)
         
         if found:
-            return f"⚡ Native Deep System Matches in {base_dir}:\n" + "\n".join([f"- {f}" for f in found])
+            res = f"⚡ Native Deep System Matches in {base_dir}:\n" + "\n".join([f"- {f}" for f in found])
+            return {"success": True, "verified": True, "result": res, "error": None}
         else:
-            return f"No files found matching {keywords} in {base_dir}."
+            return {"success": True, "verified": True, "result": f"No files found matching {keywords} in {base_dir}.", "error": None}
     except Exception as e:
-        return f"Error searching files: {str(e)}"
+        return {"success": False, "verified": False, "result": "", "error": f"Error searching files: {str(e)}"}
 
 FILE_TOOLS = [
     {

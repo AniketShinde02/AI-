@@ -3,12 +3,13 @@ import urllib.parse
 import json
 import logging
 import asyncio
+from typing import Dict, Any
 from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger("nexus.tools.third_party")
 
-async def get_weather(city: str) -> str:
+async def get_weather(city: str) -> Dict[str, Any]:
     """Fetch current weather for a city using Open-Meteo (No API key required)."""
     try:
         # Step 1: Geocoding
@@ -20,7 +21,7 @@ async def get_weather(city: str) -> str:
             geo_data = json.loads(response.read().decode())
             
         if not geo_data.get("results"):
-            return f"Could not find location: {city}"
+            return {"success": False, "verified": False, "result": "", "error": f"Could not find location: {city}"}
             
         location = geo_data["results"][0]
         lat, lon = location["latitude"], location["longitude"]
@@ -45,13 +46,14 @@ async def get_weather(city: str) -> str:
         temp = current.get("temperature_2m")
         wind = current.get("wind_speed_10m")
         
-        return f"The current weather in {location['name']}, {location.get('country', '')} is {temp}°C with {condition} conditions. Wind speed is {wind} km/h."
+        res = f"The current weather in {location['name']}, {location.get('country', '')} is {temp}°C with {condition} conditions. Wind speed is {wind} km/h."
+        return {"success": True, "verified": True, "result": res, "error": None}
         
     except Exception as e:
         logger.error(f"Weather tool failed: {e}")
-        return f"Failed to get weather: {str(e)}"
+        return {"success": False, "verified": False, "result": "", "error": f"Failed to get weather: {str(e)}"}
 
-async def search_web(query: str, max_results: int = 5) -> str:
+async def search_web(query: str, max_results: int = 5) -> Dict[str, Any]:
     """Perform a web search using DuckDuckGo."""
     try:
         def _search():
@@ -61,7 +63,7 @@ async def search_web(query: str, max_results: int = 5) -> str:
                 
         results = await asyncio.to_thread(_search)
         if not results:
-            return f"No results found for '{query}'"
+            return {"success": False, "verified": False, "result": "", "error": f"No results found for '{query}'"}
             
         output = [f"Web Search Results for '{query}':"]
         for i, res in enumerate(results, 1):
@@ -72,12 +74,12 @@ async def search_web(query: str, max_results: int = 5) -> str:
             output.append(f"   URL: {href}")
             output.append(f"   Snippet: {body}")
             
-        return "\n".join(output)
+        return {"success": True, "verified": True, "result": "\n".join(output), "error": None}
     except Exception as e:
         logger.error(f"Web search failed: {e}")
-        return f"Error performing web search: {str(e)}"
+        return {"success": False, "verified": False, "result": "", "error": f"Error performing web search: {str(e)}"}
 
-async def read_webpage(url: str) -> str:
+async def read_webpage(url: str) -> Dict[str, Any]:
     """Fetch and read the text content of a webpage."""
     try:
         def _fetch():
@@ -92,10 +94,10 @@ async def read_webpage(url: str) -> str:
                 return text[:5000] # Return first 5000 chars to avoid overwhelming the LLM
                 
         text_content = await asyncio.to_thread(_fetch)
-        return f"Content of {url}:\n\n{text_content}"
+        return {"success": True, "verified": True, "result": f"Content of {url}:\n\n{text_content}", "error": None}
     except Exception as e:
         logger.error(f"Failed to read webpage {url}: {e}")
-        return f"Error reading webpage: {str(e)}"
+        return {"success": False, "verified": False, "result": "", "error": f"Error reading webpage: {str(e)}"}
 
 THIRD_PARTY_TOOLS = [
     {

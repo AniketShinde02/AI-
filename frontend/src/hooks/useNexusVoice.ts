@@ -28,6 +28,7 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [micCaptured, setMicCaptured] = useState(false);
   const [systemMetrics, setSystemMetrics] = useState<any>(null);
+  const [activeEngine, setActiveEngine] = useState<'gemini_live' | 'groq' | 'text' | 'unknown'>('unknown');
   
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -328,6 +329,9 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
             
             setIsSpeaking(false);
             logger.info("[Nexus WS] 💥 Agent interrupted");
+          } else if (msg.type === 'engine_mode') {
+            setActiveEngine(msg.mode as 'gemini_live' | 'groq' | 'text');
+            logger.info(`[Nexus WS] 🔧 Engine mode: ${msg.mode}`);
           } else if (msg.type === 'pong') {
             const latency = Date.now() - msg.timestamp;
             logger.debug(`[Nexus WS] 🏓 Pong received in ${latency}ms`);
@@ -587,6 +591,7 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     isListening,
     isSpeaking,
     micCaptured,
+    activeEngine,
     systemMetrics,
     connect,
     disconnect,

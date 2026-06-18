@@ -16,15 +16,29 @@ import {
   Settings,
   Wifi,
   WifiOff,
+  Mic,
+  MicOff,
 } from "lucide-react";
+
+// Engine mode display config — sourced from backend engine_mode WebSocket message
+const ENGINE_CONFIG: Record<string, { label: string; color: string }> = {
+  gemini_live: { label: "Gemini Live", color: "#00d4ff" },
+  groq:        { label: "Groq",        color: "#f59e0b" },
+  text:        { label: "Text Mode",   color: "#a78bfa" },
+  unknown:     { label: "---",         color: "#52525b" },
+};
 
 export function TopNav() {
   const pathname = usePathname();
   const { voiceState, uiMode, setUiMode } = useNexus();
-  const { isConnected } = useVoice();
+  const { isConnected, isListening, micCaptured, activeEngine } = useVoice();
+
+  // Real mic state: only active if both VAD is listening AND browser mic stream is held
+  const micActive = isListening && micCaptured;
+  const engineCfg = ENGINE_CONFIG[activeEngine] ?? ENGINE_CONFIG.unknown;
 
   const navItems = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Dashboard", href: "/",           icon: LayoutDashboard },
     { name: "Chat",      href: "/chat",       icon: MessageSquare },
     { name: "Trace",     href: "/trace",      icon: Activity },
     { name: "Memory",    href: "/memory",     icon: BrainCircuit },
@@ -58,7 +72,6 @@ export function TopNav() {
         <nav className="flex items-center gap-0.5">
           {navItems.map((item) => {
             let isActive = false;
-            let onClick = undefined;
 
             if (item.name === "Dashboard") {
               isActive = pathname === "/" && uiMode === "voice";
@@ -109,8 +122,41 @@ export function TopNav() {
         </nav>
       </div>
 
-      {/* Right: WS + Voice State */}
+      {/* Right: Real Status Indicators */}
       <div className="flex items-center gap-3 pl-5 border-l border-white/[0.06]">
+
+        {/* Mic State — reflects actual browser MediaStream + VAD state */}
+        <div
+          title={micActive ? "Microphone active" : "Microphone off"}
+          className={`flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest transition-colors ${
+            micActive ? "text-[#00FFFF]" : "text-zinc-600"
+          }`}
+        >
+          {micActive ? <Mic size={12} /> : <MicOff size={12} />}
+          <span>{micActive ? "🎤 On" : "🔇 Off"}</span>
+        </div>
+
+        <div className="w-px h-4 bg-white/[0.06]" />
+
+        {/* Engine Mode — sourced from backend engine_mode WS message */}
+        <div
+          title={`Active engine: ${engineCfg.label}`}
+          className="flex items-center gap-1.5"
+        >
+          <div
+            className="w-1.5 h-1.5 rounded-full"
+            style={{ background: engineCfg.color, boxShadow: `0 0 5px ${engineCfg.color}` }}
+          />
+          <span
+            className="text-[9px] font-bold uppercase tracking-widest"
+            style={{ color: engineCfg.color }}
+          >
+            {engineCfg.label}
+          </span>
+        </div>
+
+        <div className="w-px h-4 bg-white/[0.06]" />
+
         {/* WS Connection */}
         <div className={`flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest ${isConnected ? "text-[#10b981]" : "text-[#ff3366]"}`}>
           {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
@@ -121,7 +167,7 @@ export function TopNav() {
 
         {/* Voice State */}
         <div className="flex items-center gap-2">
-          <span className="text-[8px] font-quantico font-bold uppercase tracking-[0.2em] text-zinc-500">System State</span>
+          <span className="text-[8px] font-quantico font-bold uppercase tracking-[0.2em] text-zinc-500">State</span>
           <div className="flex items-center gap-1.5">
             <div
               className="w-1.5 h-1.5 rounded-full animate-pulse"

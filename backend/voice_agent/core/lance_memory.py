@@ -1,5 +1,4 @@
 import os
-import lancedb
 import logging
 from typing import List, Dict, Any, Optional
 import httpx
@@ -27,6 +26,7 @@ class SemanticMemory:
         """Asynchronously initialize the LanceDB connection on demand."""
         if self._initialized: return
         
+        import lancedb
         self.db = await lancedb.connect_async(LANCE_DB_PATH)
         try:
             self.memory_table = await self.db.open_table("semantic_memory")
@@ -71,6 +71,9 @@ class SemanticMemory:
     async def add_memory(self, text: str, metadata: Dict[str, Any]):
         """Add a chunk of text to semantic memory."""
         await self._ensure_initialized()
+        if not self.db:
+            return False
+            
         embedding = await self._get_embedding(text)
         if not embedding:
             return False

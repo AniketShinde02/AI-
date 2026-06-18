@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { content, userId, metadata = {} } = await request.json();
+    const { content, userId, metadata = {}, model } = await request.json();
     
     if (!content || !userId) {
       return NextResponse.json({ error: 'Missing payload' }, { status: 400 });
@@ -32,10 +32,13 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     });
 
-    // 2. High-Speed Inference (Groq/SambaNova)
+    // 2. High-Speed Inference (Groq/SambaNova/Mistral)
+    const reqModel = model || process.env.LLM_MODEL || 'llama-3.3-70b-versatile';
+    const isMistral = reqModel.includes('mistral') || reqModel.includes('pixtral');
+    
     const aiClient = new OpenAI({
-      apiKey: groqApiKey || process.env.SAMBANOVA_API_KEY || process.env.GEMINI_API_KEY,
-      baseURL: groqApiKey ? 'https://api.groq.com/openai/v1' : undefined,
+      apiKey: isMistral ? process.env.MISTRAL_API_KEY : (groqApiKey || process.env.SAMBANOVA_API_KEY || process.env.GEMINI_API_KEY),
+      baseURL: isMistral ? 'https://api.mistral.ai/v1' : (groqApiKey ? 'https://api.groq.com/openai/v1' : undefined),
     });
 
     const completion = await aiClient.chat.completions.create({
@@ -43,7 +46,7 @@ export async function POST(request: Request) {
         { role: 'system', content: 'You are Nexus, a high-performance OS-level AI assistant.' },
         { role: 'user', content: content }
       ],
-      model: process.env.LLM_MODEL || 'llama-3.3-70b-versatile',
+      model: reqModel,
       temperature: 0.7,
       max_tokens: 1024,
     });

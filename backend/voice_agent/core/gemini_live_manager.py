@@ -9,11 +9,7 @@ import json
 import base64
 import asyncio
 import logging
-
-import logging
-import json
 import time
-
 raw_logger = logging.getLogger('DEBUG_GEMINI_RAW')
 raw_logger.setLevel(logging.INFO)
 if not raw_logger.handlers:
@@ -123,7 +119,7 @@ class GeminiLiveSessionManager:
             async with self._send_lock:
                 raw_logger.info(f"[OUTBOUND TEXT] [Session: {self.session_id}] [Func: send_text] {text} (turn_complete={turn_complete})")
                 await self.session.send_client_content(
-                    turns=types.Content(parts=[types.Part.from_text(text=text)]),
+                    turns=[types.Content(role="user", parts=[types.Part.from_text(text=text)])],
                     turn_complete=turn_complete
                 )
         except Exception as e:
@@ -162,7 +158,7 @@ class GeminiLiveSessionManager:
             
         config = types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
-            system_instruction=types.Content(parts=[types.Part.from_text(text=self.system_instruction)])
+            system_instruction=types.Content(role="system", parts=[types.Part.from_text(text=self.system_instruction)])
         )
         try:
             async with self.client.aio.live.connect(model="gemini-2.5-flash-native-audio-latest", config=config) as session:

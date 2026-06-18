@@ -139,6 +139,38 @@ class NexusDatabase:
                 )
             """)
 
+            # Capability Verification Matrix
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS verification_matrix (
+                    feature TEXT PRIMARY KEY,
+                    status TEXT,
+                    last_test TIMESTAMP,
+                    result TEXT,
+                    evidence TEXT
+                )
+            """)
+
+            # App Discovery
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS discovered_apps (
+                    app_name TEXT PRIMARY KEY,
+                    executable_path TEXT,
+                    alias TEXT,
+                    discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # File Ingestion State Tracker (Replaces JSON files in .nexus_states)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ingestion_state (
+                    file_hash TEXT PRIMARY KEY,
+                    file_path TEXT,
+                    workspace_id TEXT,
+                    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+
             # User Permissions for Capabilities
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_permissions (
@@ -185,6 +217,12 @@ class NexusDatabase:
                     FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
                 )
             """)
+            
+            # Migration for older DBs
+            try:
+                cursor.execute("ALTER TABLE sessions ADD COLUMN workspace_id TEXT")
+            except sqlite3.OperationalError:
+                pass
 
             # Notes
             cursor.execute("""
@@ -508,6 +546,56 @@ class NexusDatabase:
                     INSERT INTO tool_audit_logs (tool_id, parameters_passed, result_status, permission_state)
                     VALUES (?, ?, ?, ?)
                 """, (tool_id, json.dumps(parameters_passed), result_status, permission_state))
+                conn.commit()
+        await asyncio.to_thread(_save)
+
+    # --- VERIFICATION MATRIX (Rule 8) ---
+    async def log_verification(self, feature: str, status: str, result: str, evidence: str):
+        def _save():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO verification_matrix (feature, status, last_test, result, evidence)
+                    VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)
+                    ON CONFLICT(feature) DO UPDATE SET 
+                        status=excluded.status, 
+                        last_test=CURRENT_TIMESTAMP, 
+                        result=excluded.result, 
+                        evidence=excluded.evidence
+                """, (feature, status, result, evidence))
+                conn.commit()
+        await asyncio.to_thread(_save)
+
+    async def get_verification_status(self) -> List[Dict[str, Any]]:
+        def _fetch():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT feature, status, last_test, result, evidence FROM verification_matrix ORDER BY feature ASC")
+                rows = cursor.fetchall()
+                return [{"feature": r[0], "status": r[1], "last_test": r[2], "result": r[3], "evidence": r[4]} for r in rows]
+        return await asyncio.to_thread(_fetch)
+
+    # --- INGESTION STATE (File Parsing tracking) ---
+    async def get_ingestion_state(self, file_hash: str) -> bool:
+        def _fetch():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM ingestion_state WHERE file_hash=?", (file_hash,))
+                return cursor.fetchone() is not None
+        return await asyncio.to_thread(_fetch)
+
+    async def set_ingestion_state(self, file_hash: str, file_path: str, workspace_id: Optional[str] = None):
+        def _save():
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO ingestion_state (file_hash, file_path, workspace_id, processed_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(file_hash) DO UPDATE SET 
+                        file_path=excluded.file_path, 
+                        workspace_id=excluded.workspace_id,
+                        processed_at=CURRENT_TIMESTAMP
+                """, (file_hash, file_path, workspace_id))
                 conn.commit()
         await asyncio.to_thread(_save)
 

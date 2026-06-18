@@ -1,5 +1,113 @@
-## [2026-06-18] — Reasoning Leak Fix + Tool Wiring + Permissions System
+## [Unreleased] - Real-Time Core & Automation Upgrades
 
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- Integrated enterprise-grade cloud API gateways (GitHub Models, OpenRouter Free Pool, Mistral AI, Cloudflare Workers AI, Cohere, Zhipu/BigModel) to scale background task throughput at zero cost.
+- Implemented speech-native bidirectional streaming capabilities via speech-to-speech (S2S) architecture candidates (Ultravox.ai, Moshi, Hume AI).
+- Added an async-isolated notification and status layer powered by unmetered cloud Edge TTS loops to prevent process thread blocking.
+- Implemented a Dynamic Desktop Application Discovery Engine that dynamically crawls and indexes installed software shortcuts (.lnk) into a local database pool.
+
+### Fixed
+- Fixed a translation/ASR routing bug where Hinglish/slang transcriptions (e.g., "open kro", "what app") caused terminal exceptions (`'command' is not recognized as an internal or external command`).
+- Implemented a fuzzy string matching layer using algorithmic distance fallback metrics to resolve raw voice inputs against the 240+ dynamically indexed application paths.
+- Enforced Strict Structural Isolation boundaries inside system prompting logic to containerize reasoning tokens (`<thinking>`) within the backend data logs, completely hiding internal monologue from the voice/UI frontend.
+- Resolved Gemini Live TTS dropout on microphone inputs by wrapping WebSocket `turns` payload in arrays and enforcing explicit `role="user"` fields required by the `google-genai` SDK.
+- Patched an `UnboundLocalError` scope breach in the Action Router where `res` dictionaries were uninitialized if the user's action was denied by capability permissions or failed `pc_` substring matching.
+- Eliminated static type-checker Pyright failures in `tools/system.py` (`Cannot set item in 'str'`) and `core/app_discovery.py` (`Returned type Unknown | None is not assignable to declared return type str`) via accurate type hinting (`List[Dict[str, Any]]` and `Optional[str]`).
+- Cleaned up redundant local imports (`flake8` F811/F401 errors) across `system.py`, `voice_session.py`, and `gemini_live_manager.py` that were blocking clean syntax validation.
+
+## [2026-06-18] — Dynamic App Discovery Engine
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Dynamic LNK Crawler**: Upgraded `core/app_discovery.py` to recursively crawl `ProgramData` and `AppData` Start Menu folders for `.lnk` shortcuts, dynamically maintaining an absolute-path inventory of all local desktop software alongside UWP apps.
+- **Dynamic Tool Injection**: Created `get_dynamic_system_tools` in `tools/system.py`. `voice_session.py` now queries the real-time SQLite app inventory and dynamically embeds the list of available host applications into the system prompt's tool description.
+- **Absolute Path Execution**: Updated `core/pc_control.py` to natively execute `.lnk` paths via `os.startfile()`.
+
+### Changed
+- **Zero-Latency Routing**: Upgraded `core/action_router.py` to operate entirely on raw user app names mapped to the SQLite dictionary instead of relying on a fragile static `app_aliases` hash map.
+- **Removed Hardcoded Aliases**: Deleted the 50-item legacy `_APP_ALIASES` static map from `pc_control.py`. All mapping is now 100% dynamically discovered from the host system environment.
+- **Bug Fix**: Removed a duplicated LanceDB memory function in `voice_session.py` that was silently overriding AI preference extraction logic. Fixed duplicate import of `execute_pc_action` that broke the Action Router.
+
+## [2026-06-18] — Global Runtime Contract & Action Interception
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Global Action Router**: Created `core/action_router.py` to intercept precise intent strings (e.g., `open vscode`) and execute actions directly in 0ms without involving the LLM.
+- **Global Output Processor**: Created `core/output_processor.py` that strips internal tags like `<think>` and reasoning strings before emission.
+- **Ingestion State Tracker**: Created `ingestion_state` table in SQLite (`database.py`) to persistently track embedded code files.
+
+### Changed
+- **PC Control execution schema**: Modified `core/pc_control.py` so all automation tasks return a strict 5-key deterministic dictionary: `success`, `tool`, `target`, `verification`, `execution_time`.
+- **Scrapper OS bridge schema**: Updated `core/scrapper_os.py` methods to match the identical 5-key dict requirement.
+- **RAG Oracle Persistence**: Updated `rag_oracle.py` to abandon fragile JSON file hashes and rely entirely on SQLite's `ingestion_state`.
+- **Voice Session Output**: Wired `action_router` and `output_processor` natively into `voice_session.py`, guaranteeing all emitted WebSocket and TTS text adheres to the reasoning-ban contract.
+- **Trace Payload Integrity**: Applied the `output_processor` filter to `trace_emitter.py` so raw LLM thoughts do not leak into the UI event trace logs.
+
+## [2026-06-18] — Execution Layer Hardening & SQLite Only Memory
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+- Environment: Local / Development
+
+### Added
+- **BrowserAgent Layer**: Added `core/browser_agent.py` using Playwright to handle `open_url`, `search`, `click`, `extract`, and `screenshot` natively.
+- **App Discovery Service**: Added `core/app_discovery.py` to automatically discover installed Windows applications via `Get-StartApps` and store them in the database for intelligent launching.
+- **Trace Emitter**: Added `core/trace_emitter.py` to emit telemetry events for tool routing and execution directly via the WebSocket.
+- **ScrapperOS Bridge**: Integrated `tools/scrapper_tools.py` into the global registry to natively support checking health, listing tasks, and running external ScrapperOS automations.
+
+### Changed
+- **Memory Storage**: Removed in-memory `self.vector_db` list from `RAGOracle` and migrated semantic RAG ingestion entirely to LanceDB vector database via `core/lance_memory.py`.
+- **PC Control**: Rewrote `core/pc_control.py`'s `open_app` to query `discovered_apps` DB for paths before falling back to aliases. Upgraded verification loop to use `asyncio.sleep` to prevent blocking the event loop.
+- **Session Persistence**: Tool execution confirmations and error results are now permanently saved to SQLite using `db.save_message` directly after completion.
+- **Capability Routing**: Added capability prompting logic in `voice_session.py`. If a capability requires permission ("Prompt"), a WebSocket message is dispatched instead of blocking or assuming execution. Added support for `grant_permission` in `websocket_routes.py`.
+
+### Security
+- **Error Transparency**: Tool execution strictly returns verbatim strings to the LLM context, prohibiting any hallucinated "success" messages if the underlying action failed.
+- **App Launch Verification**: Verified process detection runs async using `psutil` thread polling, validating successful execution entirely disconnected from the LLM prompt.
+
+## [2026-06-18] — Gemini Rate Limits Reference Update
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Changed
+- **Gemini Rate Limits Reference**: Expanded [GEMINI_RATE_LIMITS.md](file:///d:/AI/archived/docs_archive/GEMINI_RATE_LIMITS.md) to document a comprehensive list of Gemini models, categories, and their rate limits (RPM, TPM, RPD) transcribed directly from Google AI Studio.
+
+## [2026-06-18] — Codebase Architecture Investigation & Adoption Planning
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+- Environment: Local / Development
+
+### Added
+- **Unified Deep Codebase Analysis Report**: Consolidated all comparative studies into a single master document:
+  - [iris_hermes_stonic_comparison.md](file:///C:/Users/JinWoo/.gemini/antigravity-ide/brain/8d9a0ac3-ab39-4269-be51-d1b07d3f52bc/iris_hermes_stonic_comparison.md): Integrates process topologies, audio pipelines, memory models, stream-scrubbing systems, and permissions, ending with a prioritized list of 10 highest-value patterns for Nexus.
+- **Mistral AI Environment Placeholders**: Added `MISTRAL_API_KEY=your_mistral_api_key_here` in backend `.env`, frontend `.env`, and root `.env.example`.
+- **Mistral AI Routing & UI**: 
+  - Integrated `MistralClient` into `ModelRouter` (`model_router.py`) to correctly route Mistral and Pixtral models to the official Mistral API.
+  - Added `mistral-large-latest` and `pixtral-large-2411` to the model selector in `InputArea.tsx` and the Settings Page.
+  - Updated the frontend `/api/chat/route.ts` to dynamically configure the `OpenAI` client with Mistral API base URL and key when a Mistral model is requested.
+
+### Changed
+- Consolidated 5 separate comparative Markdown files into the single `iris_hermes_stonic_comparison.md` master document, deleting the redundant individual files to keep the artifacts folder clean.
+
+### Notes
+- No functional modifications were made to Nexus codebase during the research task, but the subsequent implementation safely added Mistral integration. Ensure `mistralai` is installed in the backend environment (`pip install mistralai`) to utilize the new routing logic.
+
+## [2026-06-18] — Reasoning Leak Fix + Tool Wiring + Permissions System
 ### Author
 - Antigravity AI
 - Machine: JinWoo-PC
@@ -129,6 +237,63 @@ ew Int16Array for PCM conversion and sends raw Binary WebSocket frames. Backend 
 
 ### Performance
 - Backend startup time reduced from infinite to <1s (instantly reaches Application startup complete).
+
+## [2026-06-18] — Reasoning Leak Elimination, Action Pipeline Fix, Real Frontend Indicators
+
+### Author
+- Antigravity AI
+- Machine: Local-AI
+
+### Added
+- **`core/output_contract.py`**: New single-source enforcement module. All agent text must pass through `scrub_output()` before touching WebSocket or TTS. Strips `<think>` blocks, `[thinking]`/`[scratchpad]`/`[internal]` tags, bold/italic annotations, and 40+ reasoning prefix sentences including Hinglish patterns.
+- **Forced Tool Routing**: Added `_ACTION_KEYWORDS` tuple in `VoiceSession`. If a transcript starts with `"open "`, `"launch "`, `"close "`, `"screenshot"`, etc., the LLM is forced into `tool_choice={"type": "any"}` — eliminating the root cause where Groq chose to respond conversationally instead of calling `pc_open_app`.
+- **Engine Mode WebSocket message**: Backend now emits `{"type": "engine_mode", "mode": "gemini_live" | "groq"}` on connect and on fallback. Frontend state is always truthful.
+- **`ACTION_PIPELINE_AUDIT.md`**: Full pipeline trace for 6 apps (file manager, notepad, calculator, chrome, vscode, spotify) with root cause analysis.
+
+### Changed
+- **Gemini Live path** (`voice_session.py` `on_agent_message`): Now calls `scrub_and_log()` before `safe_send_json()`. Previously had **zero filtering** — all Gemini thinking tokens were passing directly to the frontend.
+- **Groq streaming path** (partial + final flush + final assembly): All 3 emission points now use `scrub_and_log()` from `output_contract.py` instead of the old inline `re.sub` + narrow `_REASONING_PREFIXES` list.
+- **`core/pc_control.py`**: Expanded alias map from 10 entries to 50+ entries. Now correctly resolves `"file manager"`, `"file explorer"`, `"spotify"`, `"task manager"`, `"discord"`, `"teams"`, `"zoom"`, URI-scheme apps, and more. Switched from `start {target}` shell to direct `Popen(target)` with shell fallback for PATH apps.
+- **`api/websocket_routes.py`**: Added `engine_mode` message sends on Gemini connect success and on Gemini hard-fail-to-Groq transition.
+- **`useNexusVoice.ts`**: Added `activeEngine` state + handles `engine_mode` WS message.
+- **`VoiceContext.tsx`**: `activeEngine` exposed in context interface.
+- **`TopNav.tsx`**: Added real 🎤 Mic ON/OFF indicator (based on `isListening && micCaptured`), Engine Mode pill (Gemini Live / Groq / Text) with distinct colors sourced from backend `engine_mode` messages.
+
+### Fixed
+- **Reasoning Leak — Gemini Live**: `on_agent_message` callback had zero filtering. Fixed with `scrub_and_log()`.
+- **Reasoning Leak — Groq partial chunks**: Inline `_REASONING_PREFIXES` list was too narrow (16 entries). Replaced with comprehensive 40+ entry list in `output_contract.py`.
+- **`"open file manager"` routing to conversation**: Fixed via forced tool routing + alias map expansion.
+- **Frontend showing fake states**: TopNav now reads real `isListening`, `micCaptured`, and `activeEngine` from WebSocket-sourced state.
+
+### Security
+- All text output paths now enforced through a single contract module — no bypasses.
+
+## [2026-06-18] — Nexus Truthfulness, Architecture Polish, & Rate Limit Intelligence
+
+
+### Author
+- Antigravity AI
+- Machine: Local-AI
+
+### Added
+- **Strict Execution Contract:** Implemented a new, strict JSON schema across all action tools (`success`, `verified`, `result`, `error`) to enforce deterministic and honest agent responses.
+- **Deep Process Verification:** Introduced active process polling using `psutil` inside PC Control (`open_app`). The agent now mathematically verifies that an OS application has successfully launched and exists in system memory before claiming success.
+- **LanceDB Semantic Memory:** Successfully wired up `extract_and_save_memory` in the background of `voice_session.py`. This ensures automatic embedding and semantic chunking of user-AI conversations into the LanceDB vector store.
+- **Trace Pipeline Audit:** Implemented structured audit logging inside `model_router.py`. All LLM intent-to-tool paths are now permanently logged to the SQLite database (`tool_audit_logs`), mapping the user intent directly to the tool selected.
+- **Rate Limit Intelligence:** Researched, mapped, and appended exhaustive rate limit rules (RPM, RPH, RPD, Tokens) for over 10 providers including Cerebras, DeepSeek, Mistral, SambaNova, OpenRouter, ElevenLabs, Cartesia, Deepgram, Hugging Face, and GetStream.io. Saved to `archived/docs_archive/models_with_limits.md`.
+- **Environment Templates:** Created comprehensive, clean `.env.example` placeholder files in both `frontend` and `backend` directories to standardize secrets management.
+
+### Changed
+- **Hallucination Eradication:** Refactored `core/voice_session.py` to completely eliminate hardcoded AI confirmations (e.g., "Opening app..."). The agent now parses the real Execution Contract and speaks exactly what the tool verification system returns.
+- **Global Tool Routing:** Modified the fast-tool execution flow inside `voice_session.py` to correctly parse and route *all* tools (system, files, tasks, memory, third-party) instead of just PC actions.
+- **SQLite Memory Migration:** Transitioned `tools/memory_tools.py` away from legacy JSON storage, mapping it directly to the production `core.database.db` SQLite engine.
+- **Persistent Conversational Archiving:** Enabled database-driven chat persistence. Both user transcripts and assistant outputs are now safely preserved to the `messages` table synchronously via `asyncio.create_task`.
+
+### Fixed
+- **Uvicorn Crash on Restart:** Fixed a critical `NameError` crash (`'Dict' is not defined`) in `third_party_tools.py` caused by the Execution Contract refactor, ensuring auto-reload continues without disruption.
+
+### Security
+- **Global Capability Enforcement:** Upgraded the voice pipeline's tool detection flow so that *every single tool* executed by the agent must pass through the `cap_registry.check_permission()` gateway. Explicit permission grants, denials, and requests are strictly audited.
 
 # CHANGELOG - Nexus AI Project
 

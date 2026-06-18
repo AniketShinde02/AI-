@@ -32,6 +32,8 @@ from silero_vad import VADIterator # type: ignore
 import torch
 import pickle
 from core.database import db
+from core.output_processor import output_processor
+from core.action_router import action_router
 from tools.system import execute_pc_action
 from tools.task_tools import create_task, create_note
 from tools.memory_tools import update_preferences, get_user_memory, delete_user_preference
@@ -109,37 +111,57 @@ class VoiceSession:
         self.post_tts_guard_time: float = 0.4   # Was 1.8s
         self.post_tts_guard_until: float = 0.0  # epoch timestamp; 0 = guard inactive
         # Extremely strict VAD thresholds to block ambient room noise/fans
-        self.vad_threshold_normal: float = 0.85 
-        self.vad_threshold_strict: float = 0.95 
+        self.vad_threshold_normal: float = 0.85
+        self.vad_threshold_strict: float = 0.95
 
         self.vad_iterator = VADIterator(
-            gs.vad_model, 
+            gs.vad_model,
             threshold=self.vad_threshold_normal,
             min_silence_duration_ms=500,
             speech_pad_ms=100
         )
         self.vad_chunk_buffer = bytearray()
-        self.vad_preroll_buffer: Deque[bytes] = deque(maxlen=8) # ~0.5s context
-        self.recent_ai_outputs: Deque[str] = deque(maxlen=3) # Phase 8 Echo Cancellation
-        self.conversation_history: Deque[dict] = deque(maxlen=16) # 8 rolling turns
+        self.vad_preroll_buffer: Deque[bytes] = deque(maxlen=8)  # ~0.5s context
+        self.recent_ai_outputs: Deque[str] = deque(maxlen=3)     # Phase 8 Echo Cancellation
+        self.conversation_history: Deque[dict] = deque(maxlen=16)  # 8 rolling turns
 
         # --- Gemini Live Integration ---
         self.gemini_manager = None
         if self.engine == "gemini_live":
+            from prompts import GEMINI_LIVE_SYSTEM_INSTRUCTION
             self.gemini_manager = GeminiLiveSessionManager(
                 websocket=self.websocket,
-                system_instruction="You are Nexus. Keep responses extremely short. Use a natural, casual Hinglish tone with humor. No conversational filler.",
+                system_instruction=GEMINI_LIVE_SYSTEM_INSTRUCTION,
                 session_id=self.session_id
             )
+
+
 
     async def connect_gemini(self):
         if self.gemini_manager:
             async def on_agent_message(text):
-                await self.safe_send_json({"type": "agent_message", "text": text})
-                self.conversation_history.append({"role": "assistant", "content": text})
+                import re
+                from core.pc_control import PCControl
+                open_match = re.search(r'\[OPEN_APP:\s*"?([^"]+)"?\]', text)
+                if open_match:
+                    app_name = open_match.group(1).strip()
+                    logger.info(f"Gemini Live Intent Parsed: Open App -> {app_name}")
+                    pc_controller = PCControl()
+                    await pc_controller.open_app(app_name)
+                    # We can drop the [OPEN_APP: ...] string from being sent to TTS
+                    text = re.sub(r'\[OPEN_APP:\s*"?([^"]+)"?\]', '', text).strip()
+                    if not text:
+                        return
+                        
+                # --- OUTPUT CONTRACT: scrub BEFORE sending to WebSocket ---
+                clean = output_processor.filter_reasoning(text)
+                if clean:
+                    await self.safe_send_json({"type": "agent_message", "text": clean})
+                    self.conversation_history.append({"role": "assistant", "content": clean})
             async def on_disconnect():
                 logger.warning("🔄 Falling back to Nexus STT (Groq) engine")
-                self.engine = "nexus" # Failover to local pipeline
+                self.engine = "nexus"
+                await self.safe_send_json({"type": "engine_mode", "mode": "groq"})
             await self.gemini_manager.connect(on_agent_message, on_disconnect)
 
     async def extract_and_save_memory(self, user_msg: str, ai_msg: str, turn_id: int = 0):
@@ -156,7 +178,7 @@ class VoiceSession:
 
             if gs.llm_provider is None: return
             
-            from tools.memory_tools import MEMORY_TOOLS, update_preferences
+            from tools.memory_tools import MEMORY_TOOLS
             import json
             
             # 2. We use a fast call to check if the user expressed a preference or rule
@@ -729,7 +751,6 @@ class VoiceSession:
                     if full_pcm:
                         gs.cached_greeting_pcm = full_pcm
                         try:
-                            import pickle
                             with open(gs.CACHE_FILE, "wb") as f:
                                 pickle.dump(gs.cached_greeting_pcm, f)
                         except Exception as e:
@@ -902,17 +923,12 @@ class VoiceSession:
             if self.is_connected:
                 await self.safe_send_json({"type": "error", "message": str(e)})
 
-    # Patterns that indicate reasoning/self-talk that must never reach the user
-    _REASONING_PREFIXES = (
-        "okay so", "okay, so", "alright so", "alright, so",
-        "so the user", "the user wants", "the user said",
-        "i need to", "i'll now", "i will now", "i should",
-        "i'm going to", "i am going to", "my approach",
-        "let me think", "let me plan", "my plan is",
-        "i interpret", "i understand that", "as an ai",
-        "i'll phrase", "i'll keep", "i'll respond",
-        "going to respond", "i can't actually", "i cannot actually",
-        "i don't actually", "i do not actually",
+    # ACTION KEYWORDS: force tool routing for these intents without relying on LLM judgment
+    _ACTION_KEYWORDS = (
+        "open ", "launch ", "start ", "run ",
+        "close ", "kill ", "quit ", "shut down ",
+        "take a screenshot", "screenshot",
+        "type ", "press ", "click ", "opem ",
     )
 
     async def run_llm_and_tts(self, transcript: str, turn_id: int):
@@ -939,15 +955,77 @@ class VoiceSession:
             self.conversation_history.append({"role": "user", "content": transcript})
             messages = [{"role": "system", "content": system_prompt}] + list(self.conversation_history)
             
-            from tools.system import SYSTEM_TOOLS, execute_pc_action
-            from core.capabilities import registry
-            from core.database import db as cap_db
+            # Persist user message
+            asyncio.create_task(db.save_message(self.session_id, "user", transcript))
             
+            from core.trace_emitter import emit_trace
+            await emit_trace(self.websocket, "user_command", f"Command: {transcript}", "🗣️")
+            await emit_trace(self.websocket, "model_selected", f"Model routing: {gs.llm_provider.model}", "🧠")
+            
+            from tools.system import get_dynamic_system_tools
+            from tools.file_tools import FILE_TOOLS
+            from tools.task_tools import TASK_TOOLS
+            from tools.memory_tools import MEMORY_TOOLS
+            from tools.third_party_tools import THIRD_PARTY_TOOLS
+            from tools.scrapper_tools import SCRAPPER_TOOLS
+            from tools.browser_tools import BROWSER_TOOLS
+            from core.capabilities import registry as cap_registry
+            from core.registry import tool_registry
+            
+            dynamic_system_tools = await get_dynamic_system_tools()
+            ALL_TOOLS = dynamic_system_tools + FILE_TOOLS + TASK_TOOLS + MEMORY_TOOLS + THIRD_PARTY_TOOLS + SCRAPPER_TOOLS + BROWSER_TOOLS
+            
+            # --- FORCED TOOL ROUTING ---
+            action_intent = await action_router.route_intent(transcript)
+            
+            if action_intent:
+                logger.info(f"🎯 [ACTION ROUTER] Intercepted action intent: '{transcript[:50]}'")
+                action = action_intent["tool"]
+                params = {"target": action_intent.get("target", "")}
+                
+                await emit_trace(self.websocket, "tool_selected", f"Selected tool: {action}", "🛠️", params)
+                perm = await cap_registry.check_permission("default_user", action)
+                res = {"success": False, "error": "Unknown action"}
+                
+                if perm == "Deny":
+                    confirmation = "That capability is currently disabled. Enable it in Settings."
+                elif perm == "Prompt":
+                    await self.safe_send_json({
+                        "type": "permission_request",
+                        "tool_id": action,
+                        "parameters": params
+                    })
+                    return
+                else:
+                    if action.startswith("pc_"):
+                        # Action Router sets "target", but execute_pc_action expects standard args
+                        tool_params = {}
+                        if action in ["pc_open_app", "pc_close_app"]:
+                            tool_params["app_name"] = params.get("target", "")
+                        
+                        res = await execute_pc_action(action, tool_params)
+
+                    if res.get("success"):
+                        confirmation = f"I have executed the {action} capability."
+                    else:
+                        confirmation = f"I failed to execute the capability. {res.get('error', '')}"
+
+                await emit_trace(self.websocket, "tool_result", confirmation, "✅")
+                await cap_registry.log_execution(action, params, "success" if perm=="Allow" and res.get("success") else "failed", perm)
+                
+                # We skip LLM reasoning completely for intercept
+                await self.safe_send_json({"type": "agent_message", "text": confirmation, "is_final": True})
+                self.conversation_history.append({"role": "assistant", "content": confirmation})
+                await self.enqueue_tts(confirmation, turn_id=turn_id)
+                await self.tts_queue.put({"text": "", "turn_id": turn_id, "is_sentinel": True})
+                return
+            
+            # Standard LLM fallback
             try:
                 tool_response = await gs.llm_provider.client.chat.completions.create( # type: ignore
                     messages=messages, # type: ignore
                     model=gs.llm_provider.model,
-                    tools=SYSTEM_TOOLS,
+                    tools=ALL_TOOLS,
                     tool_choice="auto",
                     temperature=0.1,
                     max_tokens=256
@@ -959,30 +1037,58 @@ class VoiceSession:
                     params = json.loads(tool_call.function.arguments)
                     
                     # Check capability permission
-                    perm = await registry.check_permission("default_user", action)
+                    await emit_trace(self.websocket, "tool_selected", f"Selected tool: {action}", "🛠️", params)
+                    perm = await cap_registry.check_permission("default_user", action)
                     if perm == "Deny":
                         confirmation = "That capability is currently disabled. Enable it in Settings."
+                        await cap_registry.log_execution(action, params, "denied", perm)
+                        await emit_trace(self.websocket, "execution_complete", f"Denied by permissions: {action}", "❌")
+                    elif perm == "Prompt":
+                        # Send WS event to UI
+                        await self.safe_send_json({
+                            "type": "capability_prompt",
+                            "tool_id": action,
+                            "params": params
+                        })
+                        confirmation = "I need permission to perform that action. Please check your screen."
+                        await cap_registry.log_execution(action, params, "prompted", perm)
+                        await emit_trace(self.websocket, "execution_started", f"Requested permission for: {action}", "🛡️")
                     else:
-                        result = await execute_pc_action(action, params)
-                        await registry.log_execution(action, params, "success", perm)
-                        logger.info(f"🛠 Tool executed: {action}({params}) → {result}")
+                        await cap_registry.log_execution(action, params, "started", perm)
+                        await emit_trace(self.websocket, "execution_started", f"Executing: {action}", "⏳")
                         
-                        # Brief user-facing confirmation only
-                        app_name = params.get("app_name", "").capitalize()
-                        if action == "pc_open_app":
-                            confirmation = f"Opening {app_name}."
-                        elif action == "pc_close_app":
-                            confirmation = f"Closed {app_name}."
-                        elif action == "pc_take_screenshot":
-                            confirmation = "Screenshot ले लिया।"
-                        elif action == "pc_type_text":
-                            confirmation = "Typed."
-                        elif action == "pc_press_shortcut":
-                            confirmation = "Done."
+                        # Execute tool and get Execution Contract
+                        if action.startswith("pc_"):
+                            contract_result = await execute_pc_action(action, params)
+                        elif action.startswith("browser_"):
+                            from tools.browser_tools import execute_browser_action
+                            contract_result = await execute_browser_action(action, params)
                         else:
-                            confirmation = "Done."
+                            contract_result = await tool_registry.execute(action, params, ["admin"])
+                            
+                        # If the tool registry returned an error directly (e.g. tool not found)
+                        if isinstance(contract_result, dict) and "error" in contract_result and "success" not in contract_result:
+                            contract_result = {"success": False, "verified": False, "result": "", "error": contract_result["error"]}
+                            
+                        # Log success/failure
+                        status = "success" if contract_result.get("success") else "failed"
+                        await cap_registry.log_execution(action, params, status, perm)
+                        logger.info(f"🛠 Tool executed: {action}({params}) → {contract_result}")
+                        await emit_trace(self.websocket, "execution_complete", f"Execution {status}", "✅" if status == "success" else "⚠️", contract_result)
+                        
+                        # Strict Verification Check
+                        if contract_result.get("success") and contract_result.get("verified"):
+                            confirmation = str(contract_result.get("result", "Done."))
+                        elif contract_result.get("success") and not contract_result.get("verified"):
+                            confirmation = "Action attempted, but could not be verified."
+                        else:
+                            error_msg = str(contract_result.get("error", "Unknown error"))
+                            confirmation = f"Failed to perform action: {error_msg}"
                     
                     self.conversation_history.append({"role": "assistant", "content": confirmation})
+                    # Persist tool result to DB so it's not lost on reconnect
+                    asyncio.create_task(db.save_message(self.session_id, "assistant", confirmation))
+                    
                     await self.safe_send_json({"type": "agent_message", "text": confirmation, "is_final": True})
                     await self.enqueue_tts(confirmation, turn_id=turn_id, is_last=True)
                     return  # Tool executed — stop here, do not stream LLM prose
@@ -1046,28 +1152,20 @@ class VoiceSession:
 
                     if is_boundary or is_long:
                         text_to_queue = current_sentence.strip()
-                        text_to_queue = re.sub(r'<think>.*?</think>', '', text_to_queue, flags=re.DOTALL|re.IGNORECASE).strip()
-                        text_to_queue = re.sub(r'<think>.*$', '', text_to_queue, flags=re.DOTALL|re.IGNORECASE).strip()
-                        text_to_queue = re.sub(r'\*+.*?\*+', '', text_to_queue).strip()
+                        # --- OUTPUT CONTRACT: scrub before any emission ---
+                        text_to_queue = output_processor.filter_reasoning(text_to_queue) or ""
                         
-                        # Drop sentences that are pure reasoning/self-talk
-                        lowered = text_to_queue.lower().strip()
-                        is_reasoning = any(lowered.startswith(pfx) for pfx in self._REASONING_PREFIXES)
-                        
-                        if text_to_queue and re.search(r'[a-zA-Z\u0900-\u097f]', text_to_queue) and not is_reasoning:
+                        if text_to_queue and re.search(r'[a-zA-Z\u0900-\u097f]', text_to_queue):
                             await self.safe_send_json({"type": "agent_partial", "text": text_to_queue, "turn_id": turn_id})
                             self.recent_ai_outputs.append(text_to_queue)
                             await self.enqueue_tts(text_to_queue, turn_id=turn_id)
-                        elif is_reasoning:
-                            logger.warning(f"[LEAK FILTER] Dropped reasoning sentence: {text_to_queue[:80]}")
                         current_sentence = ""
 
             # Final flush — any remaining text in the buffer
             if current_sentence.strip():
                 text_to_queue = current_sentence.strip()
-                text_to_queue = re.sub(r'<think>.*?</think>', '', text_to_queue, flags=re.DOTALL|re.IGNORECASE).strip()
-                text_to_queue = re.sub(r'<think>.*$', '', text_to_queue, flags=re.DOTALL|re.IGNORECASE).strip()
-                text_to_queue = re.sub(r'\*+.*?\*+', '', text_to_queue).strip()
+                # --- OUTPUT CONTRACT: scrub before final flush emission ---
+                text_to_queue = output_processor.filter_reasoning(text_to_queue) or ""
                 if text_to_queue and re.search(r'[a-zA-Z\u0900-\u097f]', text_to_queue):
                     await self.safe_send_json({"type": "agent_partial", "text": text_to_queue, "turn_id": turn_id})
                     self.recent_ai_outputs.append(text_to_queue)
@@ -1081,12 +1179,15 @@ class VoiceSession:
             })
 
             self.llm_latency = time.perf_counter() - llm_start_time
-            # Clean final text before sending
-            full_ai_text = re.sub(r'<think>.*?</think>', '', full_ai_text, flags=re.DOTALL|re.IGNORECASE).strip()
-            full_ai_text = re.sub(r'\*+.*?\*+', '', full_ai_text).strip()
+            # --- OUTPUT CONTRACT: scrub final assembled text ---
+            full_ai_text = output_processor.filter_reasoning(full_ai_text) or ""
             
             logger.info(f"⚡ [LLM] Turn {turn_id} completed in {self.llm_latency:.2f}s")
             self.conversation_history.append({"role": "assistant", "content": full_ai_text})
+            
+            # Persist assistant message
+            asyncio.create_task(db.save_message(self.session_id, "assistant", full_ai_text.strip()))
+            
             await self.safe_send_json({"type": "agent_message", "text": full_ai_text.strip(), "is_final": True})
             logger.info(f"🤖 Nexus Full Response: {full_ai_text[:100]}...")
 
@@ -1103,4 +1204,3 @@ class VoiceSession:
         finally:
             self.llm_is_streaming = False
             logger.info(f"🧠 [Turn {turn_id}] LLM stream finished.")
-

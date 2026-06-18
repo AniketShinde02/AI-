@@ -8,6 +8,7 @@ interface VoiceContextType {
   isListening: boolean;
   isSpeaking: boolean;
   micCaptured: boolean;
+  activeEngine: 'gemini_live' | 'groq' | 'text' | 'unknown';
   systemMetrics: any;
   connect: () => void;
   disconnect: () => void;
