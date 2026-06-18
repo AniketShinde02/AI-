@@ -1,3 +1,9 @@
+# ==========================================
+# CRITICAL SYSTEM FILE
+# Do not modify websocket lifecycle, session cleanup, 
+# Gemini transport, or fallback routing without running 
+# full voice test suite. Changes here can silently break voice.
+# ==========================================
 import os
 import asyncio
 import logging
@@ -188,7 +194,7 @@ class VoiceSession:
 
     async def tts_worker(self):
         """Background worker to synthesize and send audio from the queue sequentially."""
-        logger.info("👷 TTS Worker started.")
+        logger.debug("👷 TTS Worker started.")
         try:
             while self.is_connected:
                 # Wait for a sentence to process
@@ -325,11 +331,11 @@ class VoiceSession:
         except Exception as e:
             logger.error(f"❌ TTS Worker crashed: {e}")
         finally:
-            logger.info("👷 TTS Worker stopped.")
+            logger.debug("👷 TTS Worker stopped.")
 
     async def metrics_worker(self):
         """Streams system metrics to the client every 1.5 seconds."""
-        logger.info("📊 Metrics Worker started.")
+        logger.debug("📊 Metrics Worker started.")
         try:
             while self.is_connected:
                 await asyncio.sleep(1.5)
@@ -362,7 +368,7 @@ class VoiceSession:
         except Exception as e:
             logger.error(f"❌ Metrics Worker crashed: {e}")
         finally:
-            logger.info("📊 Metrics Worker stopped.")
+            logger.debug("📊 Metrics Worker stopped.")
 
     async def stop_audio(self) -> None:
         """Immediately stops any ongoing TTS and clears buffers."""

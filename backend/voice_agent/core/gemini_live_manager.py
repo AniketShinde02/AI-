@@ -1,3 +1,9 @@
+# ==========================================
+# CRITICAL SYSTEM FILE
+# Do not modify websocket lifecycle, session cleanup, 
+# Gemini transport, or fallback routing without running 
+# full voice test suite. Changes here can silently break voice.
+# ==========================================
 import os
 import json
 import base64
@@ -80,7 +86,7 @@ class GeminiLiveSessionManager:
         
         try:
             async with self._send_lock:
-                raw_logger.info(f"[OUTBOUND AUDIO] [Session: {self.session_id}] [Func: send_audio] Size: {len(pcm_data)} bytes")
+                raw_logger.debug(f"[OUTBOUND AUDIO] [Session: {self.session_id}] [Func: send_audio] Size: {len(pcm_data)} bytes")
                 await self.session.send_realtime_input(
                     audio=types.Blob(
                         mime_type="audio/pcm;rate=16000",
@@ -166,7 +172,7 @@ class GeminiLiveSessionManager:
                 
                 while self.is_connected:
                     async for response in session.receive():
-                        raw_logger.info(f"[INBOUND JSON] [Session: {self.session_id}] Size: {len(response.model_dump_json())} bytes | Content: {response.model_dump_json(exclude_none=True)}")
+                        raw_logger.debug(f"[INBOUND JSON] [Session: {self.session_id}] Size: {len(response.model_dump_json())} bytes | Content: {response.model_dump_json(exclude_none=True)}")
                         try:
                             server_content = getattr(response, "server_content", None)
                             if server_content is not None:

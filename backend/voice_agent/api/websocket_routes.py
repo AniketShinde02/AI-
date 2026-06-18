@@ -1,3 +1,9 @@
+# ==========================================
+# CRITICAL SYSTEM FILE
+# Do not modify websocket lifecycle, session cleanup, 
+# Gemini transport, or fallback routing without running 
+# full voice test suite. Changes here can silently break voice.
+# ==========================================
 import logging
 import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -36,7 +42,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 if "bytes" not in data: # Prevent logging massive binary payloads
                     text_data = data.get("text", "")
                     if text_data and '{"type":"ping"' not in text_data:
-                        logger.info(f"🔍 RAW WS RECEIVE: {data}")
+                        logger.debug(f"🔍 RAW WS RECEIVE: {data}")
             except (WebSocketDisconnect, RuntimeError):
                 # RuntimeError = "Cannot call receive once a disconnect message has been received"
                 break
@@ -71,7 +77,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
                     
                 if msg.get("type") == "settings":
-                    logger.info(f"📩 Received settings: {msg}")
+                    logger.debug(f"📩 Received settings: {msg}")
                     session.selected_persona = msg.get("persona") or "female"
                     session.selected_provider = msg.get("ttsProvider") or "edge"
                     session.selected_language = msg.get("language") or "auto"
@@ -79,7 +85,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     
                 if "action" in msg:
                     action = msg["action"]
-                    logger.info(f"📩 Received action: {action}")
+                    logger.debug(f"📩 Received action: {action}")
                     if action == "mute":
                         session.is_muted = True
                         session.audio_buffer.clear()
@@ -91,7 +97,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         session.vad_iterator.reset_states()
                         
                 elif "text" in msg:
-                    logger.info(f"📩 Received chat message: {msg['text']}")
+                    logger.debug(f"📩 Received chat message: {msg['text']}")
                     session.current_turn_id += 1
                     asyncio.create_task(session.run_llm_and_tts(
                         msg["text"], 
