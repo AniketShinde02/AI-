@@ -1,4 +1,33 @@
+## [2026-06-18] — Reasoning Leak Fix + Tool Wiring + Permissions System
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+- Environment: Local / Development
+
+### Fixed
+- **CRITICAL: Reasoning leak into chat UI** — LLaMA 3.3 70B was outputting internal monologue (e.g. "Okay so the user wants me to...") as plain text directly into the chat bubble and TTS because the prior negative constraint ("Do not output reasoning") caused the model to hallucinate free-form prose with no detectable markers.
+- Root cause: Groq LLaMA 3.3 70B does not use `<think>` tags by default. Existing regex filters only stripped `<think>...</think>` blocks, which were never generated.
+- Fix layer 1 (Prompt): Rewrote `prompts.py` VOICE RULES to explicitly name and prohibit 25+ reasoning-prefix patterns by example. Added hard rule: "Your FIRST token must be the start of your actual response."
+- Fix layer 2 (Streaming filter in `voice_session.py`): Added `_REASONING_PREFIXES` tuple + per-sentence prefix check before any text is sent to TTS queue or frontend WebSocket. Reasoning sentences are dropped silently and logged as `[LEAK FILTER]`.
+- Fix layer 3 (Frontend `MessageList.tsx`): Kept `<think>` and `**` block stripping as secondary defense.
+
+### Added
+- **Tool calling wired**: `run_llm_and_tts` now performs a non-streaming Groq tool-detection call **before** the streaming LLM response. If a tool is matched (`pc_open_app`, `pc_close_app`, `pc_take_screenshot`, etc.), it executes immediately and returns only a one-line confirmation — no LLM prose.
+- **"open file manager" now works**: Routes to `pc_control.py:open_app("explorer")` via `tools/system.py:execute_pc_action()`. Audit logged.
+- **Capabilities registered on startup**: `global_state.py` lifespan now calls `registry.register_tool()` for all 5 PC control capabilities on boot. SQLite `capabilities` table is authoritative.
+- **REST API for capabilities**: Added `GET /api/capabilities`, `PATCH /api/capabilities/{id}` (toggle enabled), `GET /api/audit-log` to `rest_routes.py`.
+- **Permissions UI page** (`/settings/permissions`): Full page showing all registered capabilities with enable/disable toggles, category grouping, and live tool execution audit log.
+- **Permissions card added to Settings page**: Direct link to `/settings/permissions` visible in the Settings Command Center.
+
+### Notes
+- Tool detection adds ~200-400ms latency to each turn (extra Groq call). This is acceptable for the reliability gain but can be optimized later with intent pre-classification.
+- LLaMA 3.3 70B respects tool schemas precisely and routes tool calls accurately in early testing.
+- Gemini Live sessions do NOT go through this pipeline (they use Gemini's own voice model). Tool wiring for Gemini Live is a future task.
+
 ## [2026-06-18] — Gemini Live Telemetry & VAD Fixes
+
+
 
 ### Author
 - Antigravity AI

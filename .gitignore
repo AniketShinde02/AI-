@@ -326,3 +326,10 @@ forensics_*.py
 DEBUG_FORENSICS.txt
 .tempmediaStorage/
 Stonic-AI-Source-Code/
+
+# Secrets and Chats
+.chats/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json

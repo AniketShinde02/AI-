@@ -15,7 +15,7 @@ import json
 import time
 
 raw_logger = logging.getLogger('DEBUG_GEMINI_RAW')
-raw_logger.setLevel(logging.DEBUG)
+raw_logger.setLevel(logging.INFO)
 if not raw_logger.handlers:
     fh = logging.FileHandler('d:/AI/backend/voice_agent/DEBUG_GEMINI_RAW.log', encoding='utf-8')
     fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))

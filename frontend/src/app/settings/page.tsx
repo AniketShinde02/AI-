@@ -139,6 +139,27 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Permissions Link */}
+          <div className="bg-[#06060c] border border-[#6137FF]/15 clip-cut p-5 flex flex-col">
+            <div className="flex items-center gap-2 mb-4">
+              <Shield size={14} className="text-[#6137FF]" />
+              <h2 className="text-[10px] font-quantico font-bold uppercase tracking-widest text-white">Permissions</h2>
+            </div>
+            <div className="flex-1 flex flex-col justify-center items-center gap-4 py-4">
+              <p className="text-[10px] text-zinc-400 text-center font-mono px-4">
+                Control which system capabilities Nexus can access: apps, screenshots, keyboard, filesystem.
+              </p>
+              <Link
+                href="/settings/permissions"
+                className="px-4 py-2 bg-[#6137FF]/10 border border-[#6137FF]/30 text-[#6137FF] text-[10px] font-bold uppercase tracking-widest clip-cut transition-all hover:bg-[#6137FF]/20 flex items-center gap-2"
+              >
+                <Shield size={12} />
+                Manage Permissions
+              </Link>
+            </div>
+          </div>
+
+
           {/* Persona */}
           <div className="bg-[#06060c] border border-white/5 clip-cut p-5">
             <div className="flex items-center gap-2 mb-4">

@@ -397,3 +397,43 @@ async def execute_tool(request: dict):
         logger.exception(f"❌ Tool Execution failed: {e}")
         return {"status": "error", "error": str(e)}
 
+
+# ============================================================
+# CAPABILITIES & PERMISSIONS API
+# ============================================================
+
+@rest_router.get("/api/capabilities")
+async def get_capabilities():
+    """Return all registered capabilities and their enabled state."""
+    with db._get_conn() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, description, category, enabled FROM capabilities ORDER BY category, name")
+        rows = cursor.fetchall()
+        return [{"id": r[0], "name": r[1], "description": r[2], "category": r[3], "enabled": bool(r[4])} for r in rows]
+
+class CapabilityToggle(BaseModel):
+    enabled: bool
+
+@rest_router.patch("/api/capabilities/{cap_id}")
+async def toggle_capability(cap_id: str, body: CapabilityToggle):
+    """Enable or disable a capability by ID."""
+    with db._get_conn() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE capabilities SET enabled = ? WHERE id = ?", (1 if body.enabled else 0, cap_id))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail=f"Capability {cap_id} not found")
+        conn.commit()
+    return {"id": cap_id, "enabled": body.enabled}
+
+@rest_router.get("/api/audit-log")
+async def get_audit_log(limit: int = 50):
+    """Return the last N tool execution audit log entries."""
+    with db._get_conn() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT tool_id, parameters_passed, result_status, permission_state, timestamp FROM tool_audit_logs ORDER BY timestamp DESC LIMIT ?",
+            (limit,)
+        )
+        rows = cursor.fetchall()
+        import json as _json
+        return [{"tool": r[0], "params": _json.loads(r[1]) if r[1] else {}, "status": r[2], "permission": r[3], "timestamp": r[4]} for r in rows]

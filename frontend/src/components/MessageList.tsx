@@ -62,8 +62,10 @@ export function MessageList() {
             ) : (
               message.content?.trim() ? (() => {
                 const displayContent = message.content
-                  .replace(/\*\*[\s\S]*?\*\*/g, '') // Remove completed thought blocks
-                  .replace(/\*\*[\s\S]*$/, '')      // Remove incomplete thought blocks at the end
+                  .replace(/<think>[\s\S]*?<\/think>/gi, '') // Remove completed think blocks
+                  .replace(/<think>[\s\S]*$/gi, '')          // Remove incomplete think blocks
+                  .replace(/\*\*[\s\S]*?\*\*/g, '')          // Remove completed asterisk blocks
+                  .replace(/\*\*[\s\S]*$/, '')               // Remove incomplete asterisk blocks at the end
                   .trim();
                 
                 if (!displayContent) return null; // Don't show empty bubbles if it's currently just thinking

@@ -902,6 +902,19 @@ class VoiceSession:
             if self.is_connected:
                 await self.safe_send_json({"type": "error", "message": str(e)})
 
+    # Patterns that indicate reasoning/self-talk that must never reach the user
+    _REASONING_PREFIXES = (
+        "okay so", "okay, so", "alright so", "alright, so",
+        "so the user", "the user wants", "the user said",
+        "i need to", "i'll now", "i will now", "i should",
+        "i'm going to", "i am going to", "my approach",
+        "let me think", "let me plan", "my plan is",
+        "i interpret", "i understand that", "as an ai",
+        "i'll phrase", "i'll keep", "i'll respond",
+        "going to respond", "i can't actually", "i cannot actually",
+        "i don't actually", "i do not actually",
+    )
+
     async def run_llm_and_tts(self, transcript: str, turn_id: int):
         """Streams LLM response and semantic-chunks it for TTS."""
         logger.info(f"🧠 [Turn {turn_id}] LLM processing: {transcript[:50]}...")
@@ -921,10 +934,61 @@ class VoiceSession:
                 raise RuntimeError("LLM provider not initialized")
                 
             llm_start_time = time.perf_counter()
-            
-            # Update memory
+
+            # --- TOOL DETECTION (non-streaming, fast) ---
             self.conversation_history.append({"role": "user", "content": transcript})
             messages = [{"role": "system", "content": system_prompt}] + list(self.conversation_history)
+            
+            from tools.system import SYSTEM_TOOLS, execute_pc_action
+            from core.capabilities import registry
+            from core.database import db as cap_db
+            
+            try:
+                tool_response = await gs.llm_provider.client.chat.completions.create( # type: ignore
+                    messages=messages, # type: ignore
+                    model=gs.llm_provider.model,
+                    tools=SYSTEM_TOOLS,
+                    tool_choice="auto",
+                    temperature=0.1,
+                    max_tokens=256
+                )
+                tool_msg = tool_response.choices[0].message
+                if tool_msg.tool_calls:
+                    tool_call = tool_msg.tool_calls[0]
+                    action = tool_call.function.name
+                    params = json.loads(tool_call.function.arguments)
+                    
+                    # Check capability permission
+                    perm = await registry.check_permission("default_user", action)
+                    if perm == "Deny":
+                        confirmation = "That capability is currently disabled. Enable it in Settings."
+                    else:
+                        result = await execute_pc_action(action, params)
+                        await registry.log_execution(action, params, "success", perm)
+                        logger.info(f"🛠 Tool executed: {action}({params}) → {result}")
+                        
+                        # Brief user-facing confirmation only
+                        app_name = params.get("app_name", "").capitalize()
+                        if action == "pc_open_app":
+                            confirmation = f"Opening {app_name}."
+                        elif action == "pc_close_app":
+                            confirmation = f"Closed {app_name}."
+                        elif action == "pc_take_screenshot":
+                            confirmation = "Screenshot ले लिया।"
+                        elif action == "pc_type_text":
+                            confirmation = "Typed."
+                        elif action == "pc_press_shortcut":
+                            confirmation = "Done."
+                        else:
+                            confirmation = "Done."
+                    
+                    self.conversation_history.append({"role": "assistant", "content": confirmation})
+                    await self.safe_send_json({"type": "agent_message", "text": confirmation, "is_final": True})
+                    await self.enqueue_tts(confirmation, turn_id=turn_id, is_last=True)
+                    return  # Tool executed — stop here, do not stream LLM prose
+            except Exception as tool_err:
+                logger.debug(f"Tool detection skipped: {tool_err}")  # Non-critical, fall through to normal LLM
+            # --- END TOOL DETECTION ---
             
             async def gemini_stream():
                 from google import genai
@@ -982,17 +1046,27 @@ class VoiceSession:
 
                     if is_boundary or is_long:
                         text_to_queue = current_sentence.strip()
+                        text_to_queue = re.sub(r'<think>.*?</think>', '', text_to_queue, flags=re.DOTALL|re.IGNORECASE).strip()
+                        text_to_queue = re.sub(r'<think>.*$', '', text_to_queue, flags=re.DOTALL|re.IGNORECASE).strip()
                         text_to_queue = re.sub(r'\*+.*?\*+', '', text_to_queue).strip()
                         
-                        if text_to_queue and re.search(r'[a-zA-Z\u0900-\u097f]', text_to_queue):
+                        # Drop sentences that are pure reasoning/self-talk
+                        lowered = text_to_queue.lower().strip()
+                        is_reasoning = any(lowered.startswith(pfx) for pfx in self._REASONING_PREFIXES)
+                        
+                        if text_to_queue and re.search(r'[a-zA-Z\u0900-\u097f]', text_to_queue) and not is_reasoning:
                             await self.safe_send_json({"type": "agent_partial", "text": text_to_queue, "turn_id": turn_id})
                             self.recent_ai_outputs.append(text_to_queue)
                             await self.enqueue_tts(text_to_queue, turn_id=turn_id)
-                            current_sentence = ""
+                        elif is_reasoning:
+                            logger.warning(f"[LEAK FILTER] Dropped reasoning sentence: {text_to_queue[:80]}")
+                        current_sentence = ""
 
             # Final flush — any remaining text in the buffer
             if current_sentence.strip():
                 text_to_queue = current_sentence.strip()
+                text_to_queue = re.sub(r'<think>.*?</think>', '', text_to_queue, flags=re.DOTALL|re.IGNORECASE).strip()
+                text_to_queue = re.sub(r'<think>.*$', '', text_to_queue, flags=re.DOTALL|re.IGNORECASE).strip()
                 text_to_queue = re.sub(r'\*+.*?\*+', '', text_to_queue).strip()
                 if text_to_queue and re.search(r'[a-zA-Z\u0900-\u097f]', text_to_queue):
                     await self.safe_send_json({"type": "agent_partial", "text": text_to_queue, "turn_id": turn_id})
@@ -1007,8 +1081,12 @@ class VoiceSession:
             })
 
             self.llm_latency = time.perf_counter() - llm_start_time
+            # Clean final text before sending
+            full_ai_text = re.sub(r'<think>.*?</think>', '', full_ai_text, flags=re.DOTALL|re.IGNORECASE).strip()
+            full_ai_text = re.sub(r'\*+.*?\*+', '', full_ai_text).strip()
+            
             logger.info(f"⚡ [LLM] Turn {turn_id} completed in {self.llm_latency:.2f}s")
-            self.conversation_history.append({"role": "assistant", "content": full_ai_text.strip()})
+            self.conversation_history.append({"role": "assistant", "content": full_ai_text})
             await self.safe_send_json({"type": "agent_message", "text": full_ai_text.strip(), "is_final": True})
             logger.info(f"🤖 Nexus Full Response: {full_ai_text[:100]}...")
 
