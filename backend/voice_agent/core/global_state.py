@@ -1,0 +1,138 @@
+import os
+import asyncio
+import logging
+import json
+import base64
+import time
+import wave
+import io
+import re
+from enum import Enum
+from typing import Optional, Deque
+from contextlib import asynccontextmanager
+from collections import deque
+import numpy as np
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+import psutil
+import platform
+import random
+from speech_cleaner import cleaner as speech_cleaner
+from pydantic import BaseModel
+from fastapi import HTTPException
+from core.database import db
+
+try:
+    import pyautogui
+    import pygetwindow as gw
+    from PIL import ImageGrab
+except ImportError:
+    logging.warning("pyautogui or pygetwindow not installed. OS automation tools will be disabled.")
+    pyautogui = None
+    gw = None
+    ImageGrab = None
+
+
+# Re-use existing provider logic
+from providers.stt import GroqSTT
+from providers.llm import GroqLLM
+from providers.tts import TTSProviderRouter, ProviderStatus
+import torch # type: ignore
+from silero_vad import load_silero_vad, VADIterator # type: ignore
+
+# Import Backend Tools for Gemini Live Bridge
+from tools.system import execute_pc_action
+from tools.task_tools import create_task, create_note
+from tools.memory_tools import update_preferences, get_user_memory, delete_user_preference
+
+from tools.file_tools import read_file, write_file, read_directory
+from tools.third_party_tools import get_weather
+from core.rag_oracle import RAGOracle
+import core.rag_oracle as rag_oracle_module
+
+# Setup logging
+import subprocess
+import signal
+from collections import deque
+from core.gemini_live_manager import GeminiLiveSessionManager
+
+logger = logging.getLogger("nexus_ws")
+
+from dotenv import find_dotenv
+# Automatically find .env in parent directories
+load_dotenv(find_dotenv(usecwd=True))
+
+# Import config
+import config
+
+# Initialize Providers as None, will be set in lifespan startup
+stt_provider: Optional[GroqSTT] = None
+llm_provider: Optional[GroqLLM] = None
+tts_router: Optional[TTSProviderRouter] = None
+vad_model = None
+
+import pickle
+
+# Global state for greeting cache
+cached_greeting_pcm: list = []
+CACHE_FILE = "greeting_cache.pkl"
+
+if os.path.exists(CACHE_FILE):
+    try:
+        with open(CACHE_FILE, "rb") as f:
+            cached_greeting_pcm = pickle.load(f)
+            print("[SUCCESS] Loaded cached greeting from disk.")
+    except Exception as e:
+        print(f"❌ Failed to load greeting cache: {e}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global stt_provider, llm_provider, tts_router, vad_model
+    import time
+    
+    start_time = time.time()
+    def log_stage(msg):
+        elapsed = time.time() - start_time
+        print(f"[{elapsed:.2f}s] {msg}")
+
+    print("\n" + "="*50)
+    log_stage("[START] Starting Nexus Voice Providers...")
+    try:
+        log_stage("1. Initializing Groq STT...")
+        stt_provider = GroqSTT(api_key=str(config.GROQ_API_KEY))
+        
+        log_stage("2. Initializing Groq LLM...")
+        llm_provider = GroqLLM(api_key=str(config.GROQ_API_KEY))
+        
+        log_stage("3. Initializing TTS Router...")
+        tts_router = TTSProviderRouter(config)
+        
+        log_stage("4. Loading Silero VAD...")
+        vad_model = load_silero_vad()
+        
+        log_stage("5. Initializing RAG Oracle...")
+        rag_oracle_module.oracle_instance = RAGOracle(
+            gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
+            groq_api_key=str(config.GROQ_API_KEY)
+        )
+        
+        log_stage("6. Initializing Lance Memory... (Lazy loading configured)")
+        # import core.lance_memory as lance_memory_module
+        # lance_memory_module.semantic_memory = lance_memory_module.SemanticMemory(
+        #     gemini_api_key=os.environ.get("GEMINI_API_KEY", "")
+        # )
+        
+        log_stage("[SUCCESS] Providers initialized successfully!")
+    except Exception as e:
+        log_stage(f"[ERROR] Critical failure during provider initialization: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    print("="*50 + "\n")
+    yield
+    # Shutdown: nothing to explicitly close for these providers
+
+active_sessions = {}
+greeting_lock = asyncio.Lock()
+

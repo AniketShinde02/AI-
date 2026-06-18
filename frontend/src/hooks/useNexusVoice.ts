@@ -41,7 +41,7 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
   const connectionStateRef = useRef<"idle" | "connecting" | "connected" | "reconnecting" | "disconnected">("idle");
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const maxRetries = 30; // Increased to allow heavy TTS/VAD ML models to load on the backend
+  const maxRetries = 99999;
 
   const isConnectingRef = useRef(false);
 
@@ -67,7 +67,8 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
         if (audioContextRef.current.state === 'suspended') {
           audioContextRef.current.resume().catch(() => {});
         }
-      } catch (e) {
+      } catch (err) {
+        console.warn("[NexusVoice] Clean close failed:", err);
         // Ignore initialization errors
       }
     };
@@ -381,7 +382,7 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
 
       if (reconnectAttemptsRef.current < maxRetries) {
         connectionStateRef.current = "reconnecting";
-        const backoffMs = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
+        const backoffMs = Math.min(1000 * Math.pow(1.5, reconnectAttemptsRef.current), 5000);
         console.log(`[Nexus WS] Reconnecting in ${backoffMs}ms (Attempt ${reconnectAttemptsRef.current + 1}/${maxRetries})`);
         reconnectAttemptsRef.current += 1;
         
@@ -424,11 +425,11 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
         connect();
         // Wait up to 5s for WS to open before activating mic
         let waited = 0;
-        while (connectionStateRef.current !== "connected" && waited < 50) {
+        while ((connectionStateRef.current as string) !== "connected" && waited < 50) {
           await new Promise(r => setTimeout(r, 100));
           waited++;
         }
-        if (connectionStateRef.current !== "connected") {
+        if ((connectionStateRef.current as string) !== "connected") {
           logger.warn("[Nexus Voice] WS not connected after 5s, deferring mic start");
           return;
         }
@@ -457,6 +458,14 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
         } 
       });
       micStreamRef.current = stream;
+
+      // FIX: Ensure we are still connected after getting mic permissions
+      if (connectionStateRef.current !== "connected") {
+        stream.getTracks().forEach(t => t.stop());
+        micStreamRef.current = null;
+        logger.warn("[Nexus Voice] WS disconnected while getting mic. Aborting.");
+        return;
+      }
 
       // 1. Setup Capture
       const source = audioCtx.createMediaStreamSource(stream);
@@ -521,6 +530,13 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ action: muted ? 'mute' : 'unmute' }));
     }
+    
+    if (!muted && connectionStateRef.current !== "connected") {
+      logger.warn("[Nexus Voice] Cannot listen while offline.");
+      setIsListening(false);
+      return;
+    }
+    
     setIsListening(!muted);
     console.log(`[Nexus Voice] Mic is now ${muted ? 'muted' : 'unmuted'}`);
   }, []);

@@ -1,7 +1,124 @@
+## [2026-06-18] — Gemini Live Telemetry & VAD Fixes
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Transport Forensics Pipeline**: Injected raw WebSocket frame logging (DEBUG_GEMINI_RAW.log and DEBUG_GEMINI_SESSION.log) into GeminiLiveSessionManager to enable exact protocol state auditing.
+- **VAD Turn Completion**: Added the send_turn_complete() method to GeminiLiveSessionManager to explicitly signal 	urn_complete=True safely behind an asyncio lock.
+- **Frontend VAD Sync**: Added a handler for the ad_stop WebSocket event in pi/websocket_routes.py so that when the frontend detects the user has stopped speaking, it instantly triggers send_turn_complete(), prompting Gemini Live to generate a response.
+
+### Fixed
+- **Unicode Logging Crash**: Fixed a UnicodeEncodeError (cp1252 charmap) in logging.FileHandler on Windows that caused the Gemini inbound 
+eceive_task to crash silently when encountering emojis in log statements. Handlers now explicitly use encoding='utf-8'.
+- **Session Identity Typing**: Fixed the VoiceSession.__init__ signature in core/voice_session.py to correctly accept session_id. Updated the router initialization to pass websocket.query_params.get('session_id', ''), resolving a str | None IDE type error and eliminating the fallback trigger.
+- **Removed Broken Variables**: Replaced all rogue 
+aw_logger references that crashed the backend connection with proper logger.debug and scoped session_logger usages.
+
+## [2026-06-18] - Gemini Live Send Protocol Fix
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Fixed
+- **Gemini Protocol Deprecation**: Migrated from the deprecated session.send() websocket wrapper to the required session.send_client_content() for text and session.send_realtime_input() for binary audio chunks, strictly conforming to the Google GenAI 1.x spec.
+- **Turn State Sync**: Set 	urn_complete=False when sending text chunks. Previously, end_of_turn=True was sent during text injection while the frontend microphone continuously streamed audio frames for the same turn. This caused the remote Gemini WebSocket to drop the connection gracefully (1000 OK) due to a turn state violation.
+
+## [2026-06-18] - Gemini Live Transport Stability Fixes
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Fixed
+- **Race Condition in Gemini Live Manager**: Added syncio.Lock() to GeminiLiveSessionManager to serialize send_audio, send_text, and send_video_frame. This prevents the google-genai websockets library from throwing concurrent write exceptions which caused immediate 1000 OK connection closures.
+- **Audio Routing False-Positive**: Verified that frontend correctly utilizes 
+ew Int16Array for PCM conversion and sends raw Binary WebSocket frames. Backend websocket_routes.py successfully passes these raw bytes to Gemini API native audio stream.
+
+### Added
+- **Transport Forensics Artifact**: Generated LIVE_TRANSPORT_FORENSICS.md outlining the exact root cause of the transport drops.
+- **Model Router Target Architecture**: Generated MODEL_ROUTER.md proposing the dynamic routing between Gemini Live (Primary Voice) and Groq/EdgeTTS (Fallback Voice).
+
+## [2026-06-18] - ws_main.py Safe Structural Refactor (Phase 5)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Modular Backend Architecture**: Safely split the monolithic 1684-line ws_main.py into smaller, single-responsibility files without modifying any underlying logic or state machine behavior:
+  - core/global_state.py: Extracted global providers, FastAPI lifespan, and configuration.
+  - core/voice_session.py: Extracted the VoiceSession class and WebSocket audio processing logic.
+  - pi/rest_routes.py: Extracted all /api endpoints, HTTP health checks, and PC automation routes.
+  - pi/websocket_routes.py: Extracted the /ws/nexus and /ws/gemini-live WebSocket connection routers.
+
+### Changed
+- **Entrypoint**: ws_main.py now cleanly imports and mounts routers and lifespan from the newly created modular directories, serving strictly as the core application configuration point.
+
+### Notes
+- **Verification**: Refactoring completed programmatically via strict line extraction rather than manual rewrites to guarantee absolutely zero behavior, state, or import scope changes.
+- **Resilience**: The backend was confirmed to boot successfully immediately following the structural module separation.
+
+
+## [2026-06-17]  Fix Gemini SDK Part.from_text TypeError
+
+### Author
+- Antigravity AI
+- Machine: Local
+
+### Fixed
+- Fixed critical TypeError: Part.from_text() takes 1 positional argument but 2 were given hidden deep inside the Gemini Live async receive background task.
+- The 	ypes.Part.from_text() method in the latest Google GenAI SDK requires a keyword-only argument (	ext=...). 
+- This hidden crash was silently preventing the WebSocket handshake from completing, causing the server to hang for 15 seconds during connect(), which caused the frontend's keepalive ping monitor to declare the WebSocket "offline".
+
+## [2026-06-17]  Fix Gemini Live API Connection Timeout
+
+### Author
+- Antigravity AI
+- Machine: Local
+
+### Fixed
+- Fixed critical Gemini Live API connection timeout caused by a deprecated model name (gemini-2.0-flash-exp) that returned APIError 1008.
+- Replaced deprecated model with gemini-2.5-flash-native-audio-latest which officially supports the AUDIO modality for the idiGenerateContent endpoint.
+- Fixed 	ypes.Modality.AUDIO enum import error that was causing silent AttributeErrors inside the Live connection task.
+- Fixed missing 1alpha API version configuration in genai.Client().
+- Increased Gemini connection timeout from 5.0s to 15.0s to prevent false-positive handshake failures.
+
+## [2026-06-17]  Fix LanceDB Uvicorn Deadlock
+
+### Author
+- Antigravity AI
+- Machine: Local
+
+### Fixed
+- Fixed critical deadlock during backend startup caused by LanceDB Rust Tokio threads colliding with Python multiprocessing and Uvicorn's lifespan asyncio context on Windows.
+- Implemented lazy loading for core.lance_memory.SemanticMemory so it completely bypasses the lifespan phase.
+- Replaced synchronous lancedb methods with native connect_async API for true async compatibility.
+- Fixed LiveConnectConfig type mismatch error in gemini_live_manager.py.
+
+### Performance
+- Backend startup time reduced from infinite to <1s (instantly reaches Application startup complete).
+
 # CHANGELOG - Nexus AI Project
 
 All notable changes to this project are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) + Semantic Versioning.
+
+---
+
+## [2026-06-17] - Phase 5: Voice Stack Stabilization (Step 1)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Fixed
+- **Frontend State Machine (`useNexusVoice.ts`)**: Fixed the critical async race condition that caused the UI to show `OFFLINE` and `LISTENING` simultaneously. Added strict connection state checks after `getUserMedia` resolves.
+- **Frontend Mic State**: Ensured `setMicMuted(false)` checks if the WebSocket is connected before forcing `isListening=true`.
+- **Backend Gemini Transport (`gemini_live_manager.py`)**: Added `asyncio.CancelledError` catching and robust `try/except` block to ensure the `AsyncLiveSession` loop gracefully handles interruptions or disconnections without crashing the main event loop.
+- **Backend Endpoints (`ws_main.py`)**: Added try/except wrappers in the `/ws/gemini-live` endpoint around `send_audio` to prevent the session loop from crashing when relaying audio back and forth, and guaranteed an explicit disconnect payload is sent on failure.
 
 ---
 
@@ -362,3 +479,7 @@ To prevent assumptions and ensure an evidence-based repair strategy, generated 1
 - **Known Issues**: Latency overhead under slow network conditions.
 
 ### Architecture Decisions (from ARCHITECTURE_DECISIONS)
+
+
+
+
