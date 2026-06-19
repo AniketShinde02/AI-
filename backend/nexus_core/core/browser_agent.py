@@ -729,7 +729,8 @@ class BrowserAgent:
 
             if step_result.get("success"):
                 completed += 1
-                logger.info(f"  ✅ Step {i+1} passed: {step_result.get('result', '')[:100]}")
+                result_str = str(step_result.get("result", ""))
+                logger.info(f"  ✅ Step {i+1} passed: {result_str[:100]}")
             else:
                 logger.warning(f"  ❌ Step {i+1} failed: {step_result.get('error', 'Unknown error')}")
 

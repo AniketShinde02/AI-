@@ -51,15 +51,19 @@ Known local apps include: [{apps_list_str}].
 
 Rules:
 1. Handle Hinglish naturally (e.g., 'chrome open kro' -> tool: 'pc_open_app', target: 'chrome').
-2. VOICE STT HALLUCINATION RULE: Voice transcribers frequently hallucinate phonetically (e.g., 'close the water' instead of 'close whatsapp', 'open quote' instead of 'open code'). 
-   - Look at the Target App Anchor Dictionary. If the transcribed word sounds highly similar to a known app in the context of the action, extract the exact word transcribed (e.g., "water", "quote"). Do not drop it. Our backend pipeline uses phonetic distance matching.
-3. If the input is conversational chat, a general question, or doesn't fit the tools, return "null" for tool and "" for target.
-4. You must reply ONLY with a single JSON object. Do not include markdown formatting like ```json.
+2. VOICE STT HALLUCINATION RULE: Voice transcribers frequently hallucinate phonetically.
+   - Look at the Target App Anchor Dictionary. If the transcribed word sounds highly similar to a known app in the context of the action, extract the exact word transcribed.
+3. Assess your confidence (0-100) that the user is explicitly requesting a PC action/command.
+   - Clear commands (e.g., "open chrome", "screenshot le lo", "close WhatsApp") should have confidence >= 85 (typically 90-100).
+   - Conversational chat, random words, background noise ("Sikili Sikili"), ambiguous statements ("Shift ho raha hai"), or statements not matching supported tools must have confidence < 85 (typically < 50).
+4. If the confidence is < 85, you should still populate the JSON but set "confidence" < 85. If it is conversational or doesn't fit the tools, tool should be "null".
+5. You must reply ONLY with a single JSON object. Do not include markdown formatting like ```json.
 
 Strict Output JSON Schema:
 {{
   "tool": "tool_name_or_null",
-  "target": "extracted_raw_app_name_or_text"
+  "target": "extracted_raw_app_name_or_text",
+  "confidence": integer_score_0_to_100
 }}"""
 
     async def route_intent(self, text: str) -> Optional[Dict[str, Any]]:
@@ -90,6 +94,14 @@ Strict Output JSON Schema:
             result = json.loads(raw_content)
             tool = result.get("tool")
             target = result.get("target", "").strip()
+            try:
+                confidence = int(result.get("confidence", 0))
+            except (ValueError, TypeError):
+                confidence = 0
+
+            if confidence < 85:
+                logger.info(f"🎯 [ACTION ROUTER] Confidence {confidence} < 85 threshold for '{text}' — treating as conversation")
+                return None
             
             # Standardize string representations of null states
             if tool and tool not in ("null", "None"):
@@ -102,14 +114,15 @@ Strict Output JSON Schema:
                     devanagari_ratio = devanagari_chars / total_alpha
                     if devanagari_ratio > 0.30:
                         logger.warning(
-                            f"🛡️ [STT Safety] Rejected '{tool}' for high-Devanagari input "
+                             f"🛡️ [STT Safety] Rejected '{tool}' for high-Devanagari input "
                             f"({devanagari_ratio:.0%} Devanagari): '{text[:60]}'"
                         )
                         return None  # Requires explicit English confirmation to execute
                 return {
                     "intent": "ACTION",
                     "tool": tool,
-                    "target": target
+                    "target": target,
+                    "confidence": confidence
                 }
             return None
             

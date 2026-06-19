@@ -142,9 +142,17 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             async def on_agent_message(text):
                 clean = output_processor.filter_reasoning(text)
                 if clean:
-                    await self.safe_send_json({"type": "agent_message", "text": clean})
-                    self.conversation_history.append({"role": "assistant", "content": clean})
-                    asyncio.create_task(db.save_message(self.session_id, "assistant", clean))
+                    action_intent = await action_router.route_intent(clean)
+                    if action_intent:
+                        logger.info(f"🎯 [ACTION ROUTER] Intercepted Gemini Live response intent: '{clean[:50]}'")
+                        if self.gemini_manager:
+                            await self.gemini_manager.interrupt()
+                        self.current_turn_id += 1
+                        asyncio.create_task(self.execute_action(action_intent, turn_id=self.current_turn_id))
+                    else:
+                        await self.safe_send_json({"type": "agent_message", "text": clean})
+                        self.conversation_history.append({"role": "assistant", "content": clean})
+                        asyncio.create_task(db.save_message(self.session_id, "assistant", clean))
 
             async def on_disconnect():
                 logger.warning("🔄 Falling back to Nexus STT (Groq) engine")
@@ -152,6 +160,74 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 await self.safe_send_json({"type": "engine_mode", "mode": "groq"})
 
             await self.gemini_manager.connect(on_agent_message, on_disconnect)
+
+    async def execute_action(self, action_intent: dict, turn_id: int):
+        from core.capabilities import registry as cap_registry
+        from core.trace_emitter import emit_trace
+        action = action_intent["tool"]
+        params = {"target": action_intent.get("target", "")}
+
+        await emit_trace(self.websocket, "tool_selected", f"Selected tool: {action}", "🛠️", params)
+        perm = await cap_registry.check_permission("default_user", action)
+        res = {"success": False, "error": "Unknown action"}
+
+        if perm == "Deny":
+            confirmation = "That capability is currently disabled. Enable it in Settings."
+        elif perm == "Prompt":
+            await self.safe_send_json({
+                "type": "permission_request",
+                "tool_id": action,
+                "parameters": params
+            })
+            return
+        else:
+            cap_def = CAPABILITY_MAP.get(action)
+            if action.startswith("pc_"):
+                tool_params = {}
+                if cap_def and cap_def.target_param:
+                    tool_params[cap_def.target_param] = params.get("target", "")
+                res = await run_desktop_tool(
+                    action,
+                    params.get("target", ""),
+                    execute_pc_action(action, tool_params),
+                )
+            elif action.startswith("browser_"):
+                from tools.browser_tools import execute_browser_action
+                browser_params = {
+                    "url": params.get("target", ""),
+                    "query": params.get("target", ""),
+                    "target": params.get("target", ""),
+                    "selector": params.get("target", ""),
+                    "text": params.get("target", ""),
+                    "action": params.get("target", "")
+                }
+                res = await run_browser_tool(
+                    action,
+                    params.get("target", ""),
+                    execute_browser_action(action, browser_params),
+                )
+
+            target_name = params.get("target", "").title()
+            if res.get("success"):
+                template = CONFIRMATION_LABELS.get(action, "Done.")
+                if cap_def and cap_def.target_param and target_name:
+                    confirmation = template.replace("{target}", target_name)
+                else:
+                    confirmation = template.replace(" {target}.", ".").replace("{target}", "").strip() or "Done."
+            else:
+                confirmation = f"I couldn't do that. {res.get('error', '')}"
+
+        await emit_trace(self.websocket, "tool_result", confirmation, "✅")
+        await cap_registry.log_execution(
+            action, params,
+            "success" if perm == "Allow" and res.get("success") else "failed",
+            perm
+        )
+        await self.safe_send_json({"type": "agent_message", "text": confirmation, "is_final": True})
+        self.conversation_history.append({"role": "assistant", "content": confirmation})
+        await self.enqueue_tts(confirmation, turn_id=turn_id)
+        await self.tts_queue.put({"text": "", "turn_id": turn_id, "is_sentinel": True})
+        await self.update_workspace_state(status="completed")
 
     async def update_workspace_state(self, active_capability=None, status="idle", verification_state=None):
         await broadcast_workspace_state(
@@ -257,6 +333,11 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
     )
 
     async def run_pipeline(self):
+        if self.engine == "gemini_live":
+            logger.info("INFO:nexus_ws:[MODE] GEMINI_LIVE — bypassing Groq pipeline")
+            self.audio_buffer.clear()
+            return
+
         if self.pipeline_lock.locked():
             self.audio_buffer.clear()
             return
@@ -459,73 +540,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
 
             if action_intent:
                 logger.info(f"🎯 [ACTION ROUTER] Intercepted intent: '{transcript[:50]}'")
-                action = action_intent["tool"]
-                params = {"target": action_intent.get("target", "")}
-
-                await emit_trace(self.websocket, "tool_selected", f"Selected tool: {action}", "🛠️", params)
-                perm = await cap_registry.check_permission("default_user", action)
-                res = {"success": False, "error": "Unknown action"}
-
-                if perm == "Deny":
-                    confirmation = "That capability is currently disabled. Enable it in Settings."
-                elif perm == "Prompt":
-                    await self.safe_send_json({
-                        "type": "permission_request",
-                        "tool_id": action,
-                        "parameters": params
-                    })
-                    return
-                else:
-                    cap_def = CAPABILITY_MAP.get(action)
-                    if action.startswith("pc_"):
-                        # Use target_param from the registry — no hardcoded if/elif lists
-                        tool_params = {}
-                        if cap_def and cap_def.target_param:
-                            tool_params[cap_def.target_param] = params.get("target", "")
-                        # Phase 4: mandatory execution hook — timing + contract validate + verification DB write
-                        res = await run_desktop_tool(
-                            action,
-                            params.get("target", ""),
-                            execute_pc_action(action, tool_params),
-                        )
-                    elif action.startswith("browser_"):
-                        from tools.browser_tools import execute_browser_action
-                        browser_params = {
-                            "url": params.get("target", ""),
-                            "query": params.get("target", ""),
-                            "target": params.get("target", ""),
-                            "selector": params.get("target", ""),
-                            "text": params.get("target", ""),
-                            "action": params.get("target", "")
-                        }
-                        res = await run_browser_tool(
-                            action,
-                            params.get("target", ""),
-                            execute_browser_action(action, browser_params),
-                        )
-
-                    target_name = params.get("target", "").title()
-                    if res.get("success"):
-                        # Build confirmation from the registry template — no inline labels needed
-                        template = CONFIRMATION_LABELS.get(action, "Done.")
-                        if cap_def and cap_def.target_param and target_name:
-                            confirmation = template.replace("{target}", target_name)
-                        else:
-                            confirmation = template.replace(" {target}.", ".").replace("{target}", "").strip() or "Done."
-                    else:
-                        confirmation = f"I couldn't do that. {res.get('error', '')}"
-
-                await emit_trace(self.websocket, "tool_result", confirmation, "✅")
-                await cap_registry.log_execution(
-                    action, params,
-                    "success" if perm == "Allow" and res.get("success") else "failed",
-                    perm
-                )
-                await self.safe_send_json({"type": "agent_message", "text": confirmation, "is_final": True})
-                self.conversation_history.append({"role": "assistant", "content": confirmation})
-                await self.enqueue_tts(confirmation, turn_id=turn_id)
-                await self.tts_queue.put({"text": "", "turn_id": turn_id, "is_sentinel": True})
-                await self.update_workspace_state(status="completed")
+                await self.execute_action(action_intent, turn_id=turn_id)
                 return
 
             # If engine is Gemini Live and CHAT intent, delegate

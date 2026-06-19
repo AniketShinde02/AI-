@@ -84,7 +84,7 @@ class GeminiLiveSessionManager:
             async with self._send_lock:
                 raw_logger.debug(f"[OUTBOUND AUDIO] [Session: {self.session_id}] [Func: send_audio] Size: {len(pcm_data)} bytes")
                 await self.session.send_realtime_input(
-                    audio=types.Blob(
+                    media=types.Blob(
                         mime_type="audio/pcm;rate=16000",
                         data=pcm_data
                     )
