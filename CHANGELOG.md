@@ -1,3 +1,37 @@
+## [2026-06-19] — Nexus V1 Final Stabilization & Agent Foundation
+
+### Author
+- Antigravity AI
+- Machine: JinWoo
+
+### Added
+- **`core/browser_agent.py`** (Phase B+C+D+E): Complete rewrite — DOM snapshot extraction (visible text, buttons, inputs, links), accessibility tree snapshot (role, label, coordinates), Observe→Decide→Execute→Verify loop per action, goal-oriented `run_browser_task()` multi-step agent execution, smart click with selector + text fallback, BrowserMemory dataclass tracking current_url, page_title, last_action, step_history, session_state. Isolated Playwright profile maintained (data/browser_profile — never touches user Chrome).
+- **`test_v1.py`** (Phase F): Replaced simple unit tests with 5 task-based integration tests: Desktop Notepad automation, Browser YouTube search, Browser GitHub repo search, Vision pipeline component verification, Camera + STT safety guard verification.
+
+### Changed
+- **`ws_main.py`** (P3): Added `asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())` at startup — fixes Playwright subprocess `NotImplementedError` on Windows Python 3.12 with uvicorn.
+- **`api/websocket_routes.py`** (P0): In `/ws/gemini-live` bytes handler — raw PCM audio now streams directly to `gemini_manager.send_audio()` in real-time (parallel to local VAD). Removes latency gap where audio had to complete STT before Gemini could start. Added `VISION_FRAME_RECEIVED` logging for P1 vision pipeline traceability.
+- **`core/voice_session.py`** (P0): `run_pipeline()` now skips `speech_cleaner` (a Groq LLM call) when `engine == "gemini_live"` — saves 400–600ms latency + one redundant Groq API call per voice turn.
+- **`core/action_router.py`** (P2 STT Safety): Added Devanagari script ratio guard — if transcript contains >30% Devanagari characters AND matched tool is `pc_press_shortcut`, `pc_type_text`, or `pc_close_app`, the action is rejected. Prevents "यह शिफ्ट हो रहा है" triggering Shift key press.
+- **`core/gemini_live_manager.py`** (P1): Added `VISION_FRAME_RECEIVED`, `VISION_FRAME_FORWARDED`, and `[OUTBOUND VIDEO]` raw logging to `send_video_frame()`. Added not-connected guard log.
+- **`prompts.py`** (P1): Added `VISION & REAL-TIME INPUT [CRITICAL]` section to Gemini Live system instruction — explicitly tells the model it IS receiving a live video stream and must describe what it sees instead of saying "I can't see you."
+- **`frontend/src/components/GeminiVision.tsx`** (P1): Frame extraction now uses `activeEngine` (WS-confirmed at runtime) instead of `voiceEngine` (localStorage-sourced, may be stale). Added `VISION_FRAME_CAPTURED` console log with frame count and size. Fixed fallback canvas height calculation (|| 360 guard).
+- **`frontend/src/hooks/useNexusVoice.ts`** (P1): Added `VISION_FRAME_SENT` and `VISION_FRAME_SENT DROPPED` debug logs in nexus_vision_frame event handler.
+- **`frontend/src/contexts/NexusContext.tsx`** (P1): Added `activeEngine` (WS-confirmed) to `NexusContextType` interface, destructured from `VoiceContext`, and exposed in provider value — enables any component to use the real-time engine state.
+- **`core/execution_hooks.py`** (Phase D/P6): `broadcast_workspace_state()` now accepts and emits `tool_target`, `execution_time`, `last_result`, and `browser_memory` (from `browser_agent.get_workspace_state()`). `wrap_execution()` passes these values post-execution for richer Agent Workspace panel data.
+
+### Fixed
+- P0: Gemini Live no longer calls Groq speech_cleaner LLM when active (was adding 400–600ms latency per voice turn)
+- P0: Raw PCM audio now streams to Gemini Live in real-time instead of waiting for STT completion
+- P1: Vision frames now dispatched when `activeEngine === 'gemini_live'` (WS-confirmed) even if localStorage `voiceEngine` hasn't loaded yet
+- P2: Hindi/Marathi keyboard action false positives eliminated by Devanagari ratio guard
+- P3: Playwright subprocess creation on Windows fixed via ProactorEventLoop policy
+
+### Notes
+- Brain V2 (Router → Capability Retrieval → Planner → Executor → Verifier → Memory) prerequisites are now met: Gemini ownership fixed, Browser agent upgraded, Verification layer complete, Workspace state complete, Playwright stable.
+- Full E2E vision tests (Tasks 4 & 5) require a live Gemini Live WS session + camera/screen share hardware.
+- Browser task execution (Tasks 2 & 3) require Playwright chromium installed: `playwright install chromium`
+
 ## [2026-06-19] — Firebase Admin Initialization & Credentials Repair
 
 ### Author

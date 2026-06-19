@@ -13,8 +13,10 @@ export function GeminiVision({ source }: GeminiVisionProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  const { voiceEngine } = useNexus();
-  const isGeminiLive = voiceEngine === 'gemini_live';
+  const { voiceEngine, activeEngine } = useNexus();
+  // P1 FIX: Use WS-confirmed activeEngine for frame dispatch, not the localStorage-sourced
+  // voiceEngine which may be stale during the first render window after page load.
+  const isGeminiLive = activeEngine === 'gemini_live' || voiceEngine === 'gemini_live';
 
   const dispatchStatus = (message: string) => {
     window.dispatchEvent(new CustomEvent("nexus_status_event", { detail: { message } }));
@@ -68,10 +70,11 @@ export function GeminiVision({ source }: GeminiVisionProps) {
     };
   }, [source]);
 
-  // Extract frames every 1s if Gemini Live is active
+  // Extract frames every 1s if Gemini Live is active (use WS-confirmed activeEngine)
   useEffect(() => {
     if (!isGeminiLive || source === 'off') return;
     
+    let frameCount = 0;
     const interval = setInterval(() => {
       const canvas = canvasRef.current;
       const video = videoRef.current;
@@ -81,16 +84,20 @@ export function GeminiVision({ source }: GeminiVisionProps) {
 
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
         canvas.width = 640;
-        canvas.height = Math.floor((video.videoHeight / video.videoWidth) * 640);
+        canvas.height = Math.floor((video.videoHeight / video.videoWidth) * 640) || 360;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         const base64Jpeg = canvas.toDataURL("image/jpeg", 0.5).split(",")[1];
+        frameCount++;
+        // P1 LOGGING: Track frame production in browser console
+        console.log(`[VISION_FRAME_CAPTURED] source=${source} frame=${frameCount} size=${base64Jpeg.length} activeEngine=${activeEngine}`);
         window.dispatchEvent(new CustomEvent("nexus_vision_frame", { detail: { frame: base64Jpeg } }));
       }
     }, 1000); // 1 FPS
 
     return () => clearInterval(interval);
-  }, [isGeminiLive, source]);
+  }, [isGeminiLive, source, activeEngine]);
+
 
   if (source === 'off') return null;
 

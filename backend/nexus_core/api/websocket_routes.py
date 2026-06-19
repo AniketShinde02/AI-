@@ -171,9 +171,12 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
             if "disconnect" in data:
                 break
             elif "bytes" in data and data["bytes"] is not None:
-                # Flow: Speech -> Intent Classifier.
-                # ALL audio goes to local process_audio -> VAD -> STT -> Intent Router
-                # Gemini ONLY receives transcript if Intent == CHAT.
+                # P0 FIX: When Gemini Live is active and connected, stream raw PCM directly
+                # to Gemini in real-time for immediate multimodal understanding.
+                # Local VAD + STT still runs for capability detection ONLY (Option A).
+                if session.engine == "gemini_live" and session.gemini_manager and session.gemini_manager.is_connected:
+                    asyncio.create_task(session.gemini_manager.send_audio(data["bytes"]))
+                # Always run local VAD for state management and capability intent detection
                 try:
                     await session.process_audio(data["bytes"])
                 except Exception as e:
@@ -181,8 +184,11 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
             elif "text" in data and data["text"] is not None:
                 msg = json.loads(data["text"])
                 if msg.get("type") == "vision_frame":
+                    # P1 LOGGING: Vision frame received at backend
+                    frame_data = msg.get("data", "")
+                    logger.info(f"[VISION_FRAME_RECEIVED] size_b64={len(frame_data)} gemini_connected={bool(session.gemini_manager and session.gemini_manager.is_connected)}")
                     if session.gemini_manager and session.gemini_manager.is_connected:
-                        await session.gemini_manager.send_video_frame(msg.get("data"))
+                        await session.gemini_manager.send_video_frame(frame_data)
                     continue
                 if msg.get("type") == "ping":
                     await session.safe_send_json({"type": "pong", "timestamp": msg.get("timestamp")})

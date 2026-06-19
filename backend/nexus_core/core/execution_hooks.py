@@ -43,6 +43,10 @@ async def broadcast_workspace_state(
     status: str = "idle",
     verification_state: Optional[str] = None,
     current_task: Optional[str] = None,
+    tool_target: Optional[str] = None,
+    execution_time: Optional[str] = None,
+    last_result: Optional[str] = None,
+    browser_state: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Broadcast current workspace state updates to all active client WebSocket sessions."""
     try:
@@ -70,20 +74,28 @@ async def broadcast_workspace_state(
 
             task = current_task or getattr(session, "current_task", None)
 
+            # Phase D: Include browser memory state if available
+            browser_memory = browser_state or browser_agent.get_workspace_state()
+
             payload = {
                 "type": "workspace_state",
                 "data": {
                     "current_task": task,
                     "active_capability": active_capability,
+                    "tool_target": tool_target,
+                    "execution_time": execution_time,
+                    "last_result": last_result,
                     "status": status,
                     "verification_state": verification_state,
                     "active_window": active_window_title,
                     "browser_screenshot": browser_screenshot,
+                    "browser_memory": browser_memory,
                 }
             }
             await session.safe_send_json(payload)
     except Exception as e:
         logger.error(f"❌ Failed to broadcast workspace state: {e}", exc_info=True)
+
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +173,8 @@ async def wrap_execution(
     await broadcast_workspace_state(
         active_capability=tool_id,
         status="running",
-        verification_state="pending"
+        verification_state="pending",
+        tool_target=target,
     )
 
     t_start = time.perf_counter()
@@ -199,13 +212,18 @@ async def wrap_execution(
 
     v_state = "passed" if contract.get("success") and contract.get("verified") else "failed"
     status_state = "completed" if contract.get("success") else "failed"
+    result_summary = str(contract.get("result") or contract.get("error") or "")[:200]
     await broadcast_workspace_state(
         active_capability=tool_id,
         status=status_state,
-        verification_state=v_state
+        verification_state=v_state,
+        tool_target=target,
+        execution_time=contract.get("execution_time"),
+        last_result=result_summary,
     )
 
     return contract
+
 
 
 # ---------------------------------------------------------------------------

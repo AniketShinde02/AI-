@@ -52,6 +52,8 @@ interface NexusContextType {
   setLanguage: (lang: string) => void;
   voiceEngine: string;
   setVoiceEngine: (engine: string) => void;
+  // WS-confirmed active engine (use this for real-time decisions, not voiceEngine)
+  activeEngine: string;
   voice: string;
   setVoice: (voice: string) => void;
   speed: number;
@@ -228,6 +230,7 @@ export function NexusProvider({ children }: { children: ReactNode }) {
     isListening: voiceIsListening,
     micCaptured,
     isSpeaking,
+    activeEngine,
     systemMetrics,
     workspaceState,
     startListening,
@@ -328,6 +331,7 @@ export function NexusProvider({ children }: { children: ReactNode }) {
       setLanguage,
       voiceEngine,
       setVoiceEngine,
+      activeEngine,
       voice,
       setVoice: setVoicePersist,
       speed,

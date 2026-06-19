@@ -110,11 +110,15 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     const handleVisionFrame = (e: any) => {
       const frameBase64 = e.detail?.frame;
       if (frameBase64 && socketRef.current?.readyState === WebSocket.OPEN) {
+        // P1 LOGGING: Track frame transmission via WS
+        logger.debug(`[VISION_FRAME_SENT] size=${frameBase64.length} ws_state=OPEN`);
         socketRef.current.send(JSON.stringify({
           type: "vision_frame",
           mime_type: "image/jpeg",
           data: frameBase64
         }));
+      } else if (frameBase64) {
+        logger.warn(`[VISION_FRAME_SENT] DROPPED — WS not open (state=${socketRef.current?.readyState})`);
       }
     };
     window.addEventListener("nexus_vision_frame", handleVisionFrame);

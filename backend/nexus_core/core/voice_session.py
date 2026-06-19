@@ -364,12 +364,15 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 logger.info(f"🗑 Rejected suspect transcript: {transcript}")
                 return
 
-            transcript = await speech_cleaner.clean(transcript)
-            logger.info(f"📝 Final STT Text: '{transcript}'")
+            # P0 FIX: Skip speech_cleaner (Groq LLM call) for Gemini Live — it has its own
+            # natural language understanding. We only need the raw transcript for ActionRouter.
+            if self.engine != "gemini_live":
+                transcript = await speech_cleaner.clean(transcript)
+                if not transcript or len(transcript) < 2:
+                    logger.info("🗑 Rejected transcript after cleanup.")
+                    return
 
-            if not transcript or len(transcript) < 2:
-                logger.info("🗑 Rejected transcript after cleanup.")
-                return
+            logger.info(f"📝 Final STT Text: '{transcript}' [engine={self.engine}]")
 
             # Phase 8: Echo Cancellation
             from difflib import SequenceMatcher

@@ -1,3 +1,12 @@
+import sys
+import asyncio
+
+# CRITICAL: Playwright on Windows requires ProactorEventLoop to launch subprocesses.
+# SelectorEventLoop (Python 3.12 default on Windows) raises NotImplementedError
+# in asyncio.base_events._make_subprocess_transport.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

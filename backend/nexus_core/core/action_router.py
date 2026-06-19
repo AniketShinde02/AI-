@@ -93,6 +93,19 @@ Strict Output JSON Schema:
             
             # Standardize string representations of null states
             if tool and tool not in ("null", "None"):
+                # P2 STT SAFETY: Block destructive/keyboard actions when input is predominantly
+                # Devanagari (Hindi/Marathi). "शिफ्ट हो रहा है" ≠ press Shift key.
+                DESTRUCTIVE_TOOLS = {"pc_press_shortcut", "pc_type_text", "pc_close_app"}
+                if tool in DESTRUCTIVE_TOOLS:
+                    devanagari_chars = sum(1 for c in text if '\u0900' <= c <= '\u097f')
+                    total_alpha = max(len([c for c in text if c.isalpha()]), 1)
+                    devanagari_ratio = devanagari_chars / total_alpha
+                    if devanagari_ratio > 0.30:
+                        logger.warning(
+                            f"🛡️ [STT Safety] Rejected '{tool}' for high-Devanagari input "
+                            f"({devanagari_ratio:.0%} Devanagari): '{text[:60]}'"
+                        )
+                        return None  # Requires explicit English confirmation to execute
                 return {
                     "intent": "ACTION",
                     "tool": tool,

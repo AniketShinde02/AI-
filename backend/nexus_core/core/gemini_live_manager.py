@@ -96,12 +96,15 @@ class GeminiLiveSessionManager:
 
     async def send_video_frame(self, frame_b64: str):
         if not self.is_connected or not self.session:
+            logger.debug("[VISION_FRAME_FORWARDED] Skipped — Gemini Live not connected")
             return
         
         try:
             # Decode base64 to raw bytes
             frame_bytes = base64.b64decode(frame_b64)
             async with self._send_lock:
+                raw_logger.debug(f"[OUTBOUND VIDEO] [Session: {self.session_id}] [Func: send_video_frame] Size: {len(frame_bytes)} bytes")
+                logger.info(f"[VISION_FRAME_FORWARDED] size={len(frame_bytes)}B session={self.session_id}")
                 await self.session.send_realtime_input(
                     video=types.Blob(
                         mime_type="image/jpeg",
