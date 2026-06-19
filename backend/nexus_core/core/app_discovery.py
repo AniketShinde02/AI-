@@ -12,8 +12,43 @@ async def run_discovery():
     """
     Run App Discovery via PowerShell Get-StartApps to find installed apps.
     Satisfies Rule 3 (Auto Discovery) and Rule 10 (EXE Thinking).
+
+    TTL: Only re-scans if no apps exist in DB OR last discovery was >24 hours ago.
+    This prevents the expensive PowerShell + .lnk scan on every server restart.
     """
+    import time
+
+    # ── TTL Cache Check ──────────────────────────────────────────────────────
+    REDISCOVERY_TTL_SECONDS = 86400  # 24 hours
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute(
+                "SELECT COUNT(*), MAX(discovered_at) FROM discovered_apps"
+            ) as cursor:
+                row = await cursor.fetchone()
+                app_count = row[0] if row else 0
+                last_discovered_str = row[1] if row else None
+
+        if app_count > 0 and last_discovered_str:
+            try:
+                from datetime import datetime, timezone
+                # Handle ISO format timestamps from SQLite
+                last_ts = datetime.fromisoformat(last_discovered_str.replace("Z", "+00:00"))
+                age_seconds = (datetime.now(timezone.utc) - last_ts).total_seconds()
+                if age_seconds < REDISCOVERY_TTL_SECONDS:
+                    logger.info(
+                        f"⏩ App discovery skipped — {app_count} apps already in DB "
+                        f"(last scan {age_seconds/3600:.1f}h ago, TTL={REDISCOVERY_TTL_SECONDS/3600:.0f}h)"
+                    )
+                    return
+            except Exception:
+                pass  # If timestamp parse fails, proceed with rediscovery
+    except Exception as e:
+        logger.warning(f"App discovery TTL check failed, proceeding with scan: {e}")
+    # ────────────────────────────────────────────────────────────────────────
+
     logger.info("🔍 Running background app discovery...")
+
     
     def _fetch_apps():
         discovered = []
@@ -101,11 +136,11 @@ async def run_discovery():
                         VALUES (?, ?, ?, ?)
                         ON CONFLICT(app_name) DO UPDATE SET 
                             executable_path=excluded.executable_path, 
-                            aliases=excluded.aliases
+                            aliases=excluded.aliases,
+                            discovered_at=CURRENT_TIMESTAMP
                     """, (name, executable_path, json.dumps(aliases), ""))
-                except Exception as e:
-                    # Fallback for old schema without JSON aliases if migration hasn't completed
-                    pass
+                except Exception:
+                    pass  # Fallback for old schema without JSON aliases
             await db.commit()
 
     await _save_apps(apps)
