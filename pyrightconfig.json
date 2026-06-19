@@ -3,11 +3,11 @@
     "venv": "venv",
     "include": [
         "backend",
-        "backend/voice_agent"
+        "backend/nexus_core"
     ],
     "extraPaths": [
         "d:/AI/backend",
-        "d:/AI/backend/voice_agent"
+        "d:/AI/backend/nexus_core"
     ],
     "typeCheckingMode": "basic",
     "useLibraryCodeForTypes": true,

@@ -10,7 +10,7 @@
 
 The project follows a clean **Modular Context Planning** structure:
 - **Core Engine**: `code-review-graph` handles codebase intelligence and wiki generation.
-- **Backend Hub**: `backend/voice_agent/` acts as the RTC bridge using `vision_agents`.
+- **Backend Hub**: `backend/nexus_core/` acts as the voice assistant engine.
 - **Frontend Hub**: Next.js + tRPC + Stream SDK for the premium UI.
 - **Context Orchestration**: `sync-context.ps1` bridges the intelligence layer with the runtime.
 

@@ -1,6 +1,6 @@
-# NEXUS DESKTOP AI OS — MASTER ARCHITECTURE REPORT
+﻿# NEXUS DESKTOP AI OS â€” MASTER ARCHITECTURE REPORT
 > Generated: 2026-06-17 | Sources: Live codebase audit + 52 web research sources
-> Status: ARCHITECTURE AND ANALYSIS ONLY — NO CODE CHANGES
+> Status: ARCHITECTURE AND ANALYSIS ONLY â€” NO CODE CHANGES
 
 ---
 
@@ -58,36 +58,36 @@ Scanned via direct file analysis. Key findings:
 
 ```
 d:\AI\
-├── frontend/           Next.js 16.2 app (React 19 + Tailwind)
-├── backend/
-│   ├── voice_agent/    ACTIVE — Primary FastAPI backend (ws_main.py = 70KB god file)
-│   │   ├── ws_main.py  — 70,576 bytes. Single entry point. Contains ALL routes.
-│   │   ├── core/       — 10 Python files, mostly unimported by ws_main.py
-│   │   ├── providers/  — STT, TTS providers (active)
-│   │   ├── tools/      — Tool registry (active)
-│   │   ├── experimental/ — 1 file (gemini_live_voice.py). NOT imported.
-│   │   ├── archive_experiments/ — 1 file (main.py). GetStream experiment. DEAD.
-│   │   └── venv/       — Python virtualenv (not to be committed)
-│   └── src/backend/    — Separate backend (legacy, NOT used by current voice system)
-├── Scrapper OS/        — Separate agent project. Standalone Python. Isolated.
-├── hermes-agent/       — Full open-source AI CLI agent clone. NOT Nexus code.
-├── windows_agent/      — Single subfolder (experiments/gemini_live). DEAD.
-├── IRIS-AI-main/       — Competitor reference. NOT Nexus code.
-├── Stonic-AI-Source-Code/ — Competitor reference. NOT Nexus code.
-├── Nexus website/      — Separate marketing Next.js site. DEAD relative to current work.
-├── experiments/        — 1 folder (gemini_live). DEAD.
-├── NEXUS_BACKUPS/      — Stale backup. Review date.
-└── docs/               — 21 markdown files (many obsolete — see Section 9)
+â”œâ”€â”€ frontend/           Next.js 16.2 app (React 19 + Tailwind)
+â”œâ”€â”€ backend/
+â”‚   â”œâ”€â”€ nexus_core/    ACTIVE â€” Primary FastAPI backend (ws_main.py = 70KB god file)
+â”‚   â”‚   â”œâ”€â”€ ws_main.py  â€” 70,576 bytes. Single entry point. Contains ALL routes.
+â”‚   â”‚   â”œâ”€â”€ core/       â€” 10 Python files, mostly unimported by ws_main.py
+â”‚   â”‚   â”œâ”€â”€ providers/  â€” STT, TTS providers (active)
+â”‚   â”‚   â”œâ”€â”€ tools/      â€” Tool registry (active)
+â”‚   â”‚   â”œâ”€â”€ experimental/ â€” 1 file (gemini_live_voice.py). NOT imported.
+â”‚   â”‚   â”œâ”€â”€ archive_experiments/ â€” 1 file (main.py). GetStream experiment. DEAD.
+â”‚   â”‚   â””â”€â”€ venv/       â€” Python virtualenv (not to be committed)
+â”‚   â””â”€â”€ src/backend/    â€” Separate backend (legacy, NOT used by current voice system)
+â”œâ”€â”€ Scrapper OS/        â€” Separate agent project. Standalone Python. Isolated.
+â”œâ”€â”€ hermes-agent/       â€” Full open-source AI CLI agent clone. NOT Nexus code.
+â”œâ”€â”€ windows_agent/      â€” Single subfolder (experiments/gemini_live). DEAD.
+â”œâ”€â”€ IRIS-AI-main/       â€” Competitor reference. NOT Nexus code.
+â”œâ”€â”€ Stonic-AI-Source-Code/ â€” Competitor reference. NOT Nexus code.
+â”œâ”€â”€ Nexus website/      â€” Separate marketing Next.js site. DEAD relative to current work.
+â”œâ”€â”€ experiments/        â€” 1 folder (gemini_live). DEAD.
+â”œâ”€â”€ NEXUS_BACKUPS/      â€” Stale backup. Review date.
+â””â”€â”€ docs/               â€” 21 markdown files (many obsolete â€” see Section 9)
 ```
 
-### Backend Voice Agent — `ws_main.py` Architecture
+### Backend Voice Agent â€” `ws_main.py` Architecture
 
 `ws_main.py` is a **70KB god file** serving as:
 1. FastAPI application entry point
 2. WebSocket server (`/ws/nexus`, `/ws/gemini-live`)
 3. STT pipeline orchestrator
 4. VAD (Voice Activity Detection) controller
-5. LLM routing logic (Groq → Gemini fallback)
+5. LLM routing logic (Groq â†’ Gemini fallback)
 6. TTS routing dispatcher
 7. Memory extraction trigger
 8. Tool registry + executor
@@ -100,32 +100,32 @@ This is the **highest priority technical debt item** in the entire repository. E
 
 ```
 frontend/src/
-├── app/
-│   ├── page.tsx           — Dashboard (23KB god component)
-│   ├── agents/            — Static mock UI (no backend)
-│   ├── automation/        — Static mock UI (no backend)
-│   ├── chat/              — Partially wired
-│   ├── memory/            — Partially wired
-│   ├── trace/             — No data pipeline
-│   ├── settings/          — Static
-│   └── api/               — Multiple API routes (chat, groq, stream, trpc, suggestions)
-├── components/
-│   ├── ThreeOrb.tsx       — ACTIVE (3D orb on dashboard)
-│   ├── NexusOrb.tsx       — DEAD (replaced by ThreeOrb.tsx)
-│   ├── LightOrb.tsx       — DEAD (experimental orb)
-│   ├── Header.tsx         — DEAD (replaced by TopNav.tsx)
-│   ├── Sidebar.tsx        — DEAD (not used in layout.tsx)
-│   ├── InputArea.tsx      — ACTIVE
-│   ├── GeminiVision.tsx   — ACTIVE (camera/screen)
-│   ├── SystemLogs.tsx     — ACTIVE
-│   └── SystemTelemetry.tsx — ACTIVE
-├── hooks/
-│   ├── useNexusVoice.ts   — ACTIVE (21KB, primary WebSocket hook)
-│   └── useHealthCheck.ts  — ACTIVE
-└── lib/
-    ├── firebase/          — WIRED (Firebase Admin for API routes)
-    ├── trpc/              — WIRED (tRPC router, but minimal usage)
-    └── stream.ts          — WIRED (GetStream, but experimental only)
+â”œâ”€â”€ app/
+â”‚   â”œâ”€â”€ page.tsx           â€” Dashboard (23KB god component)
+â”‚   â”œâ”€â”€ agents/            â€” Static mock UI (no backend)
+â”‚   â”œâ”€â”€ automation/        â€” Static mock UI (no backend)
+â”‚   â”œâ”€â”€ chat/              â€” Partially wired
+â”‚   â”œâ”€â”€ memory/            â€” Partially wired
+â”‚   â”œâ”€â”€ trace/             â€” No data pipeline
+â”‚   â”œâ”€â”€ settings/          â€” Static
+â”‚   â””â”€â”€ api/               â€” Multiple API routes (chat, groq, stream, trpc, suggestions)
+â”œâ”€â”€ components/
+â”‚   â”œâ”€â”€ ThreeOrb.tsx       â€” ACTIVE (3D orb on dashboard)
+â”‚   â”œâ”€â”€ NexusOrb.tsx       â€” DEAD (replaced by ThreeOrb.tsx)
+â”‚   â”œâ”€â”€ LightOrb.tsx       â€” DEAD (experimental orb)
+â”‚   â”œâ”€â”€ Header.tsx         â€” DEAD (replaced by TopNav.tsx)
+â”‚   â”œâ”€â”€ Sidebar.tsx        â€” DEAD (not used in layout.tsx)
+â”‚   â”œâ”€â”€ InputArea.tsx      â€” ACTIVE
+â”‚   â”œâ”€â”€ GeminiVision.tsx   â€” ACTIVE (camera/screen)
+â”‚   â”œâ”€â”€ SystemLogs.tsx     â€” ACTIVE
+â”‚   â””â”€â”€ SystemTelemetry.tsx â€” ACTIVE
+â”œâ”€â”€ hooks/
+â”‚   â”œâ”€â”€ useNexusVoice.ts   â€” ACTIVE (21KB, primary WebSocket hook)
+â”‚   â””â”€â”€ useHealthCheck.ts  â€” ACTIVE
+â””â”€â”€ lib/
+    â”œâ”€â”€ firebase/          â€” WIRED (Firebase Admin for API routes)
+    â”œâ”€â”€ trpc/              â€” WIRED (tRPC router, but minimal usage)
+    â””â”€â”€ stream.ts          â€” WIRED (GetStream, but experimental only)
 ```
 
 ---
@@ -134,12 +134,12 @@ frontend/src/
 
 | Folder | Purpose | Status | Used By | Dependencies |
 |--------|---------|--------|---------|--------------|
-| `backend/voice_agent/` | Primary voice AI backend | **ACTIVE** | Frontend WS | Groq, Gemini, EdgeTTS, silero-vad |
-| `backend/voice_agent/core/` | Core utilities | **MIXED** | ws_main.py partially | See Dead Code section |
-| `backend/voice_agent/providers/` | STT/TTS provider implementations | **ACTIVE** | ws_main.py | Groq, edge-tts, imageio-ffmpeg |
-| `backend/voice_agent/tools/` | LLM tool definitions | **ACTIVE** | ws_main.py | pyautogui, psutil |
-| `backend/voice_agent/experimental/` | Gemini Live experiments | **DEAD** | Nothing | — |
-| `backend/voice_agent/archive_experiments/` | GetStream+Kokoro experiment | **DEAD** | Nothing | vision-agents, getstream |
+| `backend/nexus_core/` | Primary voice AI backend | **ACTIVE** | Frontend WS | Groq, Gemini, EdgeTTS, silero-vad |
+| `backend/nexus_core/core/` | Core utilities | **MIXED** | ws_main.py partially | See Dead Code section |
+| `backend/nexus_core/providers/` | STT/TTS provider implementations | **ACTIVE** | ws_main.py | Groq, edge-tts, imageio-ffmpeg |
+| `backend/nexus_core/tools/` | LLM tool definitions | **ACTIVE** | ws_main.py | pyautogui, psutil |
+| `backend/nexus_core/experimental/` | Gemini Live experiments | **DEAD** | Nothing | â€” |
+| `backend/nexus_core/archive_experiments/` | GetStream+Kokoro experiment | **DEAD** | Nothing | vision-agents, getstream |
 | `backend/src/backend/` | Legacy backend (pre-refactor) | **DEAD** | Nothing | Firebase, Firestore |
 | `frontend/src/` | Next.js UI | **ACTIVE** | User | React, Three.js, tRPC |
 | `frontend/src/lib/stream.ts` | GetStream integration | **DEAD** | Nothing active | @stream-io/video-react-sdk |
@@ -147,13 +147,13 @@ frontend/src/
 | `frontend/src/lib/firebase/` | Firebase Admin | **ACTIVE** | `/api/chat` route | firebase-admin |
 | `Scrapper OS/` | Standalone scraping agents | **ISOLATED** | Nothing (separate project) | Playwright/Puppeteer |
 | `hermes-agent/` | Hermes reference implementation | **REFERENCE ONLY** | Nothing | Complex (CLI framework) |
-| `IRIS-AI-main/` | IRIS AI reference | **REFERENCE ONLY** | Nothing | — |
-| `Stonic-AI-Source-Code/` | Stonic AI reference | **REFERENCE ONLY** | Nothing | — |
+| `IRIS-AI-main/` | IRIS AI reference | **REFERENCE ONLY** | Nothing | â€” |
+| `Stonic-AI-Source-Code/` | Stonic AI reference | **REFERENCE ONLY** | Nothing | â€” |
 | `Nexus website/` | Marketing site | **DEAD** | Nothing | Next.js (separate) |
-| `windows_agent/` | Windows automation experiment | **DEAD** | Nothing | — |
-| `experiments/` | Gemini Live experiment | **DEAD** | Nothing | — |
-| `NEXUS_BACKUPS/` | Frontend backup | **STALE** | Nothing | — |
-| `docs/` | Documentation | **MIXED** | Humans only | — |
+| `windows_agent/` | Windows automation experiment | **DEAD** | Nothing | â€” |
+| `experiments/` | Gemini Live experiment | **DEAD** | Nothing | â€” |
+| `NEXUS_BACKUPS/` | Frontend backup | **STALE** | Nothing | â€” |
+| `docs/` | Documentation | **MIXED** | Humans only | â€” |
 
 ---
 
@@ -210,44 +210,44 @@ The following modules are confirmed to be in the **active execution path**:
 ### Backend Dead Code
 | File | Reason | Action |
 |------|--------|--------|
-| `core/call_manager.py` | Uses `vision_agents.plugins.getstream` — experimental framework abandoned | **ARCHIVE** |
-| `core/database.py` | Firebase/Firestore DB layer — no route in ws_main.py calls this | **ARCHIVE** |
-| `core/usage.py` | Usage tracking stub — not called anywhere in ws_main.py | **ARCHIVE** |
-| `core/registry.py` | Agent registry — not called anywhere in ws_main.py | **ARCHIVE** |
-| `core/concurrency.py` | 640-byte concurrency util — not imported | **ARCHIVE** |
-| `core/memory.py` | Duplicate memory file — `memory_manager.py` is the active one | **ARCHIVE** |
-| `experimental/gemini_live_voice.py` | Standalone Gemini Live experiment — superseded by `gemini_live_manager.py` | **ARCHIVE** |
-| `archive_experiments/main.py` | GetStream + Kokoro pipeline — obsolete architecture | **ARCHIVE** |
+| `core/call_manager.py` | Uses `vision_agents.plugins.getstream` â€” experimental framework abandoned | **ARCHIVE** |
+| `core/database.py` | Firebase/Firestore DB layer â€” no route in ws_main.py calls this | **ARCHIVE** |
+| `core/usage.py` | Usage tracking stub â€” not called anywhere in ws_main.py | **ARCHIVE** |
+| `core/registry.py` | Agent registry â€” not called anywhere in ws_main.py | **ARCHIVE** |
+| `core/concurrency.py` | 640-byte concurrency util â€” not imported | **ARCHIVE** |
+| `core/memory.py` | Duplicate memory file â€” `memory_manager.py` is the active one | **ARCHIVE** |
+| `experimental/gemini_live_voice.py` | Standalone Gemini Live experiment â€” superseded by `gemini_live_manager.py` | **ARCHIVE** |
+| `archive_experiments/main.py` | GetStream + Kokoro pipeline â€” obsolete architecture | **ARCHIVE** |
 | `test_voice_suite.py` | Manual tests, not in CI | **KEEP** (manual use only) |
 | `DEBUG_FORENSICS.txt` | Debug log file, no code | **DELETE** |
 
 ### Frontend Dead Code
 | File | Reason | Action |
 |------|--------|--------|
-| `components/NexusOrb.tsx` | Replaced by `ThreeOrb.tsx` — not imported anywhere | **ARCHIVE** |
-| `components/LightOrb.tsx` | Experimental orb — not imported anywhere | **ARCHIVE** |
+| `components/NexusOrb.tsx` | Replaced by `ThreeOrb.tsx` â€” not imported anywhere | **ARCHIVE** |
+| `components/LightOrb.tsx` | Experimental orb â€” not imported anywhere | **ARCHIVE** |
 | `components/Header.tsx` | Replaced by `layout/TopNav.tsx` | **ARCHIVE** |
 | `components/Sidebar.tsx` | Not in `layout.tsx`, not in any page | **ARCHIVE** |
-| `components/NexusStreamProvider.tsx` | GetStream provider — not used in layout | **ARCHIVE** |
-| `lib/stream.ts` | GetStream connection — no active usage | **ARCHIVE** |
-| `app/api/stream/` | GetStream token API — no active client consumption | **ARCHIVE** |
+| `components/NexusStreamProvider.tsx` | GetStream provider â€” not used in layout | **ARCHIVE** |
+| `lib/stream.ts` | GetStream connection â€” no active usage | **ARCHIVE** |
+| `app/api/stream/` | GetStream token API â€” no active client consumption | **ARCHIVE** |
 | `bones/` | Unknown stale folder | **INVESTIGATE then ARCHIVE** |
-| `app/api-docs/page.tsx` | Static API documentation page — not linked | **KEEP** (informational) |
+| `app/api-docs/page.tsx` | Static API documentation page â€” not linked | **KEEP** (informational) |
 
 ### Repository-Level Dead Folders
 | Folder | Action |
 |--------|--------|
-| `Nexus website/` | **ARCHIVE** — separate old marketing site |
-| `windows_agent/` | **ARCHIVE** — empty experiment |
-| `experiments/` | **ARCHIVE** — single gemini_live folder |
+| `Nexus website/` | **ARCHIVE** â€” separate old marketing site |
+| `windows_agent/` | **ARCHIVE** â€” empty experiment |
+| `experiments/` | **ARCHIVE** â€” single gemini_live folder |
 | `NEXUS_BACKUPS/` | **DELETE** after verifying date |
-| `backend/src/` | **ARCHIVE** — legacy backend, unused |
+| `backend/src/` | **ARCHIVE** â€” legacy backend, unused |
 
 ---
 
 ## 6. DUPLICATION REPORT
 
-### Memory System Duplication ❌
+### Memory System Duplication âŒ
 | File | Type | Status |
 |------|------|--------|
 | `core/memory.py` | JSON memory system (3218 bytes) | DEAD |
@@ -257,16 +257,16 @@ The following modules are confirmed to be in the **active execution path**:
 
 **Root Cause**: Two separate memory implementations co-exist. `memory.py` is likely an older version that was never removed when `memory_manager.py` was written.
 
-### TTS System Duplication ⚠️
+### TTS System Duplication âš ï¸
 | File | Status |
 |------|--------|
 | `providers/tts.py` | Base class + router |
 | `providers/tts_edge.py` | Edge TTS impl |
 | `providers/tts_gemini.py` | Gemini TTS impl |
 
-This is NOT duplication — it's the correct Provider pattern. No action needed.
+This is NOT duplication â€” it's the correct Provider pattern. No action needed.
 
-### Orb Component Duplication ❌
+### Orb Component Duplication âŒ
 | File | Status |
 |------|--------|
 | `components/NexusOrb.tsx` | DEAD |
@@ -275,10 +275,10 @@ This is NOT duplication — it's the correct Provider pattern. No action needed.
 
 Three orb implementations. Only one is used.
 
-### Backend Duplication ❌
+### Backend Duplication âŒ
 Two separate backend folders exist:
-- `backend/voice_agent/` — **ACTIVE**
-- `backend/src/backend/` — **DEAD** (legacy Firebase-based backend)
+- `backend/nexus_core/` â€” **ACTIVE**
+- `backend/src/backend/` â€” **DEAD** (legacy Firebase-based backend)
 
 ---
 
@@ -288,34 +288,34 @@ Two separate backend folders exist:
 
 | Package | Used? | Where | Action |
 |---------|-------|-------|--------|
-| `fastapi` | ✅ YES | ws_main.py | **KEEP** |
-| `uvicorn` | ✅ YES | ws_main.py | **KEEP** |
-| `python-dotenv` | ✅ YES | config.py | **KEEP** |
-| `groq` | ✅ YES | providers/stt.py, providers/llm.py | **KEEP** |
-| `google-genai` | ✅ YES | gemini_live_manager.py, providers/llm.py | **KEEP** |
-| `edge-tts` | ✅ YES | providers/tts_edge.py | **KEEP** |
-| `silero-vad` | ✅ YES | ws_main.py (VAD) | **KEEP** |
-| `imageio-ffmpeg` | ✅ YES | providers/tts_edge.py (PCM conversion) | **KEEP** |
-| `numpy` | ✅ YES | Audio processing | **KEEP** |
-| `pyautogui` | ✅ YES | tools/system.py | **KEEP** |
-| `psutil` | ✅ YES | SystemTelemetry endpoint | **KEEP** |
-| `python-multipart` | ✅ YES | FastAPI form data | **KEEP** |
-| `pydantic-settings` | ✅ YES | config.py | **KEEP** |
-| `httpx` | ✅ YES | Outbound API calls | **KEEP** |
-| `soundfile` | ✅ YES | Audio file I/O | **KEEP** |
-| `scipy` | ✅ YES | Audio resampling | **KEEP** |
-| `getstream` | ❌ NO | Only `archive_experiments/main.py` | **REMOVE** |
-| `vision-agents` | ❌ NO | Only `archive_experiments/main.py` | **REMOVE** |
-| `vision-agents-plugins-getstream` | ❌ NO | Archive only | **REMOVE** |
-| `elevenlabs` | ❌ NO | Not imported in any active file | **REMOVE** |
-| `redis` | ❌ NO | Not imported in any active file | **REMOVE** |
-| `aiortc` | ❌ NO | Old WebRTC experiment | **REMOVE** |
-| `kokoro-onnx` | ❌ NO | Archive experiments only | **REMOVE** |
-| `onnxruntime` | ⚠️ INDIRECT | Kokoro dependency. If Kokoro removed, review. | **REVIEW** |
-| `deepgram-sdk` | ❌ NO | Not imported anywhere | **REMOVE** |
-| `cartesia` | ❌ NO | Not in requirements.txt actually (remove from docs) | **REMOVE** |
-| `firebase_admin` | ⚠️ PARTIAL | `core/database.py` (DEAD). Remove along with database.py | **REMOVE** |
-| `firebase` (via venv) | ⚠️ PARTIAL | Only if database.py is removed | **REMOVE** |
+| `fastapi` | âœ… YES | ws_main.py | **KEEP** |
+| `uvicorn` | âœ… YES | ws_main.py | **KEEP** |
+| `python-dotenv` | âœ… YES | config.py | **KEEP** |
+| `groq` | âœ… YES | providers/stt.py, providers/llm.py | **KEEP** |
+| `google-genai` | âœ… YES | gemini_live_manager.py, providers/llm.py | **KEEP** |
+| `edge-tts` | âœ… YES | providers/tts_edge.py | **KEEP** |
+| `silero-vad` | âœ… YES | ws_main.py (VAD) | **KEEP** |
+| `imageio-ffmpeg` | âœ… YES | providers/tts_edge.py (PCM conversion) | **KEEP** |
+| `numpy` | âœ… YES | Audio processing | **KEEP** |
+| `pyautogui` | âœ… YES | tools/system.py | **KEEP** |
+| `psutil` | âœ… YES | SystemTelemetry endpoint | **KEEP** |
+| `python-multipart` | âœ… YES | FastAPI form data | **KEEP** |
+| `pydantic-settings` | âœ… YES | config.py | **KEEP** |
+| `httpx` | âœ… YES | Outbound API calls | **KEEP** |
+| `soundfile` | âœ… YES | Audio file I/O | **KEEP** |
+| `scipy` | âœ… YES | Audio resampling | **KEEP** |
+| `getstream` | âŒ NO | Only `archive_experiments/main.py` | **REMOVE** |
+| `vision-agents` | âŒ NO | Only `archive_experiments/main.py` | **REMOVE** |
+| `vision-agents-plugins-getstream` | âŒ NO | Archive only | **REMOVE** |
+| `elevenlabs` | âŒ NO | Not imported in any active file | **REMOVE** |
+| `redis` | âŒ NO | Not imported in any active file | **REMOVE** |
+| `aiortc` | âŒ NO | Old WebRTC experiment | **REMOVE** |
+| `kokoro-onnx` | âŒ NO | Archive experiments only | **REMOVE** |
+| `onnxruntime` | âš ï¸ INDIRECT | Kokoro dependency. If Kokoro removed, review. | **REVIEW** |
+| `deepgram-sdk` | âŒ NO | Not imported anywhere | **REMOVE** |
+| `cartesia` | âŒ NO | Not in requirements.txt actually (remove from docs) | **REMOVE** |
+| `firebase_admin` | âš ï¸ PARTIAL | `core/database.py` (DEAD). Remove along with database.py | **REMOVE** |
+| `firebase` (via venv) | âš ï¸ PARTIAL | Only if database.py is removed | **REMOVE** |
 
 **Estimated packages to remove: 9+ (getstream, vision-agents, elevenlabs, redis, aiortc, kokoro-onnx, deepgram-sdk, firebase_admin)**
 
@@ -323,28 +323,28 @@ Two separate backend folders exist:
 
 | Package | Used? | Where | Action |
 |---------|-------|-------|--------|
-| `next` | ✅ YES | Core framework | **KEEP** |
-| `react` + `react-dom` | ✅ YES | All components | **KEEP** |
-| `@react-three/fiber` + `drei` | ✅ YES | ThreeOrb.tsx | **KEEP** |
-| `three` | ✅ YES | ThreeOrb.tsx | **KEEP** |
-| `lucide-react` | ✅ YES | All pages | **KEEP** |
-| `framer-motion` | ✅ YES | Animations | **KEEP** |
-| `zod` | ✅ YES | Validation | **KEEP** |
-| `tailwind-merge` + `clsx` | ✅ YES | Styling | **KEEP** |
-| `@tanstack/react-query` | ✅ YES | via tRPC | **KEEP** |
-| `@trpc/*` | ⚠️ PARTIAL | Only via `/api/trpc` route. No active client queries. | **EVALUATE** |
-| `firebase` + `firebase-admin` | ⚠️ PARTIAL | `lib/firebase/server.ts` (used by `/api/chat`) | **KEEP IF CHAT ROUTE NEEDED** |
-| `openai` | ⚠️ PARTIAL | `/api/chat/route.ts` (Groq via OpenAI compat) | **KEEP** |
-| `@stream-io/node-sdk` | ❌ NO | Only stream token API (no active client) | **REMOVE** |
-| `@stream-io/video-react-sdk` | ❌ NO | Only NexusStreamProvider.tsx (DEAD component) | **REMOVE** |
-| `stream-chat` + `stream-chat-react` | ❌ NO | Not imported anywhere active | **REMOVE** |
-| `gsap` | ⚠️ PARTIAL | Check if actually used in pages | **VERIFY** |
-| `shadcn` | ⚠️ PARTIAL | UI primitives. Check usage. | **KEEP IF USED** |
-| `boneyard-js` | ❌ UNKNOWN | Check `bones/` folder | **INVESTIGATE** |
-| `@base-ui/react` | ⚠️ PARTIAL | Check if used in any component | **VERIFY** |
-| `class-variance-authority` | ⚠️ PARTIAL | shadcn-style component variants | **KEEP IF USED** |
-| `tw-animate-css` | ⚠️ PARTIAL | Tailwind animations | **KEEP IF USED** |
-| `axios` | ⚠️ PARTIAL | Check if actually called over native fetch | **VERIFY** |
+| `next` | âœ… YES | Core framework | **KEEP** |
+| `react` + `react-dom` | âœ… YES | All components | **KEEP** |
+| `@react-three/fiber` + `drei` | âœ… YES | ThreeOrb.tsx | **KEEP** |
+| `three` | âœ… YES | ThreeOrb.tsx | **KEEP** |
+| `lucide-react` | âœ… YES | All pages | **KEEP** |
+| `framer-motion` | âœ… YES | Animations | **KEEP** |
+| `zod` | âœ… YES | Validation | **KEEP** |
+| `tailwind-merge` + `clsx` | âœ… YES | Styling | **KEEP** |
+| `@tanstack/react-query` | âœ… YES | via tRPC | **KEEP** |
+| `@trpc/*` | âš ï¸ PARTIAL | Only via `/api/trpc` route. No active client queries. | **EVALUATE** |
+| `firebase` + `firebase-admin` | âš ï¸ PARTIAL | `lib/firebase/server.ts` (used by `/api/chat`) | **KEEP IF CHAT ROUTE NEEDED** |
+| `openai` | âš ï¸ PARTIAL | `/api/chat/route.ts` (Groq via OpenAI compat) | **KEEP** |
+| `@stream-io/node-sdk` | âŒ NO | Only stream token API (no active client) | **REMOVE** |
+| `@stream-io/video-react-sdk` | âŒ NO | Only NexusStreamProvider.tsx (DEAD component) | **REMOVE** |
+| `stream-chat` + `stream-chat-react` | âŒ NO | Not imported anywhere active | **REMOVE** |
+| `gsap` | âš ï¸ PARTIAL | Check if actually used in pages | **VERIFY** |
+| `shadcn` | âš ï¸ PARTIAL | UI primitives. Check usage. | **KEEP IF USED** |
+| `boneyard-js` | âŒ UNKNOWN | Check `bones/` folder | **INVESTIGATE** |
+| `@base-ui/react` | âš ï¸ PARTIAL | Check if used in any component | **VERIFY** |
+| `class-variance-authority` | âš ï¸ PARTIAL | shadcn-style component variants | **KEEP IF USED** |
+| `tw-animate-css` | âš ï¸ PARTIAL | Tailwind animations | **KEEP IF USED** |
+| `axios` | âš ï¸ PARTIAL | Check if actually called over native fetch | **VERIFY** |
 
 **Estimated frontend packages to remove: 4-6 (stream-chat, stream-chat-react, @stream-io/video-react-sdk, @stream-io/node-sdk)**
 
@@ -352,31 +352,31 @@ Two separate backend folders exist:
 
 ## 8. TECHNICAL DEBT REPORT
 
-### 🔴 HIGH PRIORITY DEBT
+### ðŸ”´ HIGH PRIORITY DEBT
 
 | Debt | File | Complexity | Maintenance Cost | Risk |
 |------|------|-----------|-----------------|------|
-| `ws_main.py` is a 70KB god file | `ws_main.py` | HIGH | VERY HIGH | CRITICAL — every bug, every feature touches the same 1400-line file |
-| `page.tsx` is a 23KB god component | `src/app/page.tsx` | HIGH | HIGH | MEDIUM — slow to modify, no component isolation |
-| No authentication on any backend endpoint | All routes | MEDIUM | LOW | CRITICAL (security) — any process on the machine can call the AI |
-| `user_memory.json` is a flat file used as a database | `memory_manager.py` | MEDIUM | MEDIUM | MEDIUM — no schema, no migration path, no concurrent write safety |
-| Agents/Automation UI are 100% mock with no backend | Multiple pages | HIGH | HIGH | HIGH — feature gap disguised as working UI |
-| RAG Oracle has no ingested data | `core/rag_oracle.py` | LOW | LOW | MEDIUM — Oracle initialized, embeddings empty |
-| Two backend folders (`voice_agent/` + `src/backend/`) | Repo root | MEDIUM | HIGH | MEDIUM — confusion about which backend is live |
+| `ws_main.py` is a 70KB god file | `ws_main.py` | HIGH | VERY HIGH | CRITICAL â€” every bug, every feature touches the same 1400-line file |
+| `page.tsx` is a 23KB god component | `src/app/page.tsx` | HIGH | HIGH | MEDIUM â€” slow to modify, no component isolation |
+| No authentication on any backend endpoint | All routes | MEDIUM | LOW | CRITICAL (security) â€” any process on the machine can call the AI |
+| `user_memory.json` is a flat file used as a database | `memory_manager.py` | MEDIUM | MEDIUM | MEDIUM â€” no schema, no migration path, no concurrent write safety |
+| Agents/Automation UI are 100% mock with no backend | Multiple pages | HIGH | HIGH | HIGH â€” feature gap disguised as working UI |
+| RAG Oracle has no ingested data | `core/rag_oracle.py` | LOW | LOW | MEDIUM â€” Oracle initialized, embeddings empty |
+| Two backend folders (`nexus_core/` + `src/backend/`) | Repo root | MEDIUM | HIGH | MEDIUM â€” confusion about which backend is live |
 
-### 🟡 MEDIUM PRIORITY DEBT
+### ðŸŸ¡ MEDIUM PRIORITY DEBT
 
 | Debt | File | Risk |
 |------|------|------|
 | Dead packages in `requirements.txt` inflating install/startup time | `requirements.txt` | LOW |
 | Dead frontend packages increasing bundle size | `package.json` | LOW |
-| 5 dead core Python modules in `core/` | `core/` | MEDIUM — risk of future import confusion |
+| 5 dead core Python modules in `core/` | `core/` | MEDIUM â€” risk of future import confusion |
 | 4 dead frontend components in `components/` | `components/` | LOW |
 | No CI test pipeline (`test_voice_suite.py` exists but is manual only) | Root | MEDIUM |
 | Gemini TTS rate-limited on free API tier | `providers/tts_gemini.py` | LOW |
 | `greeting_cache.pkl` is a binary file in the repo | Root | LOW |
 
-### 🔵 LOW PRIORITY DEBT
+### ðŸ”µ LOW PRIORITY DEBT
 
 | Debt | Risk |
 |------|------|
@@ -404,38 +404,38 @@ After the session cleanup, this is the current docs inventory and recommended ac
 | `STABLE_ARCHITECTURE.md` | Architectural freeze doc | ACTIVE | **KEEP** |
 | `SURVIVAL_GUIDE.md` | Dev onboarding | ACTIVE | **KEEP** |
 | `memory_engine.md` | Memory subsystem spec | ACTIVE | **KEEP** |
-| `deployment_runbook.md` | Deploy steps | REVIEW — overly complex for desktop | **REVIEW** |
+| `deployment_runbook.md` | Deploy steps | REVIEW â€” overly complex for desktop | **REVIEW** |
 | `ai_context.md` | AI prompt context | ACTIVE | **KEEP** |
 | `async_task_queue.md` | 53KB queue architecture | OVERKILL for current state | **ARCHIVE** |
 | `db_strucutre.md` | 71KB DB structure | May conflict with `05_db_schema` | **MERGE INTO `05_db_schema`** |
 | `agent_trace_ui.md` | 41KB trace UI spec | UI spec, not architecture | **ARCHIVE** |
 | `security_model.md` | 43KB security | Overkill for current local-only app | **SUMMARIZE + KEEP** |
-| `03_repo_structure.md` | Repo structure | OUTDATED — mirrors no longer match | **UPDATE then KEEP** |
+| `03_repo_structure.md` | Repo structure | OUTDATED â€” mirrors no longer match | **UPDATE then KEEP** |
 | `voice_stack_decision.md` | Voice stack choice | HISTORICAL | **ARCHIVE** |
 | `prompt_engineering.md` | Prompt design | SMALL, useful | **KEEP** |
 | `resources.md` | External links | KEEP for reference | **KEEP** |
 | `CODE_REVIEW_MCP.md` | MCP review tool setup | Meta-doc | **KEEP** |
-| `API.md` | 984 bytes — tiny API summary | Redundant with `06_api_contract.md` | **DELETE** |
+| `API.md` | 984 bytes â€” tiny API summary | Redundant with `06_api_contract.md` | **DELETE** |
 
 ### Recommended Final Docs Structure
 
 ```
 docs/
-├── architecture/
-│   ├── overview.md         (merge: architecture.md + STABLE_ARCHITECTURE.md)
-│   ├── memory.md           (keep: memory_engine.md)
-│   ├── agents.md           (keep: Agentic_Architecture.md)
-│   ├── storage.md          (NEW: data storage strategy from this report)
-│   └── voice.md            (from: voice_stack_decision.md — archive rest)
-├── development/
-│   ├── setup.md            (NEW: setup guide for clean env)
-│   ├── prd.md              (keep: prd.md)
-│   ├── feature_specs.md    (keep)
-│   ├── security.md         (summarize: security_model.md)
-│   └── api.md              (merge: 06_api_contract.md + API.md)
-├── database/
-│   └── schema.md           (merge: 05_db_schema_data_model.md + db_strucutre.md)
-└── archive/                (move everything else here)
+â”œâ”€â”€ architecture/
+â”‚   â”œâ”€â”€ overview.md         (merge: architecture.md + STABLE_ARCHITECTURE.md)
+â”‚   â”œâ”€â”€ memory.md           (keep: memory_engine.md)
+â”‚   â”œâ”€â”€ agents.md           (keep: Agentic_Architecture.md)
+â”‚   â”œâ”€â”€ storage.md          (NEW: data storage strategy from this report)
+â”‚   â””â”€â”€ voice.md            (from: voice_stack_decision.md â€” archive rest)
+â”œâ”€â”€ development/
+â”‚   â”œâ”€â”€ setup.md            (NEW: setup guide for clean env)
+â”‚   â”œâ”€â”€ prd.md              (keep: prd.md)
+â”‚   â”œâ”€â”€ feature_specs.md    (keep)
+â”‚   â”œâ”€â”€ security.md         (summarize: security_model.md)
+â”‚   â””â”€â”€ api.md              (merge: 06_api_contract.md + API.md)
+â”œâ”€â”€ database/
+â”‚   â””â”€â”€ schema.md           (merge: 05_db_schema_data_model.md + db_strucutre.md)
+â””â”€â”€ archive/                (move everything else here)
 ```
 
 ---
@@ -453,7 +453,7 @@ docs/
 - **Memory Strategy**: Workspace-scoped document memory via RAG; no personal preference memory
 - **Agent Strategy**: Basic workflow agents, no persistent state between sessions
 - **Storage Strategy**: LanceDB (vectors) + SQLite (chats/settings)
-- **Lessons for Nexus**: ✅ Use LanceDB for vectors. ✅ Workspace isolation model. ⚠️ Nexus needs better long-term personal memory than AnythingLLM has.
+- **Lessons for Nexus**: âœ… Use LanceDB for vectors. âœ… Workspace isolation model. âš ï¸ Nexus needs better long-term personal memory than AnythingLLM has.
 
 ### 2. Open WebUI
 - **Strengths**: Python-first, Ollama-native, extensible pipelines, MCP support, active memory with tool calling
@@ -462,89 +462,89 @@ docs/
 - **Memory Strategy**: Active tool-based memory (save/search/update/delete) via model tool calling
 - **Agent Strategy**: Model agents + MCP tool servers
 - **Storage Strategy**: SQLite (chats) + ChromaDB or external VDB
-- **Lessons for Nexus**: ✅ Active memory architecture (not passive). ✅ Tool-calling approach for memory CRUD. ✅ Model agent wrapping pattern.
+- **Lessons for Nexus**: âœ… Active memory architecture (not passive). âœ… Tool-calling approach for memory CRUD. âœ… Model agent wrapping pattern.
 
 ### 3. LibreChat
 - **Strengths**: Multi-provider unification, enterprise auth, agent chains, MCP support
 - **Weaknesses**: Not desktop-first, cloud-heavy defaults, high complexity
 - **Architecture**: Node.js/Express + MongoDB + React frontend
 - **Memory Strategy**: Key-value memory injected by memory agent at conversation start
-- **Lessons for Nexus**: ✅ Memory agent pattern at conversation start. ⚠️ MongoDB is wrong for Nexus — use SQLite instead.
+- **Lessons for Nexus**: âœ… Memory agent pattern at conversation start. âš ï¸ MongoDB is wrong for Nexus â€” use SQLite instead.
 
 ### 4. Claude Desktop
 - **Strengths**: MCP-first extensibility, local file access, project workspaces, polished UX
 - **Weaknesses**: Cloud model dependency (no local LLM), proprietary
 - **Architecture**: Electron + Anthropic API + local MCP servers
 - **Memory Strategy**: Project workspaces + user-configurable MCP memory servers
-- **Lessons for Nexus**: ✅ MCP tool interface for local tool access. ✅ Project scoping for memory isolation.
+- **Lessons for Nexus**: âœ… MCP tool interface for local tool access. âœ… Project scoping for memory isolation.
 
 ### 5. Cursor
 - **Strengths**: BYOK, `.cursorrules` context persistence, agent-first in 2026, sandboxed agent execution
-- **Weaknesses**: Not a general AI OS — it's a code editor. No voice. No personal memory globally.
+- **Weaknesses**: Not a general AI OS â€” it's a code editor. No voice. No personal memory globally.
 - **Memory Strategy**: `.cursorrules` files + Memory Bank markdown files + optional MCP memory server
-- **Lessons for Nexus**: ✅ BYOK model confirmed by the market. ✅ Explicit memory file pattern is adoptable.
+- **Lessons for Nexus**: âœ… BYOK model confirmed by the market. âœ… Explicit memory file pattern is adoptable.
 
 ### 6. ChatGPT Projects
 - **Strengths**: Automated memory synthesis ("dreaming"), partitioned workspaces, zero-friction UX
 - **Weaknesses**: Cloud-only, privacy concerns, no BYOK for memory
 - **Memory Strategy**: Automated background synthesis of conversation history into structured dossier
-- **Lessons for Nexus**: ✅ Background memory extraction (Nexus already does this). ✅ Memory management UI (show user what's stored).
+- **Lessons for Nexus**: âœ… Background memory extraction (Nexus already does this). âœ… Memory management UI (show user what's stored).
 
 ### 7. Mem0
 - **Strengths**: Dedicated persistent memory layer, cross-session recall, semantic deduplication
 - **Weaknesses**: External dependency (cloud or self-hosted), adds latency
 - **Architecture**: Vector DB + LLM extraction + structured entity memory
-- **Lessons for Nexus**: ✅ Entity extraction rather than raw log storage. ✅ Semantic deduplication to prevent bloat.
+- **Lessons for Nexus**: âœ… Entity extraction rather than raw log storage. âœ… Semantic deduplication to prevent bloat.
 
 ### 8. Open Interpreter
 - **Strengths**: Conversational OS control, privacy-first, offline capable, direct code execution
 - **Weaknesses**: High risk (executes arbitrary code), limited multi-session memory
 - **Architecture**: Python CLI + local LLM (Ollama) + direct subprocess execution
-- **Lessons for Nexus**: ✅ Natural language → OS action model. ✅ Sandboxed execution with confirmation prompts.
+- **Lessons for Nexus**: âœ… Natural language â†’ OS action model. âœ… Sandboxed execution with confirmation prompts.
 
 ### 9. OpenDevin (OpenHands)
 - **Strengths**: Multi-step autonomous workflows, environment interaction, Docker sandboxing
 - **Weaknesses**: Heavy (Docker required), not desktop-native
-- **Lessons for Nexus**: ✅ Agent lifecycle management patterns. ✅ Execution sandboxing.
+- **Lessons for Nexus**: âœ… Agent lifecycle management patterns. âœ… Execution sandboxing.
 
 ### 10. Continue.dev
 - **Strengths**: BYOK IDE integration, supports local models via Ollama, codebase context
 - **Weaknesses**: IDE extension, not general desktop OS
-- **Lessons for Nexus**: ✅ Codebase RAG indexing patterns. ✅ Local embedding approach.
+- **Lessons for Nexus**: âœ… Codebase RAG indexing patterns. âœ… Local embedding approach.
 
 ### 11. Flowise
 - **Strengths**: Visual workflow builder, LangChain-native, node-based pipelines
 - **Weaknesses**: Complex for non-technical users, cloud-focused default
-- **Lessons for Nexus**: ✅ Visual automation pipeline UI inspiration for Automation page.
+- **Lessons for Nexus**: âœ… Visual automation pipeline UI inspiration for Automation page.
 
 ### 12. Langflow
 - **Strengths**: React-Flow based visual editor, multi-agent workflows
 - **Weaknesses**: Not desktop-first
-- **Lessons for Nexus**: ✅ Visual graph for agent/workflow design.
+- **Lessons for Nexus**: âœ… Visual graph for agent/workflow design.
 
 ### 13. CrewAI
 - **Strengths**: Multi-agent coordination, role assignment, sequential task pipelines
 - **Weaknesses**: Cloud API dependent, no personal memory
-- **Lessons for Nexus**: ✅ Agent role definitions (Researcher, Executor, Planner). ✅ Sequential task delegation pattern.
+- **Lessons for Nexus**: âœ… Agent role definitions (Researcher, Executor, Planner). âœ… Sequential task delegation pattern.
 
 ### 14. AutoGen
 - **Strengths**: Multi-agent conversations, code execution, human-in-the-loop
 - **Weaknesses**: Complex setup, heavy dependencies
-- **Lessons for Nexus**: ✅ Human-in-the-loop confirmation before risky actions.
+- **Lessons for Nexus**: âœ… Human-in-the-loop confirmation before risky actions.
 
 ### 15. IRIS AI
 - **Strengths**: Voice-first, personality-driven, multi-modal (available in local repo)
-- **Weaknesses**: Reference architecture — evaluate patterns
-- **Lessons for Nexus**: ✅ Study voice pipeline patterns. ✅ Personality system design.
+- **Weaknesses**: Reference architecture â€” evaluate patterns
+- **Lessons for Nexus**: âœ… Study voice pipeline patterns. âœ… Personality system design.
 
 ### 16. Hermes
 - **Strengths**: CLI-first, production-grade skills system, plugin architecture, MCP integration (visible in local repo)
 - **Architecture**: Python CLI + skills/ + plugins/ + MCP servers
-- **Lessons for Nexus**: ✅ `skills/` folder pattern for modular agent capabilities. ✅ Plugin isolation design.
+- **Lessons for Nexus**: âœ… `skills/` folder pattern for modular agent capabilities. âœ… Plugin isolation design.
 
 ### 17. Stonic AI
 - **Strengths**: Voice-first desktop agent (from local reference)
-- **Lessons for Nexus**: ✅ Voice latency optimizations. ✅ TTS caching patterns.
+- **Lessons for Nexus**: âœ… Voice latency optimizations. âœ… TTS caching patterns.
 
 ---
 
@@ -570,9 +570,9 @@ docs/
 | Search result cache | **SQLite or RAM** | Temporary retrieval results |
 
 ### Critical Rules
-1. **Do NOT use JSON as a database** — `user_memory.json` is the current violation. Migrate to SQLite.
-2. **Do NOT store entire chat history in vector DB** — vectors are for knowledge, not conversations.
-3. **Do NOT store API keys in SQLite in plaintext** — use OS keystore or encrypted JSON.
+1. **Do NOT use JSON as a database** â€” `user_memory.json` is the current violation. Migrate to SQLite.
+2. **Do NOT store entire chat history in vector DB** â€” vectors are for knowledge, not conversations.
+3. **Do NOT store API keys in SQLite in plaintext** â€” use OS keystore or encrypted JSON.
 4. **SQLite in WAL mode** is the production-grade standard for local AI apps in 2026 (confirmed by AnythingLLM, Open WebUI, LibreChat architecture research).
 
 ---
@@ -590,7 +590,7 @@ memories table:
 - category     TEXT  (preference | fact | goal | project | person | habit)
 - key          TEXT  (e.g., "preferred_language")
 - value        TEXT  (e.g., "Hinglish")
-- confidence   REAL  (0.0–1.0, extracted by LLM)
+- confidence   REAL  (0.0â€“1.0, extracted by LLM)
 - source       TEXT  (session_id that generated it)
 - created_at   TEXT  (ISO8601)
 - updated_at   TEXT  (ISO8601)
@@ -618,8 +618,8 @@ At every LLM call:
 
 ### Memory Conflict Resolution
 - If `key` already exists: compare confidence scores
-- Higher confidence → overwrite
-- Equal confidence → append with timestamp note
+- Higher confidence â†’ overwrite
+- Equal confidence â†’ append with timestamp note
 
 ---
 
@@ -627,7 +627,7 @@ At every LLM call:
 
 ### User Expectation
 ```
-Close Nexus → Reopen Nexus → Continue exactly where they left off
+Close Nexus â†’ Reopen Nexus â†’ Continue exactly where they left off
 ```
 (Comparable to browser tab restoration)
 
@@ -639,8 +639,8 @@ sessions table:
 - name            TEXT (auto or user-named)
 - created_at      TEXT
 - last_active     TEXT
-- workspace_id    TEXT (FK → workspaces)
-- active_agent_id TEXT (FK → agents)
+- workspace_id    TEXT (FK â†’ workspaces)
+- active_agent_id TEXT (FK â†’ agents)
 
 messages table:
 - id              TEXT PRIMARY KEY
@@ -684,18 +684,18 @@ agents table:
 ### Execution Model
 ```
 User Input
-    ↓
+    â†“
 Orchestrator (ws_main.py / future: orchestrator.py)
-    ↓
+    â†“
 Active Agent (resolve from registry)
-    ↓
+    â†“
 LLM Call (with agent persona + allowed tools injected)
-    ↓
+    â†“
 Tool Calls (if LLM requests tool execution)
-    ↓
+    â†“
 Tool Executor (validate tool against agent.allowed_tools)
-    ↓
-Response → TTS → User
+    â†“
+Response â†’ TTS â†’ User
 ```
 
 ### Permissions Model
@@ -717,31 +717,31 @@ Each agent has a declared `allowed_tools` list. The Tool Executor rejects calls 
 
 ## 15. VECTOR DB RECOMMENDATION
 
-### ✅ RECOMMENDATION: LanceDB
+### âœ… RECOMMENDATION: LanceDB
 
 **Rationale:**
 
 | Criterion | LanceDB | ChromaDB | Qdrant |
 |-----------|---------|----------|--------|
-| Desktop suitability | ✅ Embedded-first (no server) | ✅ Embedded mode | ❌ Requires external process |
-| Packaging (EXE) | ✅ Library, like SQLite | ✅ Library | ❌ Sidecar binary needed |
-| RAM usage | ✅ Low (disk-based, lazy) | ✅ Low-Medium | ❌ Higher (server overhead) |
-| Performance | ✅ High (Rust-based, Lance format) | ✅ Good | ✅ High |
-| Zero-config | ✅ Yes | ✅ Yes | ❌ Needs configuration |
-| Backup strategy | ✅ Single folder (copy = backup) | ✅ Single folder | ⚠️ More complex |
-| Upgrade path | ✅ Python package update | ✅ Python package update | ❌ Binary upgrade needed |
-| Production precedent | ✅ Used by AnythingLLM desktop | ✅ Used by many | ✅ Used in cloud |
+| Desktop suitability | âœ… Embedded-first (no server) | âœ… Embedded mode | âŒ Requires external process |
+| Packaging (EXE) | âœ… Library, like SQLite | âœ… Library | âŒ Sidecar binary needed |
+| RAM usage | âœ… Low (disk-based, lazy) | âœ… Low-Medium | âŒ Higher (server overhead) |
+| Performance | âœ… High (Rust-based, Lance format) | âœ… Good | âœ… High |
+| Zero-config | âœ… Yes | âœ… Yes | âŒ Needs configuration |
+| Backup strategy | âœ… Single folder (copy = backup) | âœ… Single folder | âš ï¸ More complex |
+| Upgrade path | âœ… Python package update | âœ… Python package update | âŒ Binary upgrade needed |
+| Production precedent | âœ… Used by AnythingLLM desktop | âœ… Used by many | âœ… Used in cloud |
 
 **Conclusion**: LanceDB is the correct choice for Nexus. It runs entirely in-process (like SQLite for vectors), requires no server management, produces a simple folder structure that is trivially backed up, and has been proven by AnythingLLM for exactly this use case.
 
 ### Storage Path (Post-Migration)
 ```
 %APPDATA%\Nexus\
-├── nexus.db          (SQLite — chats, sessions, agents, memory, settings)
-├── knowledge/
-│   └── [lancedb_tables]/  (LanceDB — document + knowledge embeddings)
-├── files/            (User's uploaded documents, originals untouched)
-└── config.json       (API keys, user preferences — encrypted or OS keystore)
+â”œâ”€â”€ nexus.db          (SQLite â€” chats, sessions, agents, memory, settings)
+â”œâ”€â”€ knowledge/
+â”‚   â””â”€â”€ [lancedb_tables]/  (LanceDB â€” document + knowledge embeddings)
+â”œâ”€â”€ files/            (User's uploaded documents, originals untouched)
+â””â”€â”€ config.json       (API keys, user preferences â€” encrypted or OS keystore)
 ```
 
 ---
@@ -751,11 +751,11 @@ Each agent has a declared `allowed_tools` list. The Tool Executor rejects calls 
 ### Current State
 ```
 d:\AI\Scrapper OS\AI-OS-3-scrapping-agents\
-├── HR Finding Automation/
-├── Internet Download Automation/
-├── google-maps-scraper/
-├── google-search-scraper/
-└── job-scraper-test/
+â”œâ”€â”€ HR Finding Automation/
+â”œâ”€â”€ Internet Download Automation/
+â”œâ”€â”€ google-maps-scraper/
+â”œâ”€â”€ google-search-scraper/
+â””â”€â”€ job-scraper-test/
 ```
 
 Scrapper OS is a **collection of standalone scraping agents** (not a unified service). No single API endpoint exists yet. Each scraper is a separate project.
@@ -763,16 +763,16 @@ Scrapper OS is a **collection of standalone scraping agents** (not a unified ser
 ### Recommended Architecture: Loose Bridge Pattern
 ```
 Nexus Voice Backend
-    ↓  (registers ScrapperOS tool)
+    â†“  (registers ScrapperOS tool)
 Tool Registry (/execute-tool)
-    ↓  (when user asks: "scrape Google Maps for restaurants")
+    â†“  (when user asks: "scrape Google Maps for restaurants")
 ScrapperOS Bridge Service (localhost:8010)
-    ↓  (HTTP API: POST /run-scraper)
+    â†“  (HTTP API: POST /run-scraper)
 ScrapperOS Runner (selects and executes correct scraper)
-    ↓
-Results → JSON
-    ↓
-Nexus Tool Response → LLM → User
+    â†“
+Results â†’ JSON
+    â†“
+Nexus Tool Response â†’ LLM â†’ User
 ```
 
 ### API Boundary Design
@@ -792,7 +792,7 @@ GET /scrapers  (list available scrapers)
 - Nexus passes a local-only shared secret in headers
 - Scraper processes are spawned as isolated subprocesses
 - Results are size-limited (max 1MB per response)
-- Nexus tool registry treats Scrapper OS as an **optional capability** — graceful failure if service not running
+- Nexus tool registry treats Scrapper OS as an **optional capability** â€” graceful failure if service not running
 
 ### Resource Requirements
 - Bridge: 1 FastAPI process (port 8010), ~50MB RAM idle
@@ -821,8 +821,8 @@ Nexus-Setup.exe  (Windows Installer, ~200-400MB)
 
 | Component | Technology | Bundle Strategy |
 |-----------|-----------|-----------------|
-| Frontend UI | Next.js → static export | Export to `out/` folder, served by Tauri WebView |
-| Backend | Python FastAPI → PyInstaller | `nexus-backend.exe` sidecar binary (pyinstaller --onefile) |
+| Frontend UI | Next.js â†’ static export | Export to `out/` folder, served by Tauri WebView |
+| Backend | Python FastAPI â†’ PyInstaller | `nexus-backend.exe` sidecar binary (pyinstaller --onefile) |
 | SQLite DB | `nexus.db` | Created in `%APPDATA%\Nexus\` on first launch |
 | LanceDB | Python library (in pyinstaller bundle) | No separate install needed |
 | PyAutoGUI | Python library (in pyinstaller bundle) | No separate install needed |
@@ -844,16 +844,16 @@ Nexus-Setup.exe  (Windows Installer, ~200-400MB)
 ### Local Storage Paths
 ```
 %APPDATA%\Nexus\
-├── nexus.db              ← Production database (never delete)
-├── knowledge/            ← LanceDB vector store
-├── files/                ← User documents
-├── config.json           ← Encrypted settings + API keys
-└── logs/                 ← Rolling log files
+â”œâ”€â”€ nexus.db              â† Production database (never delete)
+â”œâ”€â”€ knowledge/            â† LanceDB vector store
+â”œâ”€â”€ files/                â† User documents
+â”œâ”€â”€ config.json           â† Encrypted settings + API keys
+â””â”€â”€ logs/                 â† Rolling log files
 
 %LOCALAPPDATA%\Nexus\
-├── nexus.exe             ← Tauri desktop app
-├── nexus-backend.exe     ← PyInstaller Python backend
-└── assets/               ← Bundled voice models, greeting cache
+â”œâ”€â”€ nexus.exe             â† Tauri desktop app
+â”œâ”€â”€ nexus-backend.exe     â† PyInstaller Python backend
+â””â”€â”€ assets/               â† Bundled voice models, greeting cache
 ```
 
 ---
@@ -864,55 +864,55 @@ Nexus-Setup.exe  (Windows Installer, ~200-400MB)
 
 | Risk | Severity | Impact | Mitigation |
 |------|---------|--------|-----------|
-| `ws_main.py` god file creates deployment-blocking bugs | 🔴 HIGH | Every backend change is high-risk | Split into service modules ASAP |
-| No auth on WebSocket means any local process can use Nexus AI | 🔴 HIGH | Security bypass | Add local shared-secret token auth |
-| `user_memory.json` flat file can corrupt on concurrent writes | 🟡 MEDIUM | Memory loss | Migrate to SQLite |
-| Firebase dependency in frontend API routes creates cloud coupling | 🟡 MEDIUM | Breaks offline use | Evaluate and remove if possible |
-| GetStream + tRPC dependencies add 40MB+ to bundle with zero usage | 🟡 MEDIUM | Larger install, slower startup | Remove unused packages |
+| `ws_main.py` god file creates deployment-blocking bugs | ðŸ”´ HIGH | Every backend change is high-risk | Split into service modules ASAP |
+| No auth on WebSocket means any local process can use Nexus AI | ðŸ”´ HIGH | Security bypass | Add local shared-secret token auth |
+| `user_memory.json` flat file can corrupt on concurrent writes | ðŸŸ¡ MEDIUM | Memory loss | Migrate to SQLite |
+| Firebase dependency in frontend API routes creates cloud coupling | ðŸŸ¡ MEDIUM | Breaks offline use | Evaluate and remove if possible |
+| GetStream + tRPC dependencies add 40MB+ to bundle with zero usage | ðŸŸ¡ MEDIUM | Larger install, slower startup | Remove unused packages |
 
 ### Performance Risks
 
 | Risk | Severity | Mitigation |
 |------|---------|-----------|
-| Three.js ThreeOrb renders every frame even when idle | 🟡 MEDIUM | Add visibility-based suspend |
-| `useNexusVoice.ts` is 21KB and handles all WebSocket state | 🟡 MEDIUM | Split into smaller hooks |
-| SQLite write blocking voice pipeline if not on WAL mode | 🟡 MEDIUM | Enable WAL on first run |
-| VAD model loads on every server start (200ms+ latency) | 🟢 LOW | Already uses `lifespan` (one-time load) |
+| Three.js ThreeOrb renders every frame even when idle | ðŸŸ¡ MEDIUM | Add visibility-based suspend |
+| `useNexusVoice.ts` is 21KB and handles all WebSocket state | ðŸŸ¡ MEDIUM | Split into smaller hooks |
+| SQLite write blocking voice pipeline if not on WAL mode | ðŸŸ¡ MEDIUM | Enable WAL on first run |
+| VAD model loads on every server start (200ms+ latency) | ðŸŸ¢ LOW | Already uses `lifespan` (one-time load) |
 
 ### Packaging Risks
 
 | Risk | Severity | Mitigation |
 |------|---------|-----------|
-| PyInstaller bundle can fail for complex packages (torch, silero) | 🔴 HIGH | Test build pipeline early; use `--hidden-import` |
-| Tauri requires Windows WebView2 (pre-installed on Win10+) | 🟢 LOW | Installer can include WebView2 bootstrapper |
-| Python version mismatch in PyInstaller | 🟡 MEDIUM | Pin Python 3.11 in CI, freeze venv |
+| PyInstaller bundle can fail for complex packages (torch, silero) | ðŸ”´ HIGH | Test build pipeline early; use `--hidden-import` |
+| Tauri requires Windows WebView2 (pre-installed on Win10+) | ðŸŸ¢ LOW | Installer can include WebView2 bootstrapper |
+| Python version mismatch in PyInstaller | ðŸŸ¡ MEDIUM | Pin Python 3.11 in CI, freeze venv |
 
 ### Dependency Risks
 
 | Risk | Severity | Mitigation |
 |------|---------|-----------|
-| `silero-vad` PyTorch dependency is 2GB+ install | 🔴 HIGH | Use ONNX version (already using onnxruntime) |
-| Groq API rate limits block production usage | 🟡 MEDIUM | Implement exponential backoff + queue |
-| Gemini API key expiry breaks ALL AI functionality | 🔴 HIGH | BYOK model — Nexus should never use its own keys |
+| `silero-vad` PyTorch dependency is 2GB+ install | ðŸ”´ HIGH | Use ONNX version (already using onnxruntime) |
+| Groq API rate limits block production usage | ðŸŸ¡ MEDIUM | Implement exponential backoff + queue |
+| Gemini API key expiry breaks ALL AI functionality | ðŸ”´ HIGH | BYOK model â€” Nexus should never use its own keys |
 
 ---
 
 ## 19. CLEANUP ROADMAP
 
-### Phase 1 — Repository Audit ✅ DONE
+### Phase 1 â€” Repository Audit âœ… DONE
 - [x] Full codebase scan
 - [x] Import verification
 - [x] Dependency audit
 - [x] Dead code identification
 
-### Phase 2 — Documentation Cleanup
+### Phase 2 â€” Documentation Cleanup
 - [ ] Archive `docs/async_task_queue.md`, `agent_trace_ui.md`, `voice_stack_decision.md`
 - [ ] Merge `db_strucutre.md` into `05_db_schema_data_model.md`
 - [ ] Delete `docs/API.md` (redundant with `06_api_contract.md`)
 - [ ] Update `03_repo_structure.md` to reflect current actual structure
 - [ ] Consolidate `architecture.md` + `STABLE_ARCHITECTURE.md` into single authoritative file
 
-### Phase 3 — Dead Code Removal (No Risk)
+### Phase 3 â€” Dead Code Removal (No Risk)
 - [ ] Delete `core/memory.py` (duplicate of `memory_manager.py`)
 - [ ] Delete `DEBUG_FORENSICS.txt`
 - [ ] Archive `core/call_manager.py`, `core/database.py`, `core/usage.py`, `core/registry.py`, `core/concurrency.py`
@@ -922,7 +922,7 @@ Nexus-Setup.exe  (Windows Installer, ~200-400MB)
 - [ ] Archive `lib/stream.ts`
 - [ ] Archive `app/api/stream/`
 
-### Phase 4 — Dependency Cleanup
+### Phase 4 â€” Dependency Cleanup
 Backend `requirements.txt`:
 - [ ] Remove: `getstream`, `vision-agents`, `vision-agents-plugins-getstream`, `elevenlabs`, `redis`, `aiortc`, `kokoro-onnx`, `deepgram-sdk`
 - [ ] Re-pin remaining packages to exact versions for PyInstaller stability
@@ -931,19 +931,19 @@ Frontend `package.json`:
 - [ ] Remove: `@stream-io/node-sdk`, `@stream-io/video-react-sdk`, `stream-chat`, `stream-chat-react`
 - [ ] Verify and possibly remove: `boneyard-js`, `@base-ui/react` (if unused)
 
-### Phase 5 — Architecture Consolidation
+### Phase 5 â€” Architecture Consolidation
 - [ ] Move `backend/src/backend/` to archive
-- [ ] Rename `backend/voice_agent/` → `backend/nexus_core/` (clearer intent)
+- [ ] Rename `backend/nexus_core/` â†’ `backend/nexus_core/` (clearer intent)
 - [ ] Add `.gitignore` entries: `venv/`, `__pycache__/`, `.mypy_cache/`, `*.pkl` (optionally)
 - [ ] Create single `ARCHITECTURE_FREEZE.md` documenting locked decisions
 
-### Phase 6 — Folder Structure Migration
-- [ ] Migrate `user_memory.json` → SQLite `memories` table
+### Phase 6 â€” Folder Structure Migration
+- [ ] Migrate `user_memory.json` â†’ SQLite `memories` table
 - [ ] Create `%APPDATA%\Nexus\` directory structure on startup
 - [ ] Move runtime data files out of repo (`*.pkl`, `.nexus_states/`)
 - [ ] Add data path config to `config.py`
 
-### Phase 7 — Architecture Freeze
+### Phase 7 â€” Architecture Freeze
 - [ ] Document all final architectural decisions in `ARCHITECTURE_FREEZE.md`
 - [ ] Establish protected modules (don't touch without review)
 - [ ] Set up basic CI: `py_compile` check + frontend build check on every push
@@ -955,54 +955,54 @@ Frontend `package.json`:
 ### Current State
 ```
 d:\AI\
-├── frontend/           Next.js dev server (port 3939)
-├── backend/voice_agent/ FastAPI + WebSocket (port 8001)
-├── [17 other folders]  Mix of active, dead, and reference code
-└── docs/               Fragmented documentation
+â”œâ”€â”€ frontend/           Next.js dev server (port 3939)
+â”œâ”€â”€ backend/nexus_core/ FastAPI + WebSocket (port 8001)
+â”œâ”€â”€ [17 other folders]  Mix of active, dead, and reference code
+â””â”€â”€ docs/               Fragmented documentation
 ```
 
 ### Target State
 ```
 d:\AI\
-├── nexus/
-│   ├── frontend/       Next.js (static export for Tauri)
-│   ├── backend/        Python FastAPI (modules, not god file)
-│   │   ├── main.py     Entry point (thin orchestrator only)
-│   │   ├── routes/     Route handlers (one file per domain)
-│   │   ├── services/   Business logic (voice, memory, agents)
-│   │   ├── providers/  STT, TTS, LLM providers
-│   │   └── tools/      Tool registry
-│   ├── data/           Local user data (gitignored)
-│   │   ├── nexus.db
-│   │   └── knowledge/
-│   └── scripts/        Build, dev, packaging scripts
-├── scrapper-os/        Bridge service (isolated)
-└── docs/               Curated documentation only
+â”œâ”€â”€ nexus/
+â”‚   â”œâ”€â”€ frontend/       Next.js (static export for Tauri)
+â”‚   â”œâ”€â”€ backend/        Python FastAPI (modules, not god file)
+â”‚   â”‚   â”œâ”€â”€ main.py     Entry point (thin orchestrator only)
+â”‚   â”‚   â”œâ”€â”€ routes/     Route handlers (one file per domain)
+â”‚   â”‚   â”œâ”€â”€ services/   Business logic (voice, memory, agents)
+â”‚   â”‚   â”œâ”€â”€ providers/  STT, TTS, LLM providers
+â”‚   â”‚   â””â”€â”€ tools/      Tool registry
+â”‚   â”œâ”€â”€ data/           Local user data (gitignored)
+â”‚   â”‚   â”œâ”€â”€ nexus.db
+â”‚   â”‚   â””â”€â”€ knowledge/
+â”‚   â””â”€â”€ scripts/        Build, dev, packaging scripts
+â”œâ”€â”€ scrapper-os/        Bridge service (isolated)
+â””â”€â”€ docs/               Curated documentation only
 ```
 
 ### Migration Steps
 
-**Step 1 (1–2 days): Cleanup (Phases 2–4)**
+**Step 1 (1â€“2 days): Cleanup (Phases 2â€“4)**
 - Archive all dead code and documentation
 - Remove unused packages
 - Zero risk to current running system
 
-**Step 2 (2–3 days): Memory Migration**
+**Step 2 (2â€“3 days): Memory Migration**
 - Introduce SQLite `nexus.db` in `%APPDATA%\Nexus\`
-- Write migration script: `user_memory.json` → `memories` table
+- Write migration script: `user_memory.json` â†’ `memories` table
 - Add SQLite WAL mode on init
 - Keep JSON fallback for 1 release cycle
 
-**Step 3 (3–5 days): Chat History to SQLite**
+**Step 3 (3â€“5 days): Chat History to SQLite**
 - Add `sessions` and `messages` tables to SQLite
 - Wire persistence to the WebSocket voice loop
 - Frontend reads from SQLite via backend API
 
-**Step 4 (5–7 days): ws_main.py Decomposition**
+**Step 4 (5â€“7 days): ws_main.py Decomposition**
 - Extract route handlers to `routes/voice.py`, `routes/tools.py`, `routes/memory.py`, etc.
 - Extract business logic to `services/voice_pipeline.py`, `services/tts_orchestrator.py`
 - Main `ws_main.py` becomes thin orchestrator (~200 lines)
-- No behavior change — pure structural refactor
+- No behavior change â€” pure structural refactor
 
 **Step 5 (Ongoing): Agents + Automation Backend**
 - Add `agents` table to SQLite
@@ -1019,8 +1019,8 @@ d:\AI\
 ### Validation Steps (Each Migration Step)
 1. `python -m py_compile` on all Python files
 2. `pnpm build` on frontend (no TS errors)
-3. Voice pipeline E2E test (speak → transcribe → respond → TTS plays)
-4. Memory persistence test (write → restart → read back)
+3. Voice pipeline E2E test (speak â†’ transcribe â†’ respond â†’ TTS plays)
+4. Memory persistence test (write â†’ restart â†’ read back)
 
 ### Rollback Plan
 - Every change goes in its own git commit
@@ -1049,11 +1049,12 @@ d:\AI\
 | Memory Architecture | **SQLite extraction + LLM summarization** | Inspired by ChatGPT + Mem0 |
 | Agent Design | **Registry-based with allowed_tools** | Lightweight permission boundary |
 | Scrapper OS | **Bridge service (localhost:8010)** | Loose coupling, independent lifecycle |
-| Memory File | **Migrate from JSON → SQLite** | Concurrent safety, structured queries |
+| Memory File | **Migrate from JSON â†’ SQLite** | Concurrent safety, structured queries |
 | Auth | **Local shared-secret token** | Minimum viable auth for desktop isolation |
-| BYOK | **Yes — mandatory** | Desktop-first, privacy-first |
+| BYOK | **Yes â€” mandatory** | Desktop-first, privacy-first |
 | Session Restoration | **SQLite sessions table** | Like browser tab restoration |
 
 ---
 
 *End of Report. No code changes permitted until user review.*
+

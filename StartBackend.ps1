@@ -4,7 +4,7 @@ Param(
 )
 
 $PROJECT_ROOT = $PSScriptRoot
-$BACKEND_ROOT = "$PROJECT_ROOT\backend\voice_agent"
+$BACKEND_ROOT = "$PROJECT_ROOT\backend\nexus_core"
 $VENV_PATH = "$PROJECT_ROOT\backend\venv"
 $REQUIREMENTS = "$BACKEND_ROOT\requirements.txt"
 $PYTHON_BIN = "$VENV_PATH\Scripts\python.exe"

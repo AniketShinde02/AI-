@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import json
 import asyncio
@@ -11,7 +11,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(backend_dir, "backend"))
-sys.path.append(os.path.join(backend_dir, "backend", "voice_agent"))
+sys.path.append(os.path.join(backend_dir, "backend", "nexus_core"))
 
 from core.database import db
 
@@ -39,3 +39,4 @@ async def migrate():
 
 if __name__ == "__main__":
     asyncio.run(migrate())
+

@@ -2,7 +2,7 @@ import asyncio
 import time
 import sys
 
-sys.path.append('d:/AI/backend/voice_agent')
+sys.path.append('d:/AI/backend/nexus_core')
 import config
 from kokoro_onnx import Kokoro
 

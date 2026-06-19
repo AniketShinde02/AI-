@@ -13,14 +13,14 @@ import time
 raw_logger = logging.getLogger('DEBUG_GEMINI_RAW')
 raw_logger.setLevel(logging.INFO)
 if not raw_logger.handlers:
-    fh = logging.FileHandler('d:/AI/backend/voice_agent/DEBUG_GEMINI_RAW.log', encoding='utf-8')
+    fh = logging.FileHandler('d:/AI/backend/nexus_core/DEBUG_GEMINI_RAW.log', encoding='utf-8')
     fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
     raw_logger.addHandler(fh)
 
 session_logger = logging.getLogger('DEBUG_GEMINI_SESSION')
 session_logger.setLevel(logging.DEBUG)
 if not session_logger.handlers:
-    fh = logging.FileHandler('d:/AI/backend/voice_agent/DEBUG_GEMINI_SESSION.log', encoding='utf-8')
+    fh = logging.FileHandler('d:/AI/backend/nexus_core/DEBUG_GEMINI_SESSION.log', encoding='utf-8')
     fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
     session_logger.addHandler(fh)
 

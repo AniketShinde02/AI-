@@ -1,8 +1,8 @@
-import json
+﻿import json
 import os
 
 json_path = r'd:\AI\backend\studio-8908067992-4e114-firebase-adminsdk-fbsvc-49d5f34889.json'
-env_path = r'd:\AI\backend\voice_agent\.env'
+env_path = r'd:\AI\backend\nexus_core\.env'
 
 with open(json_path, 'r') as f:
     creds = json.load(f)
@@ -23,3 +23,4 @@ with open(env_path, 'w') as f:
     f.writelines(new_lines)
 
 print("Successfully updated .env with minified Firebase credentials.")
+

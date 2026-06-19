@@ -32,9 +32,9 @@ $choice = Read-Host "`nSelect an option"
 if ($choice -eq "5") { exit }
 
 # ── 3. Start Services ───────────────────────────────────────────────────────
-$backend_cmd = "cd backend/voice_agent; ..\venv\Scripts\python.exe main.py serve"
+$backend_cmd = "cd backend/nexus_core; ..\venv\Scripts\python.exe main.py serve"
 $frontend_cmd = "cd frontend; pnpm dev"
-$chat_cmd = "cd backend/voice_agent; ..\venv\Scripts\python.exe chat.py"
+$chat_cmd = "cd backend/nexus_core; ..\venv\Scripts\python.exe chat.py"
 
 if ($choice -eq "1") {
     Write-Host "`n🚀 Launching Full Stack..." -ForegroundColor Green

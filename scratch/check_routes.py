@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import os
 
 # Add the directory to sys.path
@@ -10,3 +10,4 @@ try:
         print(f"Path: {route.path}, Name: {route.name}, Methods: {route.methods}")
 except Exception as e:
     print(f"Error: {e}")
+

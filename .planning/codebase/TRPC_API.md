@@ -1,5 +1,5 @@
 # 📡 tRPC API Documentation
-*Last Updated: 19/6/2026, 3:47:01 pm*
+*Last Updated: 19/6/2026, 4:30:50 pm*
 
 Automated documentation for Nexus tRPC endpoints.
 

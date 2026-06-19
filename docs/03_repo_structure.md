@@ -13,79 +13,49 @@ Use a **single monorepo**:
 ```text
 nexus/
   backend/
-  windows_agent/
-  frontend/
-  docs/
-  scripts/
-  .env.example
+    nexus_core/        # Production Python Voice/Automation Backend
+    venv/              # Local Python Virtual Environment
+  frontend/            # Next.js Client Application
+  docs/                # Project Architecture & PRD Guides
+  tests/               # Latency & performance benchmarks
+  windows_agent/       # Client packaging setup
   CHANGELOG.md
   README.md
 ```
 
 Reasoning:
-- Monorepo keeps frontend, backend, and agent code in one place, which is easier for AI tools to navigate and keeps context in one repo.[web:329][web:333]
-- Each major piece gets its own top-level directory.
+- Monorepo keeps frontend and backend code in one place, making it easier for context preservation.
+- Each domain has a dedicated path.
 
 ---
 
-## 2. Backend structure (Next.js API Routes)
+## 2. Backend structure (FastAPI + WebSocket)
 
-Backend logic is co-located with the frontend in a Next.js App Router structure.
+Backend logic is located in the `backend/nexus_core/` directory:
 
 ```text
-frontend/
-  src/
-    app/
-      api/             # Next.js REST endpoints
-        chat/          # Text messaging endpoints
-        stream/        # GetStream token & voice session orchestration
-        suggestions/   # AI search suggestions
-    lib/
-      db/              # Drizzle ORM schemas & clients
-      services/        # External integrations (Stream, LLMs)
-    hooks/             # React Query hooks calling the API
+backend/
+  nexus_core/
+    api/               # REST Route Handlers (rest_routes.py, routes_system.py)
+    core/              # Core Agent layers (voice_session.py, action_router.py)
+    providers/         # LLM/STT/TTS client wrappers
+    tools/             # Local PC & Browser capabilities
+    data/              # Local SQLite Database & profiles
+    ws_main.py         # Main Uvicorn Server entrypoint
+    test_v1.py         # End-to-End Test Suite
 ```
 
 Guidelines:
-- `api/` = incoming HTTP surfaces and background promises.
-- `lib/services/` = external dependencies (Stream, Groq, DB).
-- `lib/db/` = data models and schemas only.
-
-This aligns with a simpler, solo-dev friendly architecture where the frontend and backend live in the same repository. Background jobs (Celery/Redis) are deferred to Future / v2 if required.
+- All database state is stored inside SQLite (`nexus_core.db` using WAL mode).
+- Voice processing runs over a low-latency raw PCM streaming WebSocket pipeline.
+- Intent classification is performed via an AsyncGroq classifier before dispatch.
 
 ---
 
-## 3. Windows agent structure (Python)
+## 3. Frontend structure (Next.js)
 
-A separate package focused on Windows automation.
+Next.js app for UI; coordinates real-time audio contexts and WS streaming.
 
-```text
-windows_agent/
-  pyproject.toml / requirements.txt
-  src/
-    windows_agent/
-      __init__.py
-      server.py           # HTTP/WS server on localhost
-      main.py             # entry point (if run as script/exe)
-      handlers/
-        __init__.py
-        apps.py           # open_app, focus_app, close_app
-        files.py          # create_folder, move, copy, delete (with policy)
-        input.py          # type_text, key combos
-      policy.py           # safety rules
-      models.py           # request/response schemas
-      utils.py            # shared helpers
-  tests/
-    test_apps.py
-    test_files.py
-    test_input.py
-
-```
-
-Guidelines:
-- **Use `pywinauto`** only inside `handlers/` and `policy.py`.[web:52][web:331][web:335]
-- `server.py` should be thin: parse request, call handler, format response.
-- `policy.py` enforces safe vs sensitive actions.
 
 ---
 

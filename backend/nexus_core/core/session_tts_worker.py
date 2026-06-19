@@ -321,6 +321,9 @@ class SessionTTSMixin:
 
                         async for pcm_data in audio_gen:
                             if not self.is_connected: break  # type: ignore[attr-defined]
+                            if isinstance(pcm_data, dict):
+                                logger.info(f"🔄 [TTS Greet] Routing metadata: {pcm_data}")
+                                continue
                             audio_buffer += pcm_data.samples.tobytes()
                             if len(audio_buffer) >= BUFFER_SIZE:
                                 full_pcm.append(audio_buffer)

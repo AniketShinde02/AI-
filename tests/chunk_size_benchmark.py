@@ -2,7 +2,7 @@ import time
 import sys
 import numpy as np
 
-sys.path.append('d:/AI/backend/voice_agent')
+sys.path.append('d:/AI/backend/nexus_core')
 import config
 from piper.voice import PiperVoice
 from scipy.signal import resample_poly

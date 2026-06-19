@@ -1,4 +1,4 @@
-import edge_tts
+﻿import edge_tts
 import asyncio
 
 async def test():
@@ -9,3 +9,4 @@ async def test():
 
 if __name__ == "__main__":
     asyncio.run(test())
+

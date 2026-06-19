@@ -3,8 +3,8 @@
 # This is ISOLATED from the main Nexus backend (port 8001 vs 8000)
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$backendVenv = "D:\AI\backend\voice_agent\venv\Scripts\python.exe"
-$envFile = "D:\AI\backend\voice_agent\.env"
+$backendVenv = "D:\AI\backend\venv\Scripts\python.exe"
+$envFile = "D:\AI\backend\.env"
 
 Write-Host ""
 Write-Host "[Gemini] Starting Gemini Live Experiment..." -ForegroundColor Cyan
@@ -18,7 +18,7 @@ if (Test-Path $envFile) {
     $hasKey = $envContent | Where-Object { $_ -match "^GEMINI_API_KEY=.+" }
     if (-not $hasKey) {
         Write-Host "[Gemini] ❌ GEMINI_API_KEY not found in .env" -ForegroundColor Red
-        Write-Host "[Gemini]    Add this to D:\AI\backend\voice_agent\.env:" -ForegroundColor Yellow
+        Write-Host "[Gemini]    Add this to D:\AI\backend\.env:" -ForegroundColor Yellow
         Write-Host "           GEMINI_API_KEY=your_key_here" -ForegroundColor Yellow
         Write-Host ""
         Write-Host "    Get key at: https://aistudio.google.com/app/apikey" -ForegroundColor Cyan
@@ -33,7 +33,7 @@ Write-Host "[Gemini] Checking google-genai..." -ForegroundColor Gray
 & $backendVenv -c "import google.genai" 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[Gemini] Installing google-genai..." -ForegroundColor Yellow
-    & "D:\AI\backend\voice_agent\venv\Scripts\pip.exe" install google-genai fastapi uvicorn python-dotenv --quiet
+    & "D:\AI\backend\venv\Scripts\pip.exe" install google-genai fastapi uvicorn python-dotenv --quiet
 }
 
 # Open browser

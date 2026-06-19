@@ -1,3 +1,37 @@
+## [2026-06-19] — Verification Path Validation, Environment Loading & Pyright Fixes
+
+### Author
+- Antigravity AI
+- Machine: JinWoo
+
+### Changed
+- **`backend/nexus_core/pyrightconfig.json`**: Updated `extraPaths` reference to use the renamed `backend/nexus_core` directory.
+- **`experiments/gemini_live/run.ps1`**: Fixed legacy `voice_agent` directory references to use the correct `backend/venv` and `backend/.env` paths.
+
+### Fixed
+- **`backend/nexus_core/test_v1.py`**: Fixed environment loading logic to explicitly load keys from `backend/.env` before falling back, enabling all E2E API tests (Voice STT, Gemini Live, Groq Chat) to run and pass successfully in the unified directory structure.
+
+## [2026-06-19] — Codebase Cleanup, Folder Renaming & Documentation Consolidation
+
+### Author
+- Antigravity AI
+- Machine: JinWoo
+
+### Added
+- **`docs/07_architecture_doc.md`**: Created a consolidated architecture document combining `docs/architecture.md` and `docs/STABLE_ARCHITECTURE.md` into one single source of truth describing raw PCM WebSocket audio streaming, Silero VAD, Groq/Gemini STT routing, and SQLite storage.
+
+### Changed
+- **Folder Rename**: Renamed the primary Python backend folder from `backend/voice_agent/` to `backend/nexus_core/` to clarify boundaries. Updated launcher scripts (`StartBackend.ps1`, `run.ps1`), test configurations (`pyrightconfig.json`), and imports across test and benchmark scripts.
+- **`backend/nexus_core/requirements.txt`**: Pruned unused dependencies including `getstream`, `vision-agents`, `vision-agents-plugins-getstream`, `elevenlabs`, `redis`, `kokoro-onnx`, `onnxruntime`, `soundfile`, `scipy`, and `cartesia`.
+- **`backend/nexus_core/config.py`**: Cleaned up deprecated `getstream` imports and token generator blocks, and updated offline PIPER paths.
+- **`docs/03_repo_structure.md`**: Updated repository layouts to document the unified FastAPI structure.
+- **`NEXUS_MASTER_ARCHITECTURE_REPORT.md`**: Refactored all references from `voice_agent` to `nexus_core`.
+
+### Fixed
+- **`backend/nexus_core/test_v1.py`**: Fixed a critical self-referential feedback loop in Feature 16 (Verification Layer) that caused the `verification_matrix` table size to grow exponentially to 1GB by replacing the full nested `str(verifs)` print with a flat summary list.
+- **Database Optimization**: Cleaned and vacuumed the local database `nexus_core.db`, shrinking its file size from 967.57 MB to 190 KB (99.98% space reduction).
+- **Dead Code Cleanup**: Deleted deprecated duplicate files: `core/memory.py`, `core/memory_manager.py`, `core/call_manager.py`, `migrate_memory.py`, and the legacy JSON file `.nexus_states/user_memory.json`.
+
 ## [2026-06-19] — Core Capability Stabilization, Test Suite Expansion & Browser Cleanups
 
 ### Author
