@@ -1,3 +1,41 @@
+## [2026-06-19] — App Discovery Edge Cases, Graceful Close & Minimize
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Minimize / Maximize Windows**: Introduced `pc_minimize_app` and `pc_maximize_app` capabilities to the system tool array and `ActionRouter`. 
+
+### Changed
+- **Graceful Window Close**: Refactored `pc_close_app` to use `pygetwindow` to send a graceful `WM_CLOSE` signal to specific windows matching the query, preventing the destruction of all background tabs when using a hard `psutil` process kill.
+- **UI Render Sync**: Added a 1.5-second artificial wait in `pc_open_app` after process verification. This ensures Nexus's confirmation speech is perfectly synchronized with heavy apps (like Chrome/VS Code) visually rendering on the desktop.
+
+### Fixed
+- **Junk Shortcut Filtering**: Updated `app_discovery.py` crawler to explicitly ignore `.lnk` files containing keywords like `uninstall`, `help`, `documentation`, or `readme`. This prevents RapidFuzz from accidentally matching these over the primary executable.
+
+## [2026-06-19] — Command Ownership, Global Execution Contract, & Reasoning Strip
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Global Execution Contract**: Enforced that the Capability Router (`action_router.py`) strictly owns all actionable intents (e.g., `open vscode`). If an action is detected, the LLM is bypassed completely and never receives the transcript. 
+- **DB Memory Sync for Gemini Live**: Added synchronous persistence to `db.save_message` inside Gemini Live's `on_agent_message` callback so conversations are correctly archived.
+
+### Changed
+- **Gemini Live Routing (Double Processing Fix)**: Refactored `api/websocket_routes.py` to stop streaming raw audio `bytes` continuously to the Gemini WebSocket. All audio now routes through the unified `session.process_audio()` pipeline (VAD -> Local STT -> Intent Classifier). Gemini Live now *only* receives `send_text()` transcripts if the intent is classified as CHAT.
+- **Removed Model Hacks**: Deleted the hardcoded regex hack (`\[OPEN_APP:\]`) from `voice_session.py` that forced Gemini Live to execute tools. Capabilities are now entirely determined by the Capability Registry in backend routing, not by model assumptions.
+- **Advanced Output Processing**: Upgraded `core/output_processor.py` to aggressively strip conversational friction (`"As an AI..."`, `"I'm thinking..."`, `"I have executed..."`) to strictly separate CHAT output from TRACE output.
+
+## [2026-06-19] — Frontend Resilience & History Fetch Retry
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Fixed
+- **History Fetch Race Condition**: Implemented automatic retry logic (up to 5 attempts with 1s delay) in `NexusContext.tsx` for the initial session history fetch. This prevents the browser from throwing `TypeError: Failed to fetch` errors when `uvicorn` takes 1-2 seconds to boot or reload the backend server during live development.
+
 ## [Unreleased] - Real-Time Core & Automation Upgrades
 
 ### Author

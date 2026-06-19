@@ -155,10 +155,18 @@ class NexusDatabase:
                 CREATE TABLE IF NOT EXISTS discovered_apps (
                     app_name TEXT PRIMARY KEY,
                     executable_path TEXT,
-                    alias TEXT,
+                    aliases JSON,
+                    publisher TEXT,
                     discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            
+            # Migration for discovered_apps
+            try:
+                cursor.execute("ALTER TABLE discovered_apps ADD COLUMN aliases JSON")
+                cursor.execute("ALTER TABLE discovered_apps ADD COLUMN publisher TEXT")
+            except sqlite3.OperationalError:
+                pass
 
             # File Ingestion State Tracker (Replaces JSON files in .nexus_states)
             cursor.execute("""

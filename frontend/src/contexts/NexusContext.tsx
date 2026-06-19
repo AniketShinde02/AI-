@@ -105,23 +105,36 @@ export function NexusProvider({ children }: { children: ReactNode }) {
         const savedVolume = localStorage.getItem('nexus_volume');
         if (savedVolume) setVoiceVolume(parseInt(savedVolume, 10));
 
-        // Load Session History
+        // Load Session History with automatic retries for hot-reloads
         const sessionId = localStorage.getItem('nexus_session_id');
         if (sessionId) {
-            fetch(`http://localhost:8001/api/history/${sessionId}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.history && data.history.length > 0) {
-                        const loadedMessages = data.history.map((msg: any, i: number) => ({
-                            id: `hist_${i}`,
-                            role: msg.role,
-                            content: msg.content,
-                            timestamp: msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now()
-                        }));
-                        setMessages(loadedMessages);
+            const fetchHistory = async (retries = 5, delay = 1000) => {
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        const res = await fetch(`http://localhost:8001/api/history/${sessionId}`);
+                        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                        const data = await res.json();
+                        if (data.history && data.history.length > 0) {
+                            const loadedMessages = data.history.map((msg: any, idx: number) => ({
+                                id: `hist_${idx}`,
+                                role: msg.role,
+                                content: msg.content,
+                                timestamp: msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now()
+                            }));
+                            setMessages(loadedMessages);
+                        }
+                        return; // Success, exit loop
+                    } catch (err) {
+                        if (i === retries - 1) {
+                            console.error("Failed to load history after retries:", err);
+                        } else {
+                            // Wait before retrying (gives the backend time to finish booting)
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        }
                     }
-                })
-                .catch(err => console.error("Failed to load history:", err));
+                }
+            };
+            fetchHistory();
         }
     }
   }, []);

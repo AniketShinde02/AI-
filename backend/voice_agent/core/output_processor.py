@@ -25,19 +25,25 @@ class RuntimeOutputProcessor:
         # 2. Strip *planning...*, *thinking...*, *analyzing...* 
         text = re.sub(r'\*(?:planning|thinking|analyzing|executing|searching).*?\*', '', text, flags=re.IGNORECASE | re.DOTALL)
         
-        # 3. Strip "I am thinking...", "I will now...", "Let me check..." if they are prefixing the actual answer
-        # We can use some heuristic regexes for common LLM prefixes
+        # 3. Strip conversational friction, internal reasoning, and AI disclaimers
         prefixes_to_strip = [
-            r'^(?:I am|I will|Let me)\s+(?:think|analyze|check|search|execute|look|find).*?[\.\:]\s*',
+            r'^(?:I am|I\'m|I will|I\'ll|Let me|I need to)\s+(?:think|analyze|check|search|execute|look|find|run|open|close).*?[\.\:]\s*',
             r'^Here is the (?:information|result|answer).*?\:\s*',
             r'^Based on the (?:context|search|information).*?\:\s*',
             r'^The user wants me to.*?\.\s*',
             r'^Understood[\.\,]\s*',
-            r'^Sure[\.\,\!]\s*'
+            r'^Sure[\.\,\!]\s*',
+            r'^Okay[\.\,\!]\s*',
+            r'^As an AI(?: language model)?.*?\s*',
+            r'^I have (?:executed|run|opened|closed|completed).*?[\.\:]\s*'
         ]
         
         for pattern in prefixes_to_strip:
             text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+
+        # Remove trailing explanations like "I have executed the tool" if it's the only thing left
+        if re.match(r'^I have (?:executed|run|opened|closed|completed)', text, re.IGNORECASE):
+            text = ""
 
         # 4. Clean up excessive newlines or whitespace left over from stripping
         text = re.sub(r'\n{3,}', '\n\n', text).strip()

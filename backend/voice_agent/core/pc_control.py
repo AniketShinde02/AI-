@@ -33,7 +33,7 @@ class PCControl:
 
     async def open_app(self, app_name: str) -> Dict[str, Any]:
         import asyncio
-        import difflib
+        from rapidfuzz import fuzz, process
         from core.app_discovery import get_app_path, get_all_apps_dict
         
         start_time = time.perf_counter()
@@ -53,18 +53,21 @@ class PCControl:
             app_db = await get_all_apps_dict()
             matched_key = None
             
-            # 3. Look for exact substring match
-            for db_name in app_db.keys():
-                if clean_target in db_name or db_name in clean_target:
-                    matched_key = db_name
-                    break
-                    
-            # 4. If substring fails, use difflib fuzzy matching
+            # 3. Exact alias match
+            if clean_target in app_db:
+                matched_key = clean_target
+            
+            # 4. RapidFuzz token_set_ratio
             if not matched_key:
-                matches = difflib.get_close_matches(clean_target, list(app_db.keys()), n=1, cutoff=0.4)
-                if matches:
-                    matched_key = matches[0]
-                    logger.info(f"🎯 Nexus AI resolved approximate phrase '{app_name}' to installed app: '{matched_key}'")
+                best_match = process.extractOne(
+                    clean_target, 
+                    app_db.keys(), 
+                    scorer=fuzz.token_set_ratio, 
+                    score_cutoff=60
+                )
+                if best_match:
+                    matched_key = best_match[0]
+                    logger.info(f"🎯 Nexus AI resolved approximate phrase '{app_name}' to installed app: '{matched_key}' (score: {best_match[1]})")
 
             if matched_key:
                 target = app_db[matched_key]
@@ -118,6 +121,8 @@ class PCControl:
 
             t = f"{time.perf_counter() - start_time:.2f}s"
             if verified:
+                # Add a 1.5s artificial UI sync delay so Nexus confirmation feels synced with the app rendering
+                await asyncio.sleep(1.5)
                 return _create_contract(True, "pc_open_app", app_name, "PID detected", t)
             else:
                 return _create_contract(True, "pc_open_app", app_name, "Process not detected (may be starting)", t)
@@ -129,18 +134,83 @@ class PCControl:
         logger.info(f"PC Control: Closing {app_name}")
         start_time = time.perf_counter()
         try:
+            import pygetwindow as gw
+            import asyncio
+            closed = 0
+            
+            clean_target = app_name.lower().strip()
+            for slang in ["kro", "karo", "kar", "do", "bhai", "please", "app", "close"]:
+                clean_target = clean_target.replace(slang, "")
+            clean_target = clean_target.strip()
+            
+            # Graceful WM_CLOSE via pygetwindow
+            for win in gw.getAllWindows():
+                if win.title and clean_target in win.title.lower():
+                    win.close()
+                    closed += 1
+                    
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            if closed > 0:
+                return _create_contract(True, "pc_close_app", app_name, f"Closed {closed} windows gracefully", t)
+                
+            # Fallback to hard process kill
             killed = 0
             for proc in psutil.process_iter(['pid', 'name']):
-                if proc.info['name'] and app_name.lower() in proc.info['name'].lower():
+                if proc.info['name'] and clean_target in proc.info['name'].lower():
                     proc.kill()
                     killed += 1
-            t = f"{time.perf_counter() - start_time:.2f}s"
             if killed > 0:
                 return _create_contract(True, "pc_close_app", app_name, f"Killed {killed} processes", t)
             return _create_contract(False, "pc_close_app", app_name, "No running processes found", t)
         except Exception as e:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_close_app", app_name, str(e), t)
+
+    async def minimize_app(self, app_name: str) -> Dict[str, Any]:
+        logger.info(f"PC Control: Minimizing {app_name}")
+        start_time = time.perf_counter()
+        try:
+            import pygetwindow as gw
+            clean_target = app_name.lower().strip()
+            for slang in ["kro", "karo", "kar", "do", "bhai", "please", "app", "minimize"]:
+                clean_target = clean_target.replace(slang, "")
+            clean_target = clean_target.strip()
+            
+            minimized = 0
+            for win in gw.getAllWindows():
+                if win.title and clean_target in win.title.lower() and not win.isMinimized:
+                    win.minimize()
+                    minimized += 1
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            if minimized > 0:
+                return _create_contract(True, "pc_minimize_app", app_name, f"Minimized {minimized} windows", t)
+            return _create_contract(False, "pc_minimize_app", app_name, "No matching windows found", t)
+        except Exception as e:
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(False, "pc_minimize_app", app_name, str(e), t)
+
+    async def maximize_app(self, app_name: str) -> Dict[str, Any]:
+        logger.info(f"PC Control: Maximizing {app_name}")
+        start_time = time.perf_counter()
+        try:
+            import pygetwindow as gw
+            clean_target = app_name.lower().strip()
+            for slang in ["kro", "karo", "kar", "do", "bhai", "please", "app", "maximize"]:
+                clean_target = clean_target.replace(slang, "")
+            clean_target = clean_target.strip()
+            
+            maximized = 0
+            for win in gw.getAllWindows():
+                if win.title and clean_target in win.title.lower():
+                    win.maximize()
+                    maximized += 1
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            if maximized > 0:
+                return _create_contract(True, "pc_maximize_app", app_name, f"Maximized {maximized} windows", t)
+            return _create_contract(False, "pc_maximize_app", app_name, "No matching windows found", t)
+        except Exception as e:
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(False, "pc_maximize_app", app_name, str(e), t)
 
     # --- INPUT AUTOMATION ---
     async def type_text(self, text: str) -> Dict[str, Any]:

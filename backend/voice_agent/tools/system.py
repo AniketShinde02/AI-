@@ -11,6 +11,10 @@ async def execute_pc_action(action: str, params: Dict[str, Any]) -> Dict[str, An
             res = await pc_controller.open_app(params.get("app_name", ""))
         elif action == "pc_close_app":
             res = await pc_controller.close_app(params.get("app_name", ""))
+        elif action == "pc_minimize_app":
+            res = await pc_controller.minimize_app(params.get("app_name", ""))
+        elif action == "pc_maximize_app":
+            res = await pc_controller.maximize_app(params.get("app_name", ""))
         elif action == "pc_type_text":
             res = await pc_controller.type_text(params.get("text", ""))
         elif action == "pc_press_shortcut":
@@ -49,6 +53,34 @@ SYSTEM_TOOLS: List[Dict[str, Any]] = [
                 "type": "object",
                 "properties": {
                     "app_name": {"type": "string", "description": "Name of the app to close (e.g. 'notepad', 'chrome')"}
+                },
+                "required": ["app_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pc_minimize_app",
+            "description": "Minimize a running Windows application by name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_name": {"type": "string", "description": "Name of the app to minimize"}
+                },
+                "required": ["app_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pc_maximize_app",
+            "description": "Maximize a running Windows application by name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_name": {"type": "string", "description": "Name of the app to maximize"}
                 },
                 "required": ["app_name"]
             }

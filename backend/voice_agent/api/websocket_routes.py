@@ -167,16 +167,13 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
             if "disconnect" in data:
                 break
             elif "bytes" in data and data["bytes"] is not None:
-                if session.engine == "gemini_live" and session.gemini_manager and session.gemini_manager.is_connected:
-                    try:
-                        await session.gemini_manager.send_audio(data["bytes"])
-                    except Exception as e:
-                        logger.error(f"❌ Failed to send audio to Gemini Live: {e}")
-                else:
-                    try:
-                        await session.process_audio(data["bytes"]) # Failover path
-                    except Exception as e:
-                        logger.error(f"❌ Failed to process local audio: {e}")
+                # Flow: Speech -> Intent Classifier.
+                # ALL audio goes to local process_audio -> VAD -> STT -> Intent Router
+                # Gemini ONLY receives transcript if Intent == CHAT.
+                try:
+                    await session.process_audio(data["bytes"])
+                except Exception as e:
+                    logger.error(f"❌ Failed to process local audio: {e}")
             elif "text" in data and data["text"] is not None:
                 msg = json.loads(data["text"])
                 if msg.get("type") == "vision_frame":
@@ -202,18 +199,10 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                     session.selected_language = msg.get("language") or "auto"
                     continue
                 if "text" in msg:
-                    txt = msg["text"].lower().strip()
-                    is_action = False
-                    # Action keywords + common typos like "opem"
-                    action_kws = getattr(session, "_ACTION_KEYWORDS", ("open ", "launch ", "start ", "run ", "close ", "kill ", "quit ", "screenshot", "type ", "press ", "click "))
-                    if any(txt.startswith(kw) for kw in action_kws) or txt.startswith("opem "):
-                        is_action = True
-
-                    if session.engine == "gemini_live" and session.gemini_manager and session.gemini_manager.is_connected and not is_action:
-                        await session.gemini_manager.send_text(msg["text"], turn_complete=True)
-                    else:
-                        session.current_turn_id += 1
-                        asyncio.create_task(session.run_llm_and_tts(msg["text"], turn_id=session.current_turn_id))
+                    # All text goes to run_llm_and_tts, which performs the single Intent Classification.
+                    # It will route to Gemini Live (CHAT) or Capability Router (ACTION).
+                    session.current_turn_id += 1
+                    asyncio.create_task(session.run_llm_and_tts(msg["text"], turn_id=session.current_turn_id))
     except WebSocketDisconnect:
         pass
     except Exception as e:

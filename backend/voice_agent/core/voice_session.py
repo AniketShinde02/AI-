@@ -140,24 +140,12 @@ class VoiceSession:
     async def connect_gemini(self):
         if self.gemini_manager:
             async def on_agent_message(text):
-                import re
-                from core.pc_control import PCControl
-                open_match = re.search(r'\[OPEN_APP:\s*"?([^"]+)"?\]', text)
-                if open_match:
-                    app_name = open_match.group(1).strip()
-                    logger.info(f"Gemini Live Intent Parsed: Open App -> {app_name}")
-                    pc_controller = PCControl()
-                    await pc_controller.open_app(app_name)
-                    # We can drop the [OPEN_APP: ...] string from being sent to TTS
-                    text = re.sub(r'\[OPEN_APP:\s*"?([^"]+)"?\]', '', text).strip()
-                    if not text:
-                        return
-                        
                 # --- OUTPUT CONTRACT: scrub BEFORE sending to WebSocket ---
                 clean = output_processor.filter_reasoning(text)
                 if clean:
                     await self.safe_send_json({"type": "agent_message", "text": clean})
                     self.conversation_history.append({"role": "assistant", "content": clean})
+                    asyncio.create_task(db.save_message(self.session_id, "assistant", clean))
             async def on_disconnect():
                 logger.warning("🔄 Falling back to Nexus STT (Groq) engine")
                 self.engine = "nexus"
@@ -927,6 +915,7 @@ class VoiceSession:
     _ACTION_KEYWORDS = (
         "open ", "launch ", "start ", "run ",
         "close ", "kill ", "quit ", "shut down ",
+        "minimize ", "maximize ",
         "take a screenshot", "screenshot",
         "type ", "press ", "click ", "opem ",
     )
@@ -1020,6 +1009,12 @@ class VoiceSession:
                 await self.tts_queue.put({"text": "", "turn_id": turn_id, "is_sentinel": True})
                 return
             
+            # If engine is Gemini Live and it's a CHAT intent, delegate to Gemini Live
+            if self.engine == "gemini_live" and self.gemini_manager and self.gemini_manager.is_connected:
+                logger.info(f"🧠 [Gemini Live] Delegating CHAT intent to Gemini Live.")
+                await self.gemini_manager.send_text(transcript, turn_complete=True)
+                return
+
             # Standard LLM fallback
             try:
                 tool_response = await gs.llm_provider.client.chat.completions.create( # type: ignore
