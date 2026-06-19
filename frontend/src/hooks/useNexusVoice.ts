@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { traceStore } from '@/lib/traceStore';
 
 // Simple logger to prevent Next.js error overlays in development
 const logger = {
@@ -29,6 +30,14 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
   const [micCaptured, setMicCaptured] = useState(false);
   const [systemMetrics, setSystemMetrics] = useState<any>(null);
   const [activeEngine, setActiveEngine] = useState<'gemini_live' | 'groq' | 'text' | 'unknown'>('unknown');
+  const [workspaceState, setWorkspaceState] = useState<any>({
+    current_task: null,
+    active_capability: null,
+    status: 'idle',
+    verification_state: null,
+    active_window: null,
+    browser_screenshot: null
+  });
   
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -311,6 +320,8 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
                 socketRef.current.send(JSON.stringify({ type: 'audio_finished' }));
               }
             }
+          } else if (msg.type === 'trace_event') {
+            traceStore.addTrace(msg.icon || '⚡', msg.text || '');
           } else if (msg.type === 'user_transcript') {
             onTranscriptRef.current?.(msg.text);
           } else if (msg.type === 'agent_partial') {
@@ -337,6 +348,8 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
             logger.debug(`[Nexus WS] 🏓 Pong received in ${latency}ms`);
           } else if (msg.type === 'system_metrics') {
             setSystemMetrics(msg.data);
+          } else if (msg.type === 'workspace_state') {
+            setWorkspaceState(msg.data);
           } else if (msg.type === 'log') {
             if (logger[msg.level as keyof typeof logger]) {
               (logger as any)[msg.level](`[Backend] ${msg.message}`);
@@ -593,6 +606,7 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     micCaptured,
     activeEngine,
     systemMetrics,
+    workspaceState,
     connect,
     disconnect,
     startListening,

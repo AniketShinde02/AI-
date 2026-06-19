@@ -18,3 +18,4 @@ soundfile
 scipy
 cartesia
 lancedb
+playwright

@@ -7,7 +7,7 @@
     "**/__pycache__",
     "venv"
   ],
-  "venvPath": "d:\\AI\\backend\\voice_agent",
+  "venvPath": "d:\\AI\\backend",
   "venv": "venv",
   "extraPaths": [
     "d:\\AI\\backend\\voice_agent",

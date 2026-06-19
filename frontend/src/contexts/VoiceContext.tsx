@@ -10,6 +10,7 @@ interface VoiceContextType {
   micCaptured: boolean;
   activeEngine: 'gemini_live' | 'groq' | 'text' | 'unknown';
   systemMetrics: any;
+  workspaceState: any;
   connect: () => void;
   disconnect: () => void;
   startListening: () => Promise<void>;

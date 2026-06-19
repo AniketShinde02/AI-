@@ -19,6 +19,8 @@ import { NexusStatus } from "@/components/NexusStatus";
 import { SystemTelemetry } from "@/components/SystemTelemetry";
 import { logger } from "@/lib/logger";
 import { useEffect } from "react";
+import { GeminiVision, VisionSource } from "@/components/GeminiVision";
+import { AgentWorkspace } from "@/components/AgentWorkspace";
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -49,10 +51,17 @@ export default function Home() {
     voiceState, uiMode, setUiMode
   } = useNexus();
   const [activeTab, setActiveTab] = useState<'chat' | 'trace' | 'tasks' | 'memory'>('chat');
+  const [visionSource, setVisionSource] = useState<VisionSource>("off");
 
   useEffect(() => {
     logger.info("Nexus System Initialized", { version: "1.0.0", mode: "Autonomous" });
     logger.ai("Neural Link Established", { latency: "14ms", efficiency: "99.8%" });
+  }, []);
+
+  useEffect(() => {
+    const handleStopped = () => setVisionSource("off");
+    window.addEventListener("nexus_vision_stopped", handleStopped);
+    return () => window.removeEventListener("nexus_vision_stopped", handleStopped);
   }, []);
 
   /* Tasks state */
@@ -96,45 +105,59 @@ export default function Home() {
       <aside className="flex flex-col gap-3 overflow-y-auto scroll-hide h-full py-2 pr-1">
         
         {/* Gemini Live Vision Feed (Top of Left Column) */}
-        <div className="shrink-0 h-[120px] relative overflow-hidden bg-[#06060c] border border-[#00FFFF]/30 clip-cut shadow-[0_0_20px_rgba(0,0,0,0.8)] group">
+        <div className="shrink-0 h-[220px] relative overflow-hidden bg-[#06060c] border border-[#00FFFF]/30 shadow-[0_0_20px_rgba(0,0,0,0.8)] z-10 flex flex-col clip-cut-sm relative">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,255,0.05)_0%,transparent_100%)]"></div>
           
-          {/* Scanline effect */}
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none opacity-50"></div>
-          
-          {/* Edgy corner markers */}
-          <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-[#00FFFF]/50 pointer-events-none z-10"></div>
-          <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-[#00FFFF]/50 pointer-events-none z-10"></div>
-          <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-[#00FFFF]/50 pointer-events-none z-10"></div>
-          <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-[#00FFFF]/50 pointer-events-none z-10"></div>
-          
-          {/* Crosshairs */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 pointer-events-none z-10 opacity-30">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-px h-2 bg-[#00FFFF]"></div>
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-px h-2 bg-[#00FFFF]"></div>
-            <div className="absolute top-1/2 left-0 -translate-y-1/2 w-2 h-px bg-[#00FFFF]"></div>
-            <div className="absolute top-1/2 right-0 -translate-y-1/2 w-2 h-px bg-[#00FFFF]"></div>
-          </div>
-
-          <div className="absolute top-2 left-2 flex items-center gap-2 px-2 py-1 bg-black/80 border border-[#00FFFF]/20 z-10 clip-cut-sm shadow-[inset_0_0_10px_rgba(0,255,255,0.1)]">
-            <ScanEye size={10} className="text-[#00FFFF]" />
-            <span className="text-[8px] font-quantico font-bold text-[#00FFFF] uppercase tracking-[0.2em]">Optics_Link</span>
-          </div>
-          
-          <div className="absolute top-2 right-2 flex items-center gap-1.5 z-10">
-             <div className="w-1.5 h-1.5 bg-[#ff3366] rounded-full animate-pulse shadow-[0_0_8px_#ff3366]"></div>
-             <span className="text-[8px] font-mono font-bold text-[#ff3366] tracking-[0.2em]">STDBY</span>
-          </div>
-
-          <div className="h-full flex flex-col items-center justify-center gap-1.5 opacity-60 relative z-0">
-            <div className="flex gap-1.5 mb-1 mt-4">
-               <div className="w-1 h-2 bg-[#00FFFF]/50 animate-pulse delay-75"></div>
-               <div className="w-1 h-4 bg-[#00FFFF]/80 animate-pulse delay-150"></div>
-               <div className="w-1 h-3 bg-[#00FFFF]/50 animate-pulse delay-300"></div>
-               <div className="w-1 h-1 bg-[#00FFFF]/30 animate-pulse delay-75"></div>
+          <div className="h-8 bg-black flex items-center justify-between px-3 border-b border-[#00FFFF]/20 relative z-10 shrink-0">
+            <div className="flex items-center gap-2">
+              <ScanEye size={12} className="text-[#00FFFF]" />
+              <span className="text-[9px] font-quantico font-bold text-[#00FFFF] uppercase tracking-[0.2em]">Optics Link</span>
             </div>
-            <span className="text-[10px] font-quantico font-bold text-zinc-300 uppercase tracking-[0.3em] drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]">Gemini Live</span>
-            <span className="text-[7px] font-mono text-zinc-500 uppercase tracking-widest">Awaiting Multimodal Stream</span>
+            <div className="flex items-center gap-2">
+              <Mic size={10} className={isListening && !isMuted ? "text-[#00FFFF]" : "text-zinc-500"} />
+              <span className="text-[7.5px] font-mono text-zinc-400">
+                {isMuted ? "MUTED" : isListening ? "ON" : "STDBY"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex-1 relative bg-black/40 overflow-hidden flex items-center justify-center min-h-0">
+            {visionSource === 'off' ? (
+              <div className="h-full w-full flex flex-col items-center justify-center gap-1.5 opacity-60">
+                <div className="flex gap-1.5 mb-1 mt-2">
+                   <div className="w-1 h-2 bg-[#00FFFF]/50 animate-pulse delay-75"></div>
+                   <div className="w-1 h-4 bg-[#00FFFF]/80 animate-pulse delay-150"></div>
+                   <div className="w-1 h-3 bg-[#00FFFF]/50 animate-pulse delay-300"></div>
+                </div>
+                <span className="text-[10px] font-quantico font-bold text-zinc-300 uppercase tracking-[0.3em]">Optics Feed</span>
+                <span className="text-[7px] font-mono text-zinc-500 uppercase tracking-widest">Awaiting Video Link</span>
+              </div>
+            ) : (
+              <GeminiVision source={visionSource} />
+            )}
+          </div>
+
+          <div className="h-10 bg-black/90 border-t border-[#00FFFF]/20 flex items-center justify-around px-2 py-1 shrink-0 z-10">
+            <button
+              onClick={() => setVisionSource(prev => prev === 'camera' ? 'off' : 'camera')}
+              className={`flex-1 py-1.5 mx-1 text-[9px] font-bold uppercase tracking-wider clip-cut-sm border transition-all ${
+                visionSource === 'camera'
+                  ? 'bg-[#ff3366]/20 border-[#ff3366] text-[#ff3366] shadow-[0_0_8px_rgba(255,51,102,0.3)]'
+                  : 'bg-black/50 border-white/10 text-zinc-400 hover:text-white hover:border-white/30'
+              }`}
+            >
+              Camera
+            </button>
+            <button
+              onClick={() => setVisionSource(prev => prev === 'screen' ? 'off' : 'screen')}
+              className={`flex-1 py-1.5 mx-1 text-[9px] font-bold uppercase tracking-wider clip-cut-sm border transition-all ${
+                visionSource === 'screen'
+                  ? 'bg-[#ff3366]/20 border-[#ff3366] text-[#ff3366] shadow-[0_0_8px_rgba(255,51,102,0.3)]'
+                  : 'bg-black/50 border-white/10 text-zinc-400 hover:text-white hover:border-white/30'
+              }`}
+            >
+              Screen
+            </button>
           </div>
         </div>
 
@@ -144,40 +167,8 @@ export default function Home() {
           <SystemTelemetry />
         </div>
 
-        {/* Sub-Agents Panel - Moved from center */}
-        <div className="flex-1 w-full bg-[#06060c] border border-[#00FFFF]/30 shadow-[0_0_30px_rgba(0,0,0,0.9)] z-10 flex flex-col clip-cut-sm relative">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,255,0.05)_0%,transparent_100%)]"></div>
-          
-          <div className="h-8 bg-black flex items-center justify-between px-3 border-b border-[#00FFFF]/20 relative z-10">
-            <span className="text-[9px] font-quantico font-bold text-[#00FFFF] uppercase tracking-[0.2em]">Sub_Agents</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[8px] font-mono text-white bg-[#00FFFF]/20 px-1.5 py-0.5 border border-[#00FFFF]/30 clip-cut-sm">3 ACTIVE</span>
-            </div>
-          </div>
-          <div className="p-3 flex flex-col gap-2 overflow-y-auto scroll-hide relative z-10">
-            <div className="flex items-center justify-between bg-black/60 border border-white/5 p-2 clip-cut-sm group hover:border-[#00FFFF]/30 transition-colors">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-[#00FFFF] shadow-[0_0_8px_#00FFFF] animate-pulse"></div>
-                <span className="text-[9px] font-mono text-zinc-300">parent_delegate_task</span>
-              </div>
-              <span className="text-[8px] font-mono text-zinc-500 group-hover:text-[#00FFFF]">0.0s</span>
-            </div>
-            <div className="flex items-center justify-between bg-black/60 border border-white/5 p-2 clip-cut-sm group hover:border-[#6137FF]/30 transition-colors">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-[#6137FF] shadow-[0_0_8px_#6137FF] animate-pulse"></div>
-                <span className="text-[9px] font-mono text-zinc-300">web_search</span>
-              </div>
-              <span className="text-[8px] font-mono text-zinc-500 group-hover:text-[#6137FF]">0.8s</span>
-            </div>
-            <div className="flex items-center justify-between bg-black/60 border border-white/5 p-2 clip-cut-sm group hover:border-white/20 transition-colors">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-zinc-500"></div>
-                <span className="text-[9px] font-mono text-zinc-500">query_memory</span>
-              </div>
-              <span className="text-[8px] font-mono text-zinc-600">0.2s</span>
-            </div>
-          </div>
-        </div>
+        {/* Agent Workspace Panel */}
+        <AgentWorkspace />
       </aside>
 
       {/* CENTER COLUMN */}

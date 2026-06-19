@@ -370,3 +370,59 @@ def detect_language(text: str) -> str:
     if hinglish_hits / max(len(words), 1) > 0.5:
         return "hi"
     return "mixed"
+
+
+def format_spelled_out_words(text: str) -> str:
+    """
+    Detect space-separated single letters (e.g. "p y r i g h t" or "P Y R I G H T")
+    and format them to comma-separated capitalized letters so the TTS engine
+    spells them out correctly instead of mispronouncing them (e.g., "P, Y, R, I, G, H, T.").
+    """
+    if not text:
+        return text
+        
+    words = text.split()
+    new_words = []
+    i = 0
+    while i < len(words):
+        word = words[i]
+        clean_word = word.strip(".,!?;:")
+        if len(clean_word) == 1 and clean_word.isalpha():
+            seq = [clean_word.upper()]
+            j = i + 1
+            has_ending_punct = False
+            ending_punct = ""
+            
+            # Check if the first word itself had ending punctuation
+            if len(word) > 1 and word[-1] in ".,!?;:":
+                has_ending_punct = True
+                ending_punct = word[-1]
+                
+            if not has_ending_punct:
+                while j < len(words):
+                    next_word = words[j]
+                    clean_next = next_word.strip(".,!?;:")
+                    if len(clean_next) == 1 and clean_next.isalpha():
+                        seq.append(clean_next.upper())
+                        if len(next_word) > 1 and next_word[-1] in ".,!?;:":
+                            has_ending_punct = True
+                            ending_punct = next_word[-1]
+                            j += 1
+                            break
+                        j += 1
+                    else:
+                        break
+            
+            if len(seq) >= 2:
+                formatted = ", ".join(seq)
+                if has_ending_punct:
+                    formatted += ending_punct
+                else:
+                    formatted += "."
+                new_words.append(formatted)
+                i = j
+                continue
+                
+        new_words.append(word)
+        i += 1
+    return " ".join(new_words)

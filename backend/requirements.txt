@@ -12,3 +12,5 @@ google-cloud-firestore
 pytest
 pytest-asyncio
 loguru
+aiosqlite
+playwright

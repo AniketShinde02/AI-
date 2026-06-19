@@ -1,3 +1,142 @@
+## [2026-06-19] — Core Capability Stabilization, Test Suite Expansion & Browser Cleanups
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **`backend/voice_agent/test_v1.py`**: Added **FEATURE 22 (Live WebSocket Connection)** to execute integration handshakes, greet payload reading, and ping-pong check against the active running uvicorn server on port 8001.
+
+### Fixed
+- **`backend/voice_agent/core/browser_agent.py`**: Fixed unknown `triple_click` attribute error on Playwright `Page` by refactoring it to `click(click_count=3)`. Resolved context optional attribute checks by adding explicit context verification assertions. Implemented a robust `_ensure_page` page recreation mechanism on closed context or page instances, and added a `close()` clean-up method.
+- **`backend/voice_agent/core/session_state.py`**: Declared comprehensive class-level type annotations and stub methods for `SessionStateMixin` to prevent variable reference errors and attribute access issues under Pyright.
+- **`backend/voice_agent/core/voice_session.py`**: Corrected initialization of the Gemini Live session manager by importing and calling the dynamic `get_gemini_live_system_instruction` function instead of referencing a non-existent static string constant. Added a `# type: ignore` to `tools=ALL_TOOLS` parameter to align with Groq/OpenAI type hints. Added browser action support to the Action Router forced-routing intercept path, and updated the workspace state to `"completed"` before early returns to prevent infinite `"running"` state hangs.
+- **`backend/voice_agent/test_v1.py`**: Replaced static capability checks with a dynamic SQLite query, added type ignores to sys.stdout encoding calls to satisfy Pyright, closed tabs in Feature 5/6, and called `browser_agent.close()` on test exit to prevent browser process leaks.
+
+### Verified
+- Executed Pyright static analysis check: resolved all type checking failures (**0 errors**).
+- Ran E2E integration test suite: confirmed successful execution of all E2E browser and WebSocket mode tests (**22/22 PASS**).
+
+## [2026-06-19] — Phase 7 & 8: Agent Workspace & Multimodal Optics
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **`frontend/src/components/AgentWorkspace.tsx`**: Core UI block showing the current task, active tool/capability, OS window focus, capability verification state, and a live Playwright sandbox frame preview.
+- **`backend/voice_agent/core/execution_hooks.py`**: Added `broadcast_workspace_state` to query the foreground window and fetch base64 frames from the browser agent, pushing real-time states to connected WS clients.
+
+### Changed
+- **`frontend/src/app/page.tsx`**: Replaced mock sub-agents panel with `<AgentWorkspace />`. Upgraded top-left optics feed placeholder to a fully interactive observation component utilizing `navigator.mediaDevices` camera and screen-sharing capture streams.
+- **`frontend/src/hooks/useNexusVoice.ts`**: Subscribed to the incoming `workspace_state` message type to populate the React state and export it.
+- **`frontend/src/contexts/VoiceContext.tsx`** & **`frontend/src/contexts/NexusContext.tsx`**: Exposed `workspaceState` across the application's React Context providers.
+- **`backend/voice_agent/core/voice_session.py`**: Added task tracking properties and broadcast state transitions on transcription processing and response completion.
+- **`backend/voice_agent/api/websocket_routes.py`**: Broadcasts state status updates on initial connection, manual text messages, and audio finished notifications.
+
+### Performance
+- Captured browser screenshots use JPEG (quality 50) compression to maintain minimal payload sizes (20-40KB) for websocket transfers.
+
+## [2026-06-19] — Phase 3: Unified Capability Registry
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **[NEW] `core/capability_registry_def.py`**: Single source of truth for all 18 Nexus V1 capabilities.
+  - `CapabilityDef` dataclass encapsulates: `id`, `name`, `description`, `category`, `permissions_required`, `requires_approval`, `groq_schema` (Groq/OpenAI function-calling JSON), `target_param` (param key mapping), `confirm_template` (TTS confirmation speech).
+  - Derived compile-time exports: `CAPABILITY_MAP` (O(1) id lookup), `PC_TOOL_SCHEMAS`, `BROWSER_TOOL_SCHEMAS`, `CAPABILITY_REGISTRATION_TUPLES`, `CONFIRMATION_LABELS`, `ACTION_ROUTER_TOOL_NAMES`.
+
+### Changed
+- **`core/global_state.py`**: Replaced 8-capability hardcoded tuple list with `CAPABILITY_REGISTRATION_TUPLES` import. Now registers all 18 caps on startup (was missing 10 Phase 1 caps).
+- **`tools/system.py`**: Replaced ~100-line hardcoded `SYSTEM_TOOLS` list with `PC_TOOL_SCHEMAS` import. 11 PC tool schemas now served from single definition.
+- **`tools/browser_tools.py`**: Replaced hardcoded `BROWSER_TOOLS` with `BROWSER_TOOL_SCHEMAS` import. Extended `execute_browser_action` dispatcher to cover all 4 tab-management actions (`browser_tab_new`, `browser_tab_close`, `browser_tab_switch`, `browser_tab_list`).
+- **`core/voice_session.py`**: Replaced inline 9-entry `action_labels` dict with `CONFIRMATION_LABELS`/`CAPABILITY_MAP` template lookup. Adding a new capability now requires zero changes here.
+- **`core/action_router.py`**: Replaced 15-line hardcoded tool name string in `_generate_system_prompt` with `ACTION_ROUTER_TOOL_NAMES` import. Prompt is now always in sync with the registry.
+
+### Verified
+- Syntax check: 6/6 modified files pass `ast.parse`.
+- Runtime import: 18 capabilities, 11 PC schemas, 4 browser tab schemas, 15 action router tools — all counts correct.
+- All 20 E2E tests (test_v1.py) confirmed PASS before this change was applied.
+
+## [2026-06-19] — Phase 2: File Splitting
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Changed (Structural Splits — zero behaviour change)
+
+#### `voice_session.py` 1221 → ~380 lines
+- **[NEW] `core/session_state.py`**: `SessionState` enum + `SessionStateMixin` — owns all VAD logic, `process_audio`, transcript/TTS sanitizers. No circular deps.
+- **[NEW] `core/session_tts_worker.py`**: `SessionTTSMixin` — owns `tts_worker`, `metrics_worker`, `greet`, `safe_send_json`, `stop_audio`, `enqueue_tts`. No circular deps.
+- **`voice_session.py`**: Now a clean orchestration shell — `VoiceSession` inherits both mixins via Python MRO. Owns `__init__`, lifecycle, `run_pipeline`, `run_llm_and_tts`, `extract_and_save_memory`. Added `pc_focus_app`, `pc_switch_window`, `pc_clipboard_read`, `pc_clipboard_write` confirmation labels to the action router dispatch table.
+
+#### `database.py` 502 → ~280 lines
+- **[NEW] `core/db_schema.py`**: Extracts all `CREATE TABLE IF NOT EXISTS` DDL into a single idempotent `init_db_sync()` function. Migration guards (`ALTER TABLE` stmts) included.
+- **`database.py`**: Imports `init_db_sync` from `db_schema.py`. Pure async query layer only. Kept `_get_conn()` sync helper for backward-compat with audit/capability REST endpoints.
+
+#### `api/rest_routes.py` 440 → ~220 lines
+- **[NEW] `api/routes_system.py`**: All OS-automation endpoints (mouse, keyboard, window, screenshot, `/execute-tool`) moved here under `system_router`.
+- **`rest_routes.py`**: Data-layer API only (memory, agents, workflows, RAG, capabilities, voices, theme, scrapper-os). Includes `system_router` via `rest_router.include_router()` — external import surface unchanged.
+
+### Verified
+- Syntax check: 7/7 files OK (`ast.parse`)
+- Import validation: all modules load cleanly including MRO check on `VoiceSession`
+
+## [2026-06-19] — Phase 1: Complete Missing Capabilities
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **`focus_app`** (`pc_control.py`): Brings a running window to the foreground using `ctypes.windll.user32.SetForegroundWindow` + `BringWindowToTop`. Falls back to `pygetwindow.activate()`. Includes RapidFuzz title-match for fuzzy window lookup and auto-restore from minimized state.
+- **`switch_window`** (`pc_control.py`): Named target delegates to `focus_app`; unnamed/empty target sends `Alt+Tab` cycle via PyAutoGUI.
+- **`clipboard_read`** (`pc_control.py`): Reads system clipboard via `pyperclip.paste()`. Returns full execution contract with character count and 100-char preview.
+- **`clipboard_write`** (`pc_control.py`): Writes to system clipboard via `pyperclip.copy()` and performs a round-trip read-back to verify the write.
+- **`browser_type`** (`browser_agent.py`): Clicks + triple-click selects a Playwright CSS selector, then types with 30ms inter-key delay for realistic input.
+- **`browser_submit`** (`browser_agent.py`): Attempts native `form.submit()` via `page.evaluate()`, falls back to `keyboard.press("Enter")`.
+- **`browser_tab_management`** (`browser_agent.py`): Supports `new`, `close`, `switch` (by integer index or RapidFuzz title match), and `list` actions on the Playwright persistent context.
+- **ActionRouter updated** (`action_router.py`): System prompt now registers all 15 tools (7 new + 8 existing) so the intent classifier can route user voice commands to them.
+- **`test_v1.py` extended**: Added tests 17 (focus_app), 18 (switch_window), 19 (clipboard round-trip), 20 (browser_tab_management).
+
+### Verified
+- Tests 17/18/19 executed and passed locally with full execution contracts.
+
+## [2026-06-19] — Stabilization Audit & Core Implementation
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Semantic Category Matcher (Task C)**: Implemented functional category routing inside `app_discovery.py` and `pc_control.py` mapping intent terms like "file manager" to system executables (`explorer.exe`) in $O(1)$ time, bypassing fuzzy matching false-positives (such as launching 7-Zip).
+- **Spelled-Out Word Normalization (Task B)**: Added a normalization filter in `text_normalizer.py` and integrated it into `voice_session.py`'s TTS preprocessing pipeline to format spaced letter spelling (e.g. `p y r i g h t`) into comma-separated capitalized letters (`P, Y, R, I, G, H, T.`), allowing natural TTS spelling pronunciation.
+- **Complete V1 Stabilization Audit**: Performed a detailed 9-phase audit of the Nexus V1 architecture, establishing splitting boundaries for monolithic files, mapping missing capabilities, proposing a provider-agnostic Capability Registry schema, and listing Brain V2 blocker priorities.
+
+### Changed
+- **IDE/Venv Synchronization (Task A)**: Synced the Pyright virtual environment settings in `pyrightconfig.json` to point to the operational `backend/venv` path, preventing static analysis "ghost bugs" and import warnings.
+
+### Fixed
+- **Dependency Environment Error**: Installed missing `aiosqlite` and `rapidfuzz` dependencies directly in the default `voice_agent/venv` directory to resolve IDE import errors and align the default workspace environment with the active running tests.
+
+## [2026-06-19] — V1 Features Stabilization & E2E Test Suite
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Strict Indian Accent Prompts**: Updated system instructions in `prompts.py` for both the standard REST LLM and the Gemini Live API to enforce talking strictly in an Indian accent/dialect (Indian English/Hinglish patterns, pacing, and phrasing), avoiding British or American colloquialisms and intonations.
+- **Isolated Persistent Browser**: Refactored `browser_agent.py` to route all web searches and URL openings through a standalone Playwright Chromium instance with a persistent profile (`backend/data/browser_profile`). This keeps your main browser workspace undisturbed while retaining logins, cookies, and session states.
+- **Asynchronous SQLite Migration**: Migrated `database.py` and `app_discovery.py` to use `aiosqlite` to eliminate database thread thrashing and GIL contention, converting blocking SQLite operations into native async queries.
+- **E2E Verification Suite**: Created `test_v1.py` containing automated, real integration tests for all 16 core features of Nexus V1.
+
+### Fixed
+- **Directory Path Autocreation**: Fixed `write_file` in `file_tools.py` to automatically create parent directories recursively if they do not exist when writing a file.
+- **Windows Console stdout Reconfiguration**: Reconfigured stdout and stderr to use UTF-8 encoding in the test suite to prevent encoding crashes with Hindi/Marathi/Urdu transcriptions on Windows console.
+- **Action Router Parameter Mapping**: Fixed a bug in `voice_session.py` where the Action Router's `target` parameter was not mapped to `app_name` for `pc_minimize_app` and `pc_maximize_app` actions, causing them to execute with empty parameters.
+
 ## [2026-06-19] — App Discovery Edge Cases, Graceful Close & Minimize
 ### Author
 - Antigravity AI

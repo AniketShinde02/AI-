@@ -5,8 +5,8 @@ import pyautogui
 import psutil
 import time
 from PIL import ImageGrab
-from typing import Dict, Any, List
-
+from typing import Dict, Any, List, Optional
+from rapidfuzz import fuzz, process
 logger = logging.getLogger("nexus.pc_control")
 
 # Safety Configuration
@@ -33,49 +33,55 @@ class PCControl:
 
     async def open_app(self, app_name: str) -> Dict[str, Any]:
         import asyncio
-        from rapidfuzz import fuzz, process
-        from core.app_discovery import get_app_path, get_all_apps_dict
+        from core.app_discovery import get_app_path, get_all_apps_dict, resolve_system_role
         
         start_time = time.perf_counter()
         logger.info(f"PC Control: Opening '{app_name}'")
         try:
-            # 1. Clean the incoming slang
-            clean_target = app_name.lower().strip()
-            # Remove slang / conversational filler common in Hindi/Hinglish
-            for slang in ["kro", "karo", "kar", "do", "bhai", "please", "app", "open"]:
-                clean_target = clean_target.replace(slang, "")
-            clean_target = clean_target.strip()
-            
-            if not clean_target:
-                clean_target = app_name.lower().strip() # fallback if we stripped everything
-
-            # 2. Get full DB
-            app_db = await get_all_apps_dict()
-            matched_key = None
-            
-            # 3. Exact alias match
-            if clean_target in app_db:
-                matched_key = clean_target
-            
-            # 4. RapidFuzz token_set_ratio
-            if not matched_key:
-                best_match = process.extractOne(
-                    clean_target, 
-                    app_db.keys(), 
-                    scorer=fuzz.token_set_ratio, 
-                    score_cutoff=60
-                )
-                if best_match:
-                    matched_key = best_match[0]
-                    logger.info(f"🎯 Nexus AI resolved approximate phrase '{app_name}' to installed app: '{matched_key}' (score: {best_match[1]})")
-
-            if matched_key:
-                target = app_db[matched_key]
+            # 0. Check semantic system roles mapping first
+            system_target = resolve_system_role(app_name)
+            if system_target:
+                logger.info(f"🎯 Resolved system role '{app_name}' to system default: '{system_target}'")
+                target = system_target
+                clean_target = system_target.replace(".exe", "")
             else:
-                # Absolute fallback to let OS startfile try
-                target = await get_app_path(clean_target)
-                if not target:
-                    target = app_name
+                # 1. Clean the incoming slang
+                clean_target = app_name.lower().strip()
+                # Remove slang / conversational filler common in Hindi/Hinglish
+                for slang in ["kro", "karo", "kar", "do", "bhai", "please", "app", "open"]:
+                    clean_target = clean_target.replace(slang, "")
+                clean_target = clean_target.strip()
+                
+                if not clean_target:
+                    clean_target = app_name.lower().strip() # fallback if we stripped everything
+    
+                # 2. Get full DB
+                app_db = await get_all_apps_dict()
+                matched_key = None
+                
+                # 3. Exact alias match
+                if clean_target in app_db:
+                    matched_key = clean_target
+                
+                # 4. RapidFuzz token_set_ratio
+                if not matched_key:
+                    best_match = process.extractOne(
+                        clean_target, 
+                        app_db.keys(), 
+                        scorer=fuzz.token_set_ratio, 
+                        score_cutoff=60
+                    )
+                    if best_match:
+                        matched_key = best_match[0]
+                        logger.info(f"🎯 Nexus AI resolved approximate phrase '{app_name}' to installed app: '{matched_key}' (score: {best_match[1]})")
+    
+                if matched_key:
+                    target = app_db[matched_key]
+                else:
+                    # Absolute fallback to let OS startfile try
+                    target = await get_app_path(clean_target)
+                    if not target:
+                        target = app_name
 
             # Determine process name for verification
             if target.startswith("shell:AppsFolder"):
@@ -94,6 +100,7 @@ class PCControl:
                 try:
                     os.startfile(target)
                 except Exception as e:
+                    logger.warning(f"os.startfile failed for {target}: {e}. Retrying via shell.")
                     subprocess.Popen(f"start \"\" \"{target}\"", shell=True)
             else:
                 # Direct Popen - more reliable than `start` shell command
@@ -135,7 +142,6 @@ class PCControl:
         start_time = time.perf_counter()
         try:
             import pygetwindow as gw
-            import asyncio
             closed = 0
             
             clean_target = app_name.lower().strip()
@@ -254,6 +260,110 @@ class PCControl:
         except Exception as e:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_click", button, str(e), t)
+
+    # --- WINDOW FOCUS & SWITCHING ---
+
+    async def focus_app(self, app_name: str) -> Dict[str, Any]:
+        """Bring a running application window to the foreground."""
+        import asyncio
+        start_time = time.perf_counter()
+        logger.info(f"PC Control: Focusing '{app_name}'")
+        try:
+            import pygetwindow as gw
+            clean = app_name.lower().strip()
+            for slang in ["kro", "karo", "kar", "do", "bhai", "please", "app", "open", "focus", "switch"]:
+                clean = clean.replace(slang, "").strip()
+
+            # Collect candidate windows
+            all_windows = gw.getAllWindows()
+            candidates = [w for w in all_windows if w.title and clean in w.title.lower()]
+
+            if not candidates:
+                # RapidFuzz fallback on window titles
+                titles = [w.title for w in all_windows if w.title]
+                best = process.extractOne(clean, titles, scorer=fuzz.token_set_ratio, score_cutoff=55)
+                if best:
+                    candidates = [w for w in all_windows if w.title == best[0]]
+
+            if not candidates:
+                t = f"{time.perf_counter() - start_time:.2f}s"
+                return _create_contract(False, "pc_focus_app", app_name, "No matching window found", t)
+
+            win = candidates[0]
+            # Restore if minimized first, then activate
+            if win.isMinimized:
+                win.restore()
+                await asyncio.sleep(0.3)
+
+            # Use win32gui for reliable foreground placement on Windows
+            try:
+                import ctypes
+                hwnd = win._hWnd
+                ctypes.windll.user32.ShowWindow(hwnd, 9)   # SW_RESTORE
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+                ctypes.windll.user32.BringWindowToTop(hwnd)
+            except Exception:
+                win.activate()  # pygetwindow fallback
+
+            await asyncio.sleep(0.4)
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(True, "pc_focus_app", app_name, f"Focused: '{win.title}'", t)
+
+        except Exception as e:
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(False, "pc_focus_app", app_name, str(e), t)
+
+    async def switch_window(self, app_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Switch to a specific app window, or cycle through windows with Alt+Tab
+        if no app_name is given.
+        """
+        start_time = time.perf_counter()
+        logger.info(f"PC Control: Switching window to '{app_name}'")
+
+        if not app_name or app_name.strip().lower() in ("next", "switch", ""):
+            # Cycle via Alt+Tab
+            try:
+                pyautogui.hotkey("alt", "tab")
+                t = f"{time.perf_counter() - start_time:.2f}s"
+                return _create_contract(True, "pc_switch_window", "Next window", "Alt+Tab sent", t)
+            except Exception as e:
+                t = f"{time.perf_counter() - start_time:.2f}s"
+                return _create_contract(False, "pc_switch_window", "Next window", str(e), t)
+
+        # Named target → delegate to focus_app
+        return await self.focus_app(app_name)
+
+    # --- CLIPBOARD ---
+
+    async def clipboard_read(self) -> Dict[str, Any]:
+        """Read the current contents of the system clipboard."""
+        start_time = time.perf_counter()
+        try:
+            import pyperclip
+            text = pyperclip.paste()
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            preview = text[:100].replace("\n", " ") if text else ""
+            return _create_contract(True, "pc_clipboard_read", "Clipboard", f"Read {len(text)} chars: {preview}", t)
+        except Exception as e:
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(False, "pc_clipboard_read", "Clipboard", str(e), t)
+
+    async def clipboard_write(self, text: str) -> Dict[str, Any]:
+        """Write text to the system clipboard."""
+        start_time = time.perf_counter()
+        try:
+            import pyperclip
+            pyperclip.copy(text)
+            # Verify round-trip
+            readback = pyperclip.paste()
+            verified = readback == text
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            status = "Written and verified" if verified else "Written (verification mismatch)"
+            return _create_contract(verified, "pc_clipboard_write", "Clipboard", status, t)
+        except Exception as e:
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(False, "pc_clipboard_write", "Clipboard", str(e), t)
 
     # --- SYSTEM EXTRAS ---
     async def take_screenshot(self) -> Dict[str, Any]:

@@ -126,17 +126,8 @@ async def lifespan(app: FastAPI):
         
         log_stage("7. Registering capabilities...")
         from core.capabilities import registry
-        _caps = [
-            ("pc_open_app", "Open Application", "Open a Windows application by name", "applications", False, False),
-            ("pc_close_app", "Close Application", "Close a running Windows application", "applications", False, False),
-            ("pc_take_screenshot", "Take Screenshot", "Capture the primary display", "screenshots", False, False),
-            ("pc_type_text", "Type Text", "Simulate keyboard typing", "keyboard", False, False),
-            ("pc_press_shortcut", "Press Shortcut", "Simulate a keyboard shortcut", "keyboard", False, False),
-            ("run_scrapper_task", "Run ScrapperOS Task", "Trigger an external web scraper", "automation", True, True),
-            ("list_available_scrapers", "List Scrapers", "Fetch available web scrapers", "automation", False, False),
-            ("check_scrapper_health", "Scrapper Health", "Check if ScrapperOS is online", "automation", False, False),
-        ]
-        for cap_id, name, desc, cat, req_perm, req_approval in _caps:
+        from core.capability_registry_def import CAPABILITY_REGISTRATION_TUPLES
+        for cap_id, name, desc, cat, req_perm, req_approval in CAPABILITY_REGISTRATION_TUPLES:
             await registry.register_tool(cap_id, name, desc, cat, req_perm, req_approval, enabled=True)
             
         log_stage("8. Running App Discovery...")

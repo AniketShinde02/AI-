@@ -2,7 +2,8 @@ import asyncio
 import json
 import logging
 import subprocess
-from core.database import db
+import aiosqlite
+from core.database import DB_PATH
 from typing import Optional
 
 logger = logging.getLogger("nexus.app_discovery")
@@ -77,9 +78,8 @@ async def run_discovery():
             aliases.extend(["cursor ai", "cursor editor"])
         return list(set(aliases))
 
-    def _save_apps(discovered):
-        with db._get_conn() as conn:
-            cursor = conn.cursor()
+    async def _save_apps(discovered):
+        async with aiosqlite.connect(DB_PATH) as db:
             for app in discovered:
                 name = app.get("Name", "")
                 app_id = app.get("AppID", "")
@@ -96,51 +96,43 @@ async def run_discovery():
                     executable_path = f"shell:AppsFolder\\{app_id}"
                 
                 try:
-                    cursor.execute("""
+                    await db.execute("""
                         INSERT INTO discovered_apps (app_name, executable_path, aliases, publisher)
                         VALUES (?, ?, ?, ?)
                         ON CONFLICT(app_name) DO UPDATE SET 
                             executable_path=excluded.executable_path, 
                             aliases=excluded.aliases
                     """, (name, executable_path, json.dumps(aliases), ""))
-                except sqlite3.OperationalError:
+                except Exception as e:
                     # Fallback for old schema without JSON aliases if migration hasn't completed
                     pass
-            conn.commit()
+            await db.commit()
 
-    await asyncio.to_thread(_save_apps, apps)
+    await _save_apps(apps)
     logger.info(f"✅ Discovered and saved {len(apps)} applications to DB.")
 
 async def get_app_path(app_alias: str) -> Optional[str]:
     """Find an app path by its exact name or substring."""
-    def _fetch():
-        with db._get_conn() as conn:
-            cursor = conn.cursor()
-            query = f"%{app_alias.lower()}%"
-            # Since aliases might be JSON now, we check app_name instead as a fallback
-            cursor.execute("SELECT executable_path FROM discovered_apps WHERE app_name LIKE ? LIMIT 1", (query,))
-            row = cursor.fetchone()
+    async with aiosqlite.connect(DB_PATH) as db:
+        query = f"%{app_alias.lower()}%"
+        # Since aliases might be JSON now, we check app_name instead as a fallback
+        async with db.execute("SELECT executable_path FROM discovered_apps WHERE app_name LIKE ? LIMIT 1", (query,)) as cursor:
+            row = await cursor.fetchone()
             return row[0] if row else None
-    return await asyncio.to_thread(_fetch)
 
 async def get_all_apps() -> list[str]:
     """Return a list of all discovered application names."""
-    def _fetch():
-        with db._get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT app_name FROM discovered_apps")
-            rows = cursor.fetchall()
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT app_name FROM discovered_apps") as cursor:
+            rows = await cursor.fetchall()
             return [row[0] for row in rows] if rows else []
-    return await asyncio.to_thread(_fetch)
 
 async def get_all_apps_dict() -> dict:
     """Return a dictionary of {alias: executable_path} for exact/fuzzy matching."""
-    def _fetch():
-        with db._get_conn() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute("SELECT app_name, aliases, executable_path FROM discovered_apps")
-                rows = cursor.fetchall()
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            async with db.execute("SELECT app_name, aliases, executable_path FROM discovered_apps") as cursor:
+                rows = await cursor.fetchall()
                 result = {}
                 for app_name, aliases_json, executable_path in rows:
                     if aliases_json:
@@ -153,6 +145,32 @@ async def get_all_apps_dict() -> dict:
                     else:
                         result[app_name.lower()] = executable_path
                 return result
-            except sqlite3.OperationalError:
-                return {}
-    return await asyncio.to_thread(_fetch)
+        except Exception:
+            return {}
+
+SYSTEM_ROLES = {
+    "file manager": "explorer.exe",
+    "explorer": "explorer.exe",
+    "files": "explorer.exe",
+    "web browser": "chrome.exe",
+    "browser": "chrome.exe",
+    "terminal": "cmd.exe",
+    "command prompt": "cmd.exe",
+    "cmd": "cmd.exe",
+    "powershell": "powershell.exe",
+    "text editor": "notepad.exe",
+    "editor": "notepad.exe",
+    "notepad": "notepad.exe",
+    "calculator": "calc.exe",
+    "calc": "calc.exe",
+    "settings": "ms-settings:",
+    "control panel": "control.exe"
+}
+
+def resolve_system_role(app_name: str) -> Optional[str]:
+    clean = app_name.lower().strip()
+    for slang in ["kro", "karo", "kar", "do", "bhai", "please", "app", "open"]:
+        # Use word boundaries or space stripping to prevent partial matches
+        clean = clean.replace(slang, "")
+    clean = clean.strip()
+    return SYSTEM_ROLES.get(clean)

@@ -333,3 +333,18 @@ Stonic-AI-Source-Code/
 !package.json
 !package-lock.json
 !tsconfig.json
+
+# --------------------------------------------
+# 12. NEXUS LOCAL DB, BROWSER PROFILES & SCREENSHOTS
+# --------------------------------------------
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/data/browser_profile/
+**/data/screenshots/
+**/DEBUG_GEMINI_*.log
+**/found_*.txt
+**/line_*.txt
+**/phase_*.txt
+**/full_execution_order.txt
+

@@ -27,6 +27,7 @@ interface NexusContextType {
   setIsChecking: React.Dispatch<React.SetStateAction<boolean>>;
   voiceState: string;
   systemMetrics: any; // Real-time backend metrics via WebSocket
+  workspaceState: any;
   
   // Chat State
   messages: Message[];
@@ -228,6 +229,7 @@ export function NexusProvider({ children }: { children: ReactNode }) {
     micCaptured,
     isSpeaking,
     systemMetrics,
+    workspaceState,
     startListening,
     stopListening,
     setMicMuted,
@@ -336,6 +338,7 @@ export function NexusProvider({ children }: { children: ReactNode }) {
       setVoiceVolume: setVoiceVolumePersist,
       testVoice,
       systemMetrics,
+      workspaceState,
       voiceState
     }}>
       {children}

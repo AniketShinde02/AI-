@@ -35,6 +35,7 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         # 5. Startup Greeting
         await session.greet()
+        await session.update_workspace_state(status="idle")
         
         while session.is_connected:
             try:
@@ -74,6 +75,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         logger.info(f"✅ [Session] audio_finished received. Armed post-TTS guard for 1.2s.")
                     else:
                         logger.info(f"ℹ️ [Session] audio_finished received in state: {session.state.value}. Cleared speaking flag.")
+                    asyncio.create_task(session.update_workspace_state(status="idle"))
                     continue
                     
                 if msg.get("type") == "settings":
@@ -98,6 +100,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         
                 elif "text" in msg:
                     logger.debug(f"📩 Received chat message: {msg['text']}")
+                    session.current_task = msg["text"]
+                    await session.update_workspace_state(status="running")
                     session.current_turn_id += 1
                     asyncio.create_task(session.run_llm_and_tts(
                         msg["text"], 
@@ -192,6 +196,7 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                     if session.state == SessionState.SPEAKING:
                         session._change_state(SessionState.IDLE)
                         session.post_tts_guard_until = time.time() + 1.2
+                    asyncio.create_task(session.update_workspace_state(status="idle"))
                     continue
                 if msg.get("type") == "settings":
                     session.selected_persona = msg.get("persona") or "female"

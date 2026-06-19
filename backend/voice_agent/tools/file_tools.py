@@ -18,6 +18,7 @@ async def read_file(file_path: str) -> Dict[str, Any]:
 async def write_file(file_name: str, content: str) -> Dict[str, Any]:
     """Write text to a file (creates or overwrites)."""
     try:
+        os.makedirs(os.path.dirname(os.path.abspath(file_name)), exist_ok=True)
         with open(file_name, 'w', encoding='utf-8') as f:
             f.write(content)
         return {"success": True, "verified": True, "result": f"Successfully wrote to {file_name}", "error": None}
