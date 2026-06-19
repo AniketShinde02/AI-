@@ -1,3 +1,13 @@
+## [2026-06-19] — Firebase Admin Initialization & Credentials Repair
+
+### Author
+- Antigravity AI
+- Machine: JinWoo
+
+### Fixed
+- **`frontend/src/lib/firebase/server.ts`**: Upgraded Firebase Admin SDK initialization to natively parse the `FIREBASE_CREDENTIALS` JSON string, map snake_case service account properties to camelCase, and gracefully fall back to a safe warning instead of throwing a fatal process crash during build-time page collection when credentials are unconfigured.
+- **Environment Repair**: Re-generated the minified JSON credentials from the original service account file `studio-8908067992-4e114-firebase-adminsdk-fbsvc-49d5f34889.json` and repaired the corrupted `FIREBASE_CREDENTIALS` in both `frontend/.env` and `backend/.env` (re-inserted the deleted `w` character and fixed truncated escapes like `\zsId`, `\BQr`, `\F7V`).
+
 ## [2026-06-19] — Verification Path Validation, Environment Loading & Pyright Fixes
 
 ### Author
