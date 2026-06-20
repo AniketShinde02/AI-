@@ -3,6 +3,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, useEffect, ReactNode } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
+import dynamic from "next/dynamic";
+
+const Agentation = dynamic(
+  () => import("agentation").then((mod) => mod.Agentation),
+  { ssr: false }
+);
 
 function ErrorFallback({ error }: { error: Error }) {
   return (
@@ -72,6 +78,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
           {children}
+          {process.env.NODE_ENV === "development" && <Agentation />}
         </QueryClientProvider>
       </trpc.Provider>
     </ErrorBoundary>
