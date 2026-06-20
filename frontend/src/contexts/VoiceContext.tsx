@@ -11,6 +11,15 @@ interface VoiceContextType {
   activeEngine: 'gemini_live' | 'groq' | 'text' | 'unknown';
   systemMetrics: any;
   workspaceState: any;
+  pendingPermission: { sessionId: string; command: string } | null;
+  activeAgentTier: {
+    tier: string;
+    provider: string;
+    model: string;
+    themePrimary: string;
+    themeAccent: string;
+  } | null;
+  authorizeAdminPermission: (approved: boolean) => void;
   connect: () => void;
   disconnect: () => void;
   startListening: () => Promise<void>;

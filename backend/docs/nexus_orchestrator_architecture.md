@@ -99,131 +99,93 @@ To ensure that the backend loop operates transparently and developer-friendly (l
 
 ---
 
-## 4. Draw.io XML Architecture Diagram: Nexus Orchestrator Pipeline
+## 4. Mermaid Flowchart: Nexus Orchestrator Architecture
 
-Copy this XML block directly and import it into Draw.io to view the detailed orchestrator pipeline:
+The following Mermaid flowchart represents the comprehensive Nexus Orchestrator architecture, details the interaction between the client, core system, database, and telemetry layers, and outlines model routing responsibilities (including SambaNova and Mistral Shadow Soldiers):
 
-```xml
-<mxfile host="Electron" modified="2026-06-20T12:00:00.000Z" agent="Antigravity" version="21.0.0" type="device">
-  <diagram id="nexus-orchestrator-architecture" name="Nexus Orchestrator Architecture">
-    <mxGraphModel dx="1200" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" adaptiveColors="auto" math="0" shadow="0">
-      <root>
-        <mxCell id="0" />
-        <mxCell id="1" parent="0" />
-        
-        <!-- Header -->
-        <mxCell id="arch_title" value="NEXUS ORCHESTRATOR DETAILED BACKEND PIPELINE" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=20;fontColor=#1a237e;" vertex="1" parent="1">
-          <mxGeometry x="327" y="30" width="1000" height="40" as="geometry" />
-        </mxCell>
-        
-        <!-- Layers Box -->
-        <mxCell id="client_layer" value="CLIENT / INTERFACE LAYER" style="swimlane;startSize=24;fillColor=#f5f5f5;strokeColor=#cccccc;html=1;fontSize=12;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="50" y="100" width="300" height="460" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="client_ui" value="Next.js React Frontend&lt;br/&gt;(Settings, AnimeLayout,&lt;br/&gt;HITL Admin Modals)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="client_layer">
-          <mxGeometry x="30" y="60" width="240" height="80" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="agentation_box" value="Agentation UI Annotation Bar&lt;br/&gt;(Renders elements, bounding boxes)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="client_layer">
-          <mxGeometry x="30" y="190" width="240" height="80" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="voice_mic" value="Voice Streaming Socket&lt;br/&gt;(WebRTC/WebSocket Audio)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="client_layer">
-          <mxGeometry x="30" y="320" width="240" height="80" as="geometry" />
-        </mxCell>
-        
-        <!-- Orchestrator Box -->
-        <mxCell id="orch_layer" value="NEXUS CORE SYSTEM LAYER" style="swimlane;startSize=24;fillColor=#f9f7ed;strokeColor=#36393d;html=1;fontSize=12;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="450" y="100" width="360" height="460" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="router_core" value="Action Router (ws_main.py)&lt;br/&gt;- Classifies User Intent&lt;br/&gt;- Invokes specific agent tasks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="orch_layer">
-          <mxGeometry x="30" y="50" width="300" height="80" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="engine_loop" value="Observe-Decide-Act-Verify Loop&lt;br/&gt;- browser_agent.py (Playwright)&lt;br/&gt;- pc_control.py (RobotJS/OS APIs)&lt;br/&gt;- verification_matrix.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="orch_layer">
-          <mxGeometry x="30" y="180" width="300" height="80" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="guard_policy" value="OS Policy Guardrail Engine&lt;br/&gt;- Regex parsing for safety rules&lt;br/&gt;- Intercepts destructive commands&lt;br/&gt;- Triggers HITL alerts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;" vertex="1" parent="orch_layer">
-          <mxGeometry x="30" y="310" width="300" height="80" as="geometry" />
-        </mxCell>
-        
-        <!-- LLM & Telemetry Box -->
-        <mxCell id="llm_layer" value="LLM GATEWAY &amp; TELEMETRY LAYER" style="swimlane;startSize=24;fillColor=#f5f5f5;strokeColor=#cccccc;html=1;fontSize=12;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="910" y="100" width="360" height="460" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="litellm_proxy" value="LiteLLM Gateway Proxy&lt;br/&gt;- Formats Unified API Calls&lt;br/&gt;- Handles 429 limits &amp; backoffs&lt;br/&gt;- Fallback routing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="llm_layer">
-          <mxGeometry x="30" y="50" width="300" height="80" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="langfuse_telemetry" value="Langfuse Observability Server&lt;br/&gt;- Latency/Cost Audit log&lt;br/&gt;- Prompt versions &amp; templates&lt;br/&gt;- Trace graphs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="llm_layer">
-          <mxGeometry x="30" y="180" width="300" height="80" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="phoenix_tracing" value="Arize Phoenix / OpenTelemetry&lt;br/&gt;- Local-first visual trace logs&lt;br/&gt;- Graph loops visualization" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="llm_layer">
-          <mxGeometry x="30" y="310" width="300" height="80" as="geometry" />
-        </mxCell>
-        
-        <!-- DB & Memory Box -->
-        <mxCell id="db_layer" value="DATA STORAGE &amp; MEMORY SYSTEM" style="swimlane;startSize=24;fillColor=#f5f5f5;strokeColor=#cccccc;html=1;fontSize=12;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="450" y="620" width="360" height="280" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="local_sqlite" value="Local SQLite (WAL mode)&lt;br/&gt;- Active Tasks, Sessions&lt;br/&gt;- Cookie Vault, Task Cards catalog" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="db_layer">
-          <mxGeometry x="30" y="50" width="130" height="180" as="geometry" />
-        </mxCell>
-        
-        <mxCell id="supabase_db" value="Cloud Supabase&lt;br/&gt;- Historical datasets&lt;br/&gt;- B2B lead exports&lt;br/&gt;- Audit log backup" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="db_layer">
-          <mxGeometry x="200" y="50" width="130" height="180" as="geometry" />
-        </mxCell>
-        
-        <!-- Connections -->
-        <mxCell id="c1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#555555;strokeWidth=2;" edge="1" parent="1" source="client_ui" target="router_core">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="c2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#555555;strokeWidth=2;" edge="1" parent="1" source="router_core" target="engine_loop">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="c3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#555555;strokeWidth=2;" edge="1" parent="1" source="engine_loop" target="guard_policy">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="c4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#555555;strokeWidth=2;" edge="1" parent="1" source="engine_loop" target="litellm_proxy">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="c5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#555555;strokeWidth=2;" edge="1" parent="1" source="litellm_proxy" target="langfuse_telemetry">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="c6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#555555;strokeWidth=2;" edge="1" parent="1" source="langfuse_telemetry" target="phoenix_tracing">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="c7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#555555;strokeWidth=2;" edge="1" parent="1" source="engine_loop" target="local_sqlite">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="c8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#555555;strokeWidth=2;" edge="1" parent="1" source="local_sqlite" target="supabase_db">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        
-        <!-- Legend Box (Bottom-Left) -->
-        <mxCell id="legend_bg" value="&lt;b&gt;LEGEND&lt;/b&gt;" style="swimlane;startSize=24;fillColor=#f5f5f5;strokeColor=#cccccc;html=1;fontSize=11;align=center;" vertex="1" parent="1">
-          <mxGeometry x="50" y="620" width="300" height="280" as="geometry" />
-        </mxCell>
-        <mxCell id="legend_interface" value="Interface / Client Component" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="legend_bg">
-          <mxGeometry x="10" y="45" width="280" height="30" as="geometry" />
-        </mxCell>
-        <mxCell id="legend_logic" value="Logic / Execution Engine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="legend_bg">
-          <mxGeometry x="10" y="90" width="280" height="30" as="geometry" />
-        </mxCell>
-        <mxCell id="legend_guard" value="Security / Guardrails Layer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="legend_bg">
-          <mxGeometry x="10" y="135" width="280" height="30" as="geometry" />
-        </mxCell>
-        <mxCell id="legend_llm" value="LLM Gateway &amp; Telemetry Tooling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="legend_bg">
-          <mxGeometry x="10" y="180" width="280" height="30" as="geometry" />
-        </mxCell>
-      </root>
-    </mxGraphModel>
-  </diagram>
-</mxfile>
+```mermaid
+graph TD
+    %% Styling Classes
+    classDef client fill:#dae8fc,stroke:#6c8ebf,stroke-width:2px;
+    classDef core fill:#d5e8d4,stroke:#82b366,stroke-width:2px;
+    classDef guard fill:#ffe6cc,stroke:#d6b656,stroke-width:2px;
+    classDef llm fill:#e1d5e7,stroke:#9673a6,stroke-width:2px;
+    classDef db fill:#fff2cc,stroke:#d6b656,stroke-width:2px;
+
+    %% 1. Client / Interface Layer
+    subgraph Client / Interface Layer
+        UI[Next.js React Frontend <br/> AnimeLayout, Settings Panel]:::client
+        Agentation[Agentation UI Annotation Bar <br/> Local Dev Component]:::client
+        AudioSocket[Voice Streaming Connection <br/> WebRTC / WebSocket Audio]:::client
+    end
+
+    %% 2. Core Orchestration System
+    subgraph Core System Layer
+        WSMain[WS Handler ws_main.py]:::core
+        VoiceSess[VoiceSession.py <br/> Speech VAD, Transcript Sanitizer]:::core
+        ActRouter[Action Router <br/> Intent Classifier]:::core
+        TaskEngine[Task Card Engine <br/> Workflow Runner & Catalog]:::core
+        ExecHooks[Execution Hooks <br/> wrap_execution, run_desktop_tool]:::core
+        Guardrails[OS Policy Guardrail Engine <br/> Blocked / Restricted / Permitted]:::guard
+        PCControl[PC Control Manager <br/> PyAutoGUI, Bezier Curves, DPI Scaling]:::core
+        BrowserAgent[Browser Agent <br/> Playwright Session Pool, AXTree]:::core
+    end
+
+    %% 3. LLM Gateway & Telemetry
+    subgraph Gateway & Observability Layer
+        LiteLLM[LiteLLM Gateway Proxy <br/> Model load-balancing, 429 retries]:::llm
+        Langfuse[Langfuse Tracing <br/> Prompt Cache, Latency / Token Cost Graph]:::llm
+        Phoenix[Arize Phoenix Server <br/> OpenTelemetry Loop Graph View]:::llm
+    end
+
+    %% 4. Model Responsibility Routing (Shadow Army)
+    subgraph Shadow Army Model Tiers
+        Monarch[Shadow Monarch: User / Jinwoo <br/> HITL Guardrail Gate]:::client
+        Marshal[Grand Marshal: Mistral Large <br/> Macro Planning / SambaNova 405B]:::llm
+        Generals[Generals: Cerebras 120B / SambaNova 405B <br/> AXTree Loops Execution]:::llm
+        Knights[Knights: SambaNova 3.3 70B / Groq 8B <br/> Sub-second Intent Classification]:::llm
+        Eyes[Eyes: Gemini 1.5 Flash <br/> Vision OCR & Elements Localization]:::llm
+        Soldiers[Shadow Soldiers: SambaNova 3.2 3B / Mistral Small / Codestral <br/> Minor Tasks / Code Edits / chndi kaam]:::llm
+        Infantry[Infantry: PyAutoGUI, Playwright Local <br/> Primitive API calls]:::core
+    end
+
+    %% 5. Data Storage
+    subgraph Data & Memory Storage Layer
+        SQLite[Local SQLite <br/> WAL session memory, Cookie jar]:::db
+        Supabase[Cloud Supabase <br/> Scraped B2B Leads, Long-Term logs]:::db
+    end
+
+    %% Connections - Client to Core
+    UI <-->|WebSocket: State & UI Updates| WSMain
+    AudioSocket -->|Raw PCM audio stream| VoiceSess
+    WSMain <--> VoiceSess
+    
+    %% Core pipelines
+    VoiceSess -->|User transcript text| ActRouter
+    ActRouter -->|Match Intent| TaskEngine
+    TaskEngine -->|Execute steps| ExecHooks
+    ExecHooks -->|Security Policy scanning| Guardrails
+    
+    %% Guardrails HITL
+    Guardrails -->|Restricted Command| UI
+    UI -->|Admin Approval Click| Guardrails
+    
+    %% Tools execution
+    ExecHooks -->|OS Primitives| PCControl
+    ExecHooks -->|Browser Primitives| BrowserAgent
+    
+    %% Model calls
+    ActRouter -.->|Groq Llama 8B| Knights
+    TaskEngine -.->|AXTree Prompt| Generals
+    VoiceSess -.->|Chat Prompt| Eyes
+    ExecHooks -.->|Minor tasks| Soldiers
+    
+    %% Gateway & Telemetry
+    Knights & Generals & Eyes & Soldiers & Marshal --> LiteLLM
+    LiteLLM --> Langfuse
+    LiteLLM --> Phoenix
+    
+    %% Data Flow
+    PCControl & BrowserAgent --> SQLite
+    SQLite -->|Sync long-term exports| Supabase
 ```

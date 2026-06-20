@@ -38,6 +38,14 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     active_window: null,
     browser_screenshot: null
   });
+  const [pendingPermission, setPendingPermission] = useState<{ sessionId: string; command: string } | null>(null);
+  const [activeAgentTier, setActiveAgentTier] = useState<{
+    tier: string;
+    provider: string;
+    model: string;
+    themePrimary: string;
+    themeAccent: string;
+  } | null>(null);
   
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -354,6 +362,29 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
             setSystemMetrics(msg.data);
           } else if (msg.type === 'workspace_state') {
             setWorkspaceState(msg.data);
+          } else if (msg.type === 'hitl_admin_permission') {
+            logger.info("[Nexus WS] 🛡️ HITL Admin Permission requested:", msg.data);
+            setPendingPermission({
+              sessionId: msg.data.session_id,
+              command: msg.data.command
+            });
+          } else if (msg.type === 'theme_update') {
+            const d = msg.data;
+            const tier = {
+              tier: d.agent_tier as string,
+              provider: d.provider as string,
+              model: d.model as string,
+              themePrimary: d.theme_primary as string,
+              themeAccent: d.theme_accent as string,
+            };
+            setActiveAgentTier(tier);
+            // Apply Shadow Army colors directly to CSS variables — no re-render cost
+            if (typeof document !== 'undefined') {
+              document.documentElement.style.setProperty('--shadow-army-primary', tier.themePrimary);
+              document.documentElement.style.setProperty('--shadow-army-accent', tier.themeAccent);
+              document.documentElement.setAttribute('data-agent-tier', tier.tier.toLowerCase().replace(' ', '-'));
+            }
+            logger.info(`[Shadow Army] 🎖️ Tier activated: ${tier.tier} via ${tier.provider}/${tier.model}`);
           } else if (msg.type === 'log') {
             if (logger[msg.level as keyof typeof logger]) {
               (logger as any)[msg.level](`[Backend] ${msg.message}`);
@@ -595,6 +626,17 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     }
   }, [ensureAudioContext]);
 
+  const authorizeAdminPermission = useCallback((approved: boolean) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN && pendingPermission) {
+      logger.info(`[Nexus WS] Sending authorize_admin: status=${approved ? 'approved' : 'denied'}`);
+      socketRef.current.send(JSON.stringify({
+        action: 'authorize_admin',
+        status: approved ? 'approved' : 'denied'
+      }));
+      setPendingPermission(null);
+    }
+  }, [pendingPermission]);
+
   useEffect(() => {
     return () => {
       if (socketRef.current && (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING)) {
@@ -611,6 +653,9 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     activeEngine,
     systemMetrics,
     workspaceState,
+    pendingPermission,
+    activeAgentTier,
+    authorizeAdminPermission,
     connect,
     disconnect,
     startListening,

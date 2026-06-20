@@ -27,7 +27,7 @@ async def websocket_endpoint(websocket: WebSocket):
         old_session.is_connected = False
         logger.info(f"♻️ Replacing previous session {session_id} with a fresh one to restart worker tasks")
         
-    session = VoiceSession(websocket, engine="nexus")
+    session = VoiceSession(websocket, engine="nexus", session_id=session_id or "")
     if session_id:
         gs.active_sessions[session_id] = session
         logger.info(f"🆕 Created session {session_id}")
@@ -97,7 +97,37 @@ async def websocket_endpoint(websocket: WebSocket):
                     elif action == "unmute":
                         session.is_muted = False
                         session.vad_iterator.reset_states()
+                    elif action == "authorize_admin":
+                        approved = msg.get("status") == "approved"
+                        from core.guardrails import guardrails
+                        guardrails.authorize_action(session.session_id, approved)
+                        continue
                         
+                elif msg.get("type") == "run_swarm_task":
+                    goal = msg.get("goal")
+                    session_id = session.session_id
+                    logger.info(f"🕸️ WebSocket trigger swarm task: '{goal}'")
+                    async def run_swarm_bg():
+                        from core.agent_swarm import swarm_manager
+                        try:
+                            res = await swarm_manager.execute_swarm_task(goal, session_id)
+                            result_text = res.get("result", "Swarm finished with no output.")
+                            await session.safe_send_json({
+                                "type": "agent_message",
+                                "text": result_text,
+                                "is_final": True
+                            })
+                            await session.enqueue_tts(result_text, turn_id=session.current_turn_id)
+                        except Exception as e:
+                            logger.error(f"Error in websocket swarm run: {e}", exc_info=True)
+                            await session.safe_send_json({
+                                "type": "agent_message",
+                                "text": f"Swarm failed: {str(e)}",
+                                "is_final": True
+                            })
+                    asyncio.create_task(run_swarm_bg())
+                    continue
+
                 elif "text" in msg:
                     logger.debug(f"📩 Received chat message: {msg['text']}")
                     session.current_task = msg["text"]
@@ -204,6 +234,24 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                         session.post_tts_guard_until = time.time() + 1.2
                     asyncio.create_task(session.update_workspace_state(status="idle"))
                     continue
+                if "action" in msg:
+                    action = msg["action"]
+                    logger.debug(f"📩 Received action: {action}")
+                    if action == "authorize_admin":
+                        approved = msg.get("status") == "approved"
+                        from core.guardrails import guardrails
+                        guardrails.authorize_action(session.session_id, approved)
+                        continue
+                    elif action == "mute":
+                        session.is_muted = True
+                        session.audio_buffer.clear()
+                        session.vad_chunk_buffer.clear()
+                        session.vad_iterator.reset_states()
+                        session.agent_is_speaking = False
+                        continue
+                    elif action == "unmute":
+                        session.is_muted = False
+                        session.vad_iterator.reset_states()
                 if msg.get("type") == "settings":
                     session.selected_persona = msg.get("persona") or "female"
                     session.selected_provider = msg.get("ttsProvider") or "edge"

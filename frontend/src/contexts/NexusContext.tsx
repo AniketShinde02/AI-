@@ -28,6 +28,15 @@ interface NexusContextType {
   voiceState: string;
   systemMetrics: any; // Real-time backend metrics via WebSocket
   workspaceState: any;
+  pendingPermission: { sessionId: string; command: string } | null;
+  authorizeAdminPermission: (approved: boolean) => void;
+  activeAgentTier: {
+    tier: string;
+    provider: string;
+    model: string;
+    themePrimary: string;
+    themeAccent: string;
+  } | null;
   
   // Chat State
   messages: Message[];
@@ -233,6 +242,9 @@ export function NexusProvider({ children }: { children: ReactNode }) {
     activeEngine,
     systemMetrics,
     workspaceState,
+    pendingPermission,
+    activeAgentTier,
+    authorizeAdminPermission,
     startListening,
     stopListening,
     setMicMuted,
@@ -343,7 +355,10 @@ export function NexusProvider({ children }: { children: ReactNode }) {
       testVoice,
       systemMetrics,
       workspaceState,
-      voiceState
+      voiceState,
+      pendingPermission,
+      authorizeAdminPermission,
+      activeAgentTier,
     }}>
       {children}
     </NexusContext.Provider>

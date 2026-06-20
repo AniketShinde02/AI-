@@ -225,6 +225,28 @@ class NexusDatabase:
             await db.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
             await db.commit()
 
+    async def log_agent_run(self, agent_id: str, task: str, result: str, duration_ms: int):
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT INTO agent_runs (agent_id, task, result, duration_ms)
+                VALUES (?, ?, ?, ?)
+            """, (agent_id, task, result, duration_ms))
+            await db.commit()
+
+    async def get_agent_runs(self, limit: int = 50) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("""
+                SELECT id, agent_id, task, result, duration_ms, timestamp
+                FROM agent_runs
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, (limit,)) as cursor:
+                rows = await cursor.fetchall()
+                return [{
+                    "id": r[0], "agent_id": r[1], "task": r[2],
+                    "result": r[3], "duration_ms": r[4], "timestamp": r[5]
+                } for r in rows]
+
     # ------------------------------------------------------------------
     # Workflows
     # ------------------------------------------------------------------

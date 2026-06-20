@@ -62,7 +62,8 @@ class SpeechCleaner:
                 max_tokens=256
             )
             
-            clean_text = response.choices[0].message.content.strip()
+            content = response.choices[0].message.content or ""
+            clean_text = content.strip()
             
             # Clean up potential LLM conversational leaks
             if clean_text.lower().startswith("clean transcript:"):

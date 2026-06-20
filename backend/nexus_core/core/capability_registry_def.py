@@ -238,6 +238,115 @@ CAPABILITY_DEFINITIONS: List[CapabilityDef] = [
         },
     ),
 
+    # ── Mouse Automation ─────────────────────────────────────
+
+    CapabilityDef(
+        id="pc_move_mouse",
+        name="Move Mouse",
+        description="Move the mouse cursor to a specific coordinate.",
+        category="mouse",
+        permissions_required=False,
+        requires_approval=False,
+        target_param=None,
+        confirm_template="Moved mouse.",
+        groq_schema={
+            "type": "function",
+            "function": {
+                "name": "pc_move_mouse",
+                "description": "Move the mouse cursor to a specific x, y coordinate.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "integer", "description": "The X coordinate"},
+                        "y": {"type": "integer", "description": "The Y coordinate"}
+                    },
+                    "required": ["x", "y"]
+                }
+            }
+        },
+    ),
+
+    CapabilityDef(
+        id="pc_click",
+        name="Click",
+        description="Click at the current position or at a specific coordinate.",
+        category="mouse",
+        permissions_required=False,
+        requires_approval=False,
+        target_param=None,
+        confirm_template="Clicked mouse.",
+        groq_schema={
+            "type": "function",
+            "function": {
+                "name": "pc_click",
+                "description": "Perform a mouse click, optionally at a specific coordinate.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "integer", "description": "Optional X coordinate"},
+                        "y": {"type": "integer", "description": "Optional Y coordinate"},
+                        "button": {"type": "string", "description": "The button to click (left, right, middle)", "default": "left"},
+                        "double": {"type": "boolean", "description": "True for double click, False for single click", "default": False}
+                    },
+                    "required": []
+                }
+            }
+        },
+    ),
+
+    CapabilityDef(
+        id="pc_drag",
+        name="Drag Mouse",
+        description="Click and drag from one coordinate to another.",
+        category="mouse",
+        permissions_required=False,
+        requires_approval=False,
+        target_param=None,
+        confirm_template="Dragged mouse.",
+        groq_schema={
+            "type": "function",
+            "function": {
+                "name": "pc_drag",
+                "description": "Click and drag from (x1, y1) to (x2, y2).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "x1": {"type": "integer", "description": "Starting X coordinate"},
+                        "y1": {"type": "integer", "description": "Starting Y coordinate"},
+                        "x2": {"type": "integer", "description": "Ending X coordinate"},
+                        "y2": {"type": "integer", "description": "Ending Y coordinate"}
+                    },
+                    "required": ["x1", "y1", "x2", "y2"]
+                }
+            }
+        },
+    ),
+
+    CapabilityDef(
+        id="pc_scroll",
+        name="Scroll Mouse",
+        description="Scroll the mouse wheel up or down.",
+        category="mouse",
+        permissions_required=False,
+        requires_approval=False,
+        target_param=None,
+        confirm_template="Scrolled mouse.",
+        groq_schema={
+            "type": "function",
+            "function": {
+                "name": "pc_scroll",
+                "description": "Scroll the mouse wheel. Positive for up, negative for down.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "clicks": {"type": "integer", "description": "Number of scroll ticks (positive = scroll up, negative = scroll down)"}
+                    },
+                    "required": ["clicks"]
+                }
+            }
+        },
+    ),
+
     # ── Clipboard ────────────────────────────────────────────
 
     CapabilityDef(
@@ -591,6 +700,77 @@ CAPABILITY_DEFINITIONS: List[CapabilityDef] = [
         target_param=None,
         confirm_template="Scrapper health checked.",
         groq_schema={},
+    ),
+    CapabilityDef(
+        id="run_task_card",
+        name="Run Task Card",
+        description="Execute a pre-configured task card workflow by card ID.",
+        category="task_cards",
+        permissions_required=False,
+        requires_approval=False,
+        target_param="card_id",
+        confirm_template="Completed task card {target}.",
+        groq_schema={
+            "type": "function",
+            "function": {
+                "name": "run_task_card",
+                "description": "Execute a pre-configured task card workflow by card ID.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "card_id": {
+                            "type": "string",
+                            "description": "The exact card ID to execute (e.g. 'google_maps_leads_v1', 'doc_ppt_generation_v1')"
+                        }
+                    },
+                    "required": ["card_id"]
+                }
+            }
+        },
+    ),
+
+    # ── Phase 8: LLM-Driven Agentic Browser Loop ─────────────
+
+    CapabilityDef(
+        id="browser_agentic_task",
+        name="Autonomous Browser Task",
+        description=(
+            "Execute a fully autonomous multi-step browser task described in plain language. "
+            "The AI observes the current page state, decides the next action, acts, verifies, "
+            "and repeats until the goal is achieved or 12 iterations are exhausted. "
+            "Use this for open-ended goals like 'search for X and find the price', "
+            "'go to LinkedIn and find jobs for React Developer', or 'research Y on Wikipedia'."
+        ),
+        category="browser",
+        permissions_required=False,
+        requires_approval=False,
+        target_param="goal",
+        confirm_template="Completed autonomous browser task: {target}.",
+        groq_schema={
+            "type": "function",
+            "function": {
+                "name": "browser_agentic_task",
+                "description": (
+                    "Run an autonomous multi-step browser task. The agent observes the page, "
+                    "decides actions, and verifies outcomes automatically. Use for complex goals "
+                    "that require multiple browser steps (navigate, search, click, extract)."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "goal": {
+                            "type": "string",
+                            "description": (
+                                "A plain-language description of what to accomplish in the browser. "
+                                "Examples: 'Search for Python developer jobs in Mumbai on LinkedIn', "
+                                "'Find the price of RTX 4090 on Amazon', 'Go to Wikipedia and summarize quantum computing'."
+                            )
+                        }
+                    },
+                    "required": ["goal"]
+                }
+            }
+        },
     ),
 ]
 

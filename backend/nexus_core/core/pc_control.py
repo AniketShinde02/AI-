@@ -4,10 +4,57 @@ import logging
 import pyautogui
 import psutil
 import time
+import random
 from PIL import ImageGrab
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from rapidfuzz import fuzz, process
 logger = logging.getLogger("nexus.pc_control")
+
+def _get_dpi_and_resolution() -> Tuple[int, int, float]:
+    import ctypes
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+    
+    try:
+        user32 = ctypes.windll.user32
+        w = user32.GetSystemMetrics(0)
+        h = user32.GetSystemMetrics(1)
+        
+        hdc = user32.GetDC(0)
+        gdc = ctypes.windll.gdi32.GetDeviceCaps
+        logical_dpi = 96
+        physical_dpi = gdc(hdc, 88) # LOGPIXELSX = 88
+        user32.ReleaseDC(0, hdc)
+        
+        dpr = physical_dpi / logical_dpi
+        return w, h, dpr
+    except Exception:
+        return 1920, 1080, 1.0
+
+def _bezier_curve(x1: int, y1: int, x2: int, y2: int, steps: int = 20) -> List[Tuple[int, int]]:
+    dx = x2 - x1
+    dy = y2 - y1
+    
+    ctrl_x1 = x1 + dx * random.uniform(0.1, 0.4)
+    ctrl_y1 = y1 + dy * random.uniform(-0.2, 0.5)
+    
+    ctrl_x2 = x1 + dx * random.uniform(0.6, 0.9)
+    ctrl_y2 = y1 + dy * random.uniform(0.5, 1.2)
+    
+    points = []
+    for i in range(steps + 1):
+        t = i / steps
+        t_ease = t * t * (3 - 2 * t)
+        
+        x = (1 - t_ease)**3 * x1 + 3 * (1 - t_ease)**2 * t_ease * ctrl_x1 + 3 * (1 - t_ease) * t_ease**2 * ctrl_x2 + t_ease**3 * x2
+        y = (1 - t_ease)**3 * y1 + 3 * (1 - t_ease)**2 * t_ease * ctrl_y1 + 3 * (1 - t_ease) * t_ease**2 * ctrl_y2 + t_ease**3 * y2
+        points.append((int(x), int(y)))
+    return points
 
 # Safety Configuration
 pyautogui.FAILSAFE = True
@@ -31,12 +78,25 @@ class PCControl:
     # --- APP MANAGEMENT ---
     # Dynamic App Discovery handles alias mappings now.
 
-    async def open_app(self, app_name: str) -> Dict[str, Any]:
+    async def open_app(self, app_name: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         import asyncio
         from core.app_discovery import get_app_path, get_all_apps_dict, resolve_system_role
+        from core.guardrails import guardrails
         
         start_time = time.perf_counter()
-        logger.info(f"PC Control: Opening '{app_name}'")
+        logger.info(f"PC Control: Opening '{app_name}' (session: {session_id})")
+
+        # Scan target for safety guardrails
+        classification, reason = guardrails.scan_command(app_name)
+        if classification == "BLOCKED":
+            logger.warning(f"🛡️ [Guardrails] BLOCKED execution: '{app_name}'. Reason: {reason}")
+            return _create_contract(False, "pc_open_app", app_name, f"Blocked: {reason}", "0.00s")
+            
+        if classification == "RESTRICTED" and session_id:
+            approved = await guardrails.request_authorization(session_id, app_name)
+            if not approved:
+                logger.warning(f"🛡️ [Guardrails] RESTRICTED execution Denied by User: '{app_name}'")
+                return _create_contract(False, "pc_open_app", app_name, "Access Denied by Admin", "0.00s")
         try:
             # 0. Check semantic system roles mapping first
             system_target = resolve_system_role(app_name)
@@ -137,7 +197,7 @@ class PCControl:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_open_app", app_name, str(e), t)
 
-    async def close_app(self, app_name: str) -> Dict[str, Any]:
+    async def close_app(self, app_name: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         logger.info(f"PC Control: Closing {app_name}")
         start_time = time.perf_counter()
         try:
@@ -172,7 +232,7 @@ class PCControl:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_close_app", app_name, str(e), t)
 
-    async def minimize_app(self, app_name: str) -> Dict[str, Any]:
+    async def minimize_app(self, app_name: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         logger.info(f"PC Control: Minimizing {app_name}")
         start_time = time.perf_counter()
         try:
@@ -195,7 +255,7 @@ class PCControl:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_minimize_app", app_name, str(e), t)
 
-    async def maximize_app(self, app_name: str) -> Dict[str, Any]:
+    async def maximize_app(self, app_name: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         logger.info(f"PC Control: Maximizing {app_name}")
         start_time = time.perf_counter()
         try:
@@ -218,18 +278,33 @@ class PCControl:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_maximize_app", app_name, str(e), t)
 
+    # --- COORDINATE TRANSLATION ---
+    def scale_coords(self, x: int, y: int) -> Tuple[int, int]:
+        """
+        Translates normalized task-card coordinates (1280 x 720) into the actual
+        logical screen coordinates required by PyAutoGUI, accounting for monitor aspect ratio.
+        """
+        w, h, dpr = _get_dpi_and_resolution()
+        # Scale 1280x720 canvas coordinates directly to logical display resolution
+        scaled_x = int((x / 1280.0) * w)
+        scaled_y = int((y / 720.0) * h)
+        return scaled_x, scaled_y
+
     # --- INPUT AUTOMATION ---
-    async def type_text(self, text: str) -> Dict[str, Any]:
+    async def type_text(self, text: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         start_time = time.perf_counter()
         try:
-            pyautogui.write(text, interval=0.01)
+            for char in text:
+                pyautogui.write(char)
+                # Introduce typing jitter delay between 30ms and 120ms per character
+                time.sleep(random.uniform(0.03, 0.12))
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(True, "pc_type_text", "Screen", f"Typed {len(text)} chars", t)
         except Exception as e:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_type_text", "Screen", str(e), t)
 
-    async def press_shortcut(self, keys: List[str]) -> Dict[str, Any]:
+    async def press_shortcut(self, keys: List[str], session_id: Optional[str] = None) -> Dict[str, Any]:
         start_time = time.perf_counter()
         target = "+".join(keys)
         try:
@@ -240,30 +315,117 @@ class PCControl:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_press_shortcut", target, str(e), t)
 
-    async def move_mouse(self, x: int, y: int) -> Dict[str, Any]:
+    async def move_mouse(self, x: int, y: int, session_id: Optional[str] = None) -> Dict[str, Any]:
         start_time = time.perf_counter()
         target = f"({x}, {y})"
         try:
-            pyautogui.moveTo(x, y, duration=0.5)
+            # 1. High-DPI coordinate scaling translation
+            scaled_x, scaled_y = self.scale_coords(x, y)
+            
+            # 2. Add target sub-pixel jitter (Gaussian noise perturbation)
+            jitter_x = int(random.gauss(0, 0.5))
+            jitter_y = int(random.gauss(0, 0.5))
+            
+            w, h, _ = _get_dpi_and_resolution()
+            target_x = max(0, min(w - 1, scaled_x + jitter_x))
+            target_y = max(0, min(h - 1, scaled_y + jitter_y))
+            
+            start_x, start_y = pyautogui.position()
+            
+            if start_x != target_x or start_y != target_y:
+                # 3. Cubic Bezier curve mouse movement tracking
+                distance = ((target_x - start_x)**2 + (target_y - start_y)**2)**0.5
+                steps = max(10, min(40, int(distance / 15)))
+                points = _bezier_curve(start_x, start_y, target_x, target_y, steps=steps)
+                
+                for px, py in points:
+                    pyautogui.moveTo(px, py)
+                    # Humanized movement delay per step (5ms - 15ms)
+                    time.sleep(random.uniform(0.005, 0.015))
+                    
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(True, "pc_move_mouse", target, "Mouse moved", t)
         except Exception as e:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_move_mouse", target, str(e), t)
 
-    async def click(self, button: str = "left") -> Dict[str, Any]:
+    async def click(self, x: Optional[int] = None, y: Optional[int] = None, button: str = "left", double: bool = False, session_id: Optional[str] = None) -> Dict[str, Any]:
         start_time = time.perf_counter()
+        target = f"{button} click"
         try:
-            pyautogui.click(button=button)
+            if x is not None and y is not None:
+                await self.move_mouse(x, y, session_id=session_id)
+                target += f" at ({x}, {y})"
+            
+            if double:
+                pyautogui.doubleClick(button=button)
+                target = "Double " + target
+            else:
+                pyautogui.click(button=button)
+                
             t = f"{time.perf_counter() - start_time:.2f}s"
-            return _create_contract(True, "pc_click", button, "Clicked", t)
+            return _create_contract(True, "pc_click", target, "Clicked", t)
         except Exception as e:
             t = f"{time.perf_counter() - start_time:.2f}s"
-            return _create_contract(False, "pc_click", button, str(e), t)
+            return _create_contract(False, "pc_click", target, str(e), t)
+
+    async def drag(self, x1: int, y1: int, x2: int, y2: int, session_id: Optional[str] = None) -> Dict[str, Any]:
+        start_time = time.perf_counter()
+        target = f"drag from ({x1}, {y1}) to ({x2}, {y2})"
+        try:
+            await self.move_mouse(x1, y1, session_id=session_id)
+            pyautogui.mouseDown(button="left")
+            
+            scaled_x2, scaled_y2 = self.scale_coords(x2, y2)
+            jitter_x = int(random.gauss(0, 0.5))
+            jitter_y = int(random.gauss(0, 0.5))
+            
+            w, h, _ = _get_dpi_and_resolution()
+            target_x2 = max(0, min(w - 1, scaled_x2 + jitter_x))
+            target_y2 = max(0, min(h - 1, scaled_y2 + jitter_y))
+            
+            start_x, start_y = pyautogui.position()
+            
+            if start_x != target_x2 or start_y != target_y2:
+                distance = ((target_x2 - start_x)**2 + (target_y2 - start_y)**2)**0.5
+                steps = max(10, min(40, int(distance / 15)))
+                points = _bezier_curve(start_x, start_y, target_x2, target_y2, steps=steps)
+                
+                for px, py in points:
+                    pyautogui.moveTo(px, py)
+                    # Humanized drag movement delay per step (8ms - 18ms)
+                    time.sleep(random.uniform(0.008, 0.018))
+                    
+            pyautogui.mouseUp(button="left")
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(True, "pc_drag", target, "Dragged", t)
+        except Exception as e:
+            try:
+                pyautogui.mouseUp(button="left")
+            except Exception:
+                pass
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(False, "pc_drag", target, str(e), t)
+
+    async def scroll(self, clicks: int, session_id: Optional[str] = None) -> Dict[str, Any]:
+        start_time = time.perf_counter()
+        target = f"scroll {clicks} ticks"
+        try:
+            step = 1 if clicks > 0 else -1
+            abs_clicks = abs(clicks)
+            for _ in range(abs_clicks):
+                pyautogui.scroll(step * 100)
+                # Introduce randomized micro-delays between scroll ticks
+                time.sleep(random.uniform(0.02, 0.08))
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(True, "pc_scroll", target, "Scrolled", t)
+        except Exception as e:
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(False, "pc_scroll", target, str(e), t)
 
     # --- WINDOW FOCUS & SWITCHING ---
 
-    async def focus_app(self, app_name: str) -> Dict[str, Any]:
+    async def focus_app(self, app_name: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Bring a running application window to the foreground."""
         import asyncio
         start_time = time.perf_counter()
@@ -313,7 +475,7 @@ class PCControl:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_focus_app", app_name, str(e), t)
 
-    async def switch_window(self, app_name: Optional[str] = None) -> Dict[str, Any]:
+    async def switch_window(self, app_name: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Switch to a specific app window, or cycle through windows with Alt+Tab
         if no app_name is given.
@@ -332,41 +494,64 @@ class PCControl:
                 return _create_contract(False, "pc_switch_window", "Next window", str(e), t)
 
         # Named target → delegate to focus_app
-        return await self.focus_app(app_name)
+        return await self.focus_app(app_name, session_id=session_id)
 
     # --- CLIPBOARD ---
 
-    async def clipboard_read(self) -> Dict[str, Any]:
-        """Read the current contents of the system clipboard."""
+    async def clipboard_read(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Read the current contents of the system clipboard with session bridge persistence fallback."""
         start_time = time.perf_counter()
+        text = ""
         try:
             import pyperclip
-            text = pyperclip.paste()
-            t = f"{time.perf_counter() - start_time:.2f}s"
-            preview = text[:100].replace("\n", " ") if text else ""
-            return _create_contract(True, "pc_clipboard_read", "Clipboard", f"Read {len(text)} chars: {preview}", t)
-        except Exception as e:
-            t = f"{time.perf_counter() - start_time:.2f}s"
-            return _create_contract(False, "pc_clipboard_read", "Clipboard", str(e), t)
+            text = pyperclip.paste() or ""
+        except Exception as system_err:
+            logger.warning(f"Failed to read from system clipboard: {system_err}")
 
-    async def clipboard_write(self, text: str) -> Dict[str, Any]:
-        """Write text to the system clipboard."""
+        # Session bridge sync/persistence fallback
+        if session_id:
+            import core.global_state as gs
+            session = gs.active_sessions.get(session_id)
+            if session:
+                if not text:
+                    text = session.shared_context.get("clipboard", "")
+                else:
+                    session.shared_context["clipboard"] = text
+
+        t = f"{time.perf_counter() - start_time:.2f}s"
+        preview = text[:100].replace("\n", " ") if text else ""
+        return _create_contract(True, "pc_clipboard_read", "Clipboard", f"Read {len(text)} chars: {preview}", t)
+
+    async def clipboard_write(self, text: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Write text to the system clipboard and persist it in the session memory bridge."""
         start_time = time.perf_counter()
+        success = False
+        status = ""
         try:
             import pyperclip
             pyperclip.copy(text)
-            # Verify round-trip
             readback = pyperclip.paste()
-            verified = readback == text
-            t = f"{time.perf_counter() - start_time:.2f}s"
-            status = "Written and verified" if verified else "Written (verification mismatch)"
-            return _create_contract(verified, "pc_clipboard_write", "Clipboard", status, t)
+            success = readback == text
+            status = "Written and verified" if success else "Written (verification mismatch)"
         except Exception as e:
-            t = f"{time.perf_counter() - start_time:.2f}s"
-            return _create_contract(False, "pc_clipboard_write", "Clipboard", str(e), t)
+            status = f"System clipboard write failed: {e}"
+            logger.warning(status)
+
+        # Session bridge sync/persistence persistence
+        if session_id:
+            import core.global_state as gs
+            session = gs.active_sessions.get(session_id)
+            if session:
+                session.shared_context["clipboard"] = text
+                if not success:
+                    success = True
+                    status = "Written to session clipboard bridge"
+
+        t = f"{time.perf_counter() - start_time:.2f}s"
+        return _create_contract(success, "pc_clipboard_write", "Clipboard", status, t)
 
     # --- SYSTEM EXTRAS ---
-    async def take_screenshot(self) -> Dict[str, Any]:
+    async def take_screenshot(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         start_time = time.perf_counter()
         try:
             save_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "screenshots")

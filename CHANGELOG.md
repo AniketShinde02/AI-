@@ -2,6 +2,196 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026-06-20] — Playwright Browser Agent SRP Deconstruction & Refactoring
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC (Local Developer Environment)
+
+### Added
+- **`browser_stealth.py`** (`core/browser_stealth.py`): Isolated all Javascript injection string constants (`_STEALTH_JS`, `_DOM_SNAPSHOT_JS`, `_A11Y_TREE_JS`) for page scraping, accessibility parsing, and fingerprint evasion.
+- **`browser_session_pool.py`** (`core/browser_session_pool.py`): Isolated the `BrowserMemory` state dataclass and the `SessionContext` class, which manages individual browser sessions, user profiles, and context/process cleanup callbacks.
+
+### Changed
+- **`browser_agent.py`**: Cleaned up code by importing constants and session context pools from the new decoupled helper files, decreasing the file size from ~1200 lines to ~790 lines.
+
+### Fixed
+- **`action_router.py`**: Fixed `AttributeError: 'NoneType' object has no attribute 'strip'` by safely fallback-assigning `tool` and `target` to empty strings if they are missing or null in the LLM response.
+- **`browser_agent.py`**: Initialized `raw_decision` before the `try` block to resolve the uninitialized variable warning.
+- **`browser_session_pool.py`**: Added explicit type annotations to `SessionContext` parameters `_page`, `_context`, and `_playwright` to prevent assignment type warnings.
+- **`gemini_live_manager.py`**: Integrated `agent_is_speaking` status and transitioned to `SessionState.SPEAKING` when sending audio data. This lets the backend know when the agent is speaking, preventing the local VAD from listening to echo playback and resolving VAD loop issues.
+- **`task_cards.py`**: Declared `params` and `step_result` with explicit `Dict[str, Any]` type annotations to prevent type inference mismatch errors.
+- **`voice_session.py`**: Optimized `on_agent_message` callback under Gemini Live engine to dispatch conversational responses immediately to the UI (zero-latency) while performing action intent extraction asynchronously in the background. Also addressed a type-checker invariance warning by typing the list input for `contents` inside `generate_content` as `Any`.
+- **Pyright configuration**: Deleted the redundant and misconfigured `d:\AI\backend\nexus_core\pyrightconfig.json` file, restoring correct global virtual environment lookup in the backend.
+
+### Verified
+- **30/30 tests passing green** following the refactoring. Zero regressions to browser session concurrency, agentic task loops, model routing, or PC control pipelines.
+
+## [2026-06-20] — Multi-Agent Swarm Registry & Execution Loop
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC (Local Developer Environment)
+
+### Added
+- **`AgentSwarmManager`** (`core/agent_swarm.py`): Created a core manager implementing dynamic plan decomposition (via `parent_delegate` and `model_router.route_task(PLANNING)`), sub-agent dispatch, run execution tracking, and plan synthesis.
+- **Agent Runs DB Helpers** (`core/database.py`): Implemented `log_agent_run` and `get_agent_runs` to store and retrieve historical run metrics in SQLite.
+- **REST Endpoints** (`api/rest_routes.py`): Exposed `POST /api/agents/run` for executing goals via Swarm and `GET /api/agents/runs` for fetching runs history.
+- **WebSocket Event Handler** (`api/websocket_routes.py`): Integrated `run_swarm_task` WebSocket event to allow voice/chat clients to trigger multi-agent tasks live.
+- **Test Suite** (`tests/test_nexus_v2_agent_swarm.py`): Added 6 tests verifying plan parser, sqlite database logs, sub-agent dispatches, and HITL guardrail commands.
+
+### Changed
+- **`database.py`**: Added SQLite database helper methods for the `agent_runs` table.
+
+### Verified
+- **30/30 tests passing green** including 6 new agent swarm tests and 24 existing orchestrator & PC control tests.
+
+## [2026-06-20] — Shadow Army Full Stack Integration + Phase 9 E2E Tests (Phases 6–9)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC (Local Developer Environment)
+
+### Added
+- **`browser_agentic_task` Capability** (`capability_registry_def.py`): Registered new `CapabilityDef` for the LLM-driven autonomous browser loop. Fully exposed to LLM tool-calling via Groq schema; maps to `BrowserAgent.run_agentic_task()`.
+- **`browser_agentic_task` routing** (`browser_tools.py`): Added dispatch case in `execute_browser_action()` to call `run_agentic_task(goal=...)` when the action is `browser_agentic_task`.
+- **`goal` key in browser_params** (`voice_session.py`): `execute_action()` now maps `params["goal"]` in the browser_params dict so `browser_agentic_task` receives the plain-language goal string via the voice session fast-path.
+- **`import json`** (`browser_agent.py`): Added missing module-level import required by `run_agentic_task`.
+- **Phase 9 E2E Integration Test Suite** (`tests/test_nexus_v2_e2e_integration.py`): 10 new tests covering:
+  - `test_all_task_classes_in_routing_table` — routing table completeness
+  - `test_model_router_route_task_returns_string_on_success` — LLM dispatch + response parsing
+  - `test_execute_tool_call_returns_tool_name` — tool-call response parsing
+  - `test_action_router_has_no_direct_groq_client` — Phase 7 migration verification
+  - `test_action_router_routes_through_model_router` — FAST_ROUTING dispatch end-to-end
+  - `test_run_agentic_task_observe_builds_context` — agentic loop result schema validation
+  - `test_run_agentic_task_stuck_state_detection` — stuck-state exit logic
+  - `test_browser_agentic_task_in_capability_registry` — CAPABILITY_MAP + BROWSER_TOOL_SCHEMAS
+  - `test_run_agentic_task_handles_llm_parse_error` — parse guard logic verification
+  - `test_no_duplicate_capability_ids` — registry integrity
+  - `test_full_import_chain` — zero circular imports / missing modules
+
+### Changed
+- **`voice_session.py`**: `browser_params` dict now includes `"goal"` key (no behavior change for existing browser actions).
+- **`capability_registry_def.py`**: Added `browser_agentic_task` to `CAPABILITY_DEFINITIONS`; auto-propagated to `CAPABILITY_MAP` and `BROWSER_TOOL_SCHEMAS`.
+- **`browser_tools.py`**: `execute_browser_action()` extended with `browser_agentic_task` branch.
+
+### Verified
+- **24/24 tests green** in 9.55s — full combined suite: Phase 2 advanced primitives (5) + Phase 9 E2E integration (11) + Phase 4 model routing (8).
+- Full import chain clean: `model_router`, `action_router`, `capability_registry_def`, `browser_agent`, `browser_tools`, `task_cards`, `verification_matrix`, `execution_hooks` — 0 errors.
+- No duplicate capability IDs across 32 CAPABILITY_DEFINITIONS entries.
+
+### Notes
+- Tests 5 and 8 (`observe_builds_context` and `parse_error`) test the agentic loop's result schema and parse guard logic respectively; they are structurally isolated and do not require live LLM mocking.
+- `browser_agentic_task` is now a first-class voice command: user can say "autonomously search for X" → `action_router` → `execute_browser_action` → `run_agentic_task`.
+
+## [2026-06-20] — Shadow Army Active Theme Engine + Full Integration Tests (Phase 5)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC (Local Developer Environment)
+
+### Added
+- **`ShadowArmyBadge.tsx`**: New fixed-position floating badge component that auto-appears on bottom-right of the UI whenever a `theme_update` WebSocket event fires from the backend. Shows tier icon, name, description, provider, and model string. Auto-fades after 4 seconds with a pulse animation keyed to the accent color.
+- **`theme_update` WebSocket Handler** in `useNexusVoice.ts`: Receives `theme_update` messages, sets `activeAgentTier` state, and directly writes `--shadow-army-primary` and `--shadow-army-accent` CSS variables to `document.documentElement` for instant zero-cost visual response.
+- **`data-agent-tier` attribute**: Set on `<html>` element for global CSS targeting.
+- **`activeAgentTier` propagation**: Type-safe pipeline from `useNexusVoice` → `VoiceContextType` → `NexusContextType` → `page.tsx`.
+
+### Verified
+- `pnpm tsc --noEmit` → **0 TypeScript errors**
+- Full backend test suite: **13/13 tests passed** (Phase 2 + Phase 4 suites combined)
+  - `test_nexus_v2_advanced_primitives.py` → 5/5 passed (Bezier, DPI, Clipboard, Type Jitter)
+  - `test_nexus_v2_model_routing.py` → 8/8 passed (routing table, fallbacks, live Groq + SambaNova)
+
+## [2026-06-20] — Dynamic Capability Routing: Shadow Army Tier System (Phase 4)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC (Local Developer Environment)
+
+### Added
+- **`TaskClass` Enum**: 10 task categories — `FAST_ROUTING`, `CHAT`, `PLANNING`, `BROWSER`, `PC_CONTROL`, `VISION`, `LONG_CONTEXT`, `CODE`, `RESEARCH`, `CHEAP_TASK`.
+- **`AgentTier` Enum**: 6 Shadow Army grades — `Grand Marshal`, `Generals`, `Knights`, `Eyes`, `Shadow Soldiers`, `Infantry`.
+- **`TierConfig` Dataclass**: Per-tier config carrying `provider`, `model`, `max_tokens`, `temperature`, `theme_primary`, `theme_accent`.
+- **`TIER_ROUTING_TABLE`**: Full dispatch matrix mapping every `TaskClass` → ordered `List[TierConfig]` fallback chain.
+- **`ModelRouter.route_task()`**: Core limit-aware dispatcher. Iterates tier chain, skips missing keys, emits `theme_update` WebSocket event on execution.
+- **`ModelRouter._emit_theme()`**: Non-blocking async WebSocket broadcast of active agent tier and theme colors to all connected React sessions.
+- **Multi-Client Initialization**: Lazy `_init_clients()` with separate clients for Groq, Cerebras (OpenAI-compatible), SambaNova (OpenAI-compatible), Mistral, Gemini, OpenRouter.
+- **`config.py` expansion**: Exposed `CEREBRAS_API_KEY`, `MISTRAL_API_KEY`, `SAMBANOVA_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `ELEVENLABS_API_KEY`, `CARTESIA_API_KEY`.
+- **Phase 4 Test Suite**: `tests/test_nexus_v2_model_routing.py` — 8/8 tests passed including 2 live provider smoke tests (Groq + SambaNova).
+
+### Changed
+- `ModelRouter.standard_chat()` now internally delegates to `route_task()` with task class inference from model name — fully backwards compatible.
+- `ModelRouter.execute_tool_call()` kept routing via Groq exclusively (most reliable `tool_choice` support).
+- `model_router` singleton now initialized lazily (no import-time side effects).
+
+### Notes
+- `MISTRAL_API_KEY` in `.env` is currently a placeholder — add a real key to unlock Grand Marshal / Code tiers.
+- SambaNova 3B (`Meta-Llama-3.2-3B-Instruct`) is fully live as Shadow Soldiers tier for cheap background tasks.
+
+## [2026-06-20] — Stealth Evasion & Anti-Bot Hardening (Phase 3)
+
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC (Local Developer Environment)
+
+### Added
+- **Browser Stealth Native Injection**: Implemented `_STEALTH_JS` dynamically injected via `session._context.add_init_script` in `browser_agent.py` to bypass anti-bot detections.
+- **`navigator.webdriver` Override**: Explicitly redefined property to `undefined` masking automated control.
+- **WebGL & Canvas Spoofing**: Overrode `WebGLRenderingContext.prototype.getParameter` to natively spoof standard consumer hardware (e.g., `Apple GPU` and `Google Inc. (Apple)`).
+- **Chrome Plugins Spoofing**: Injected realistic default Chrome extensions/plugins list into the Playwright window.
+- **IP Pressure & Search Plateau Resolution**: Injected randomized delay buffers ($1.5\text{s} - 3.5\text{s}$) prior to URL navigations to mitigate 429 rate limit triggers.
+- **Transparent 429 Handling**: Automatically detects HTTP 429 Too Many Requests responses and gracefully halts the navigation loop, applies a $5\text{s}-10\text{s}$ backoff, and transparently retries without crashing the agent flow.
+
+### Changed
+- Configured Playwright persistent context launch arguments to disable infobars and `AutomationControlled` blink features.
+- Set a permanent realistic User-Agent signature simulating standard Chrome on Mac OS.
+
+## [2026-06-20] — Advanced PC Controls & Clipboard Bridge (Phase 2)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC (Local Developer Environment)
+
+### Added
+- Created `test_nexus_v2_advanced_primitives.py` under `tests/` verifying Bezier path shape, DPI coordinate scaling math, typing delay jitter, mouse movement execution, and session clipboard bridge synchronization.
+- Implemented humanized mouse capabilities `pc_drag` and `pc_scroll` in `PCControl`.
+- Added **SambaNova** (Llama 3.1 405B, Llama 3.3 70B, Llama 3.2 3B) and additional **Mistral models** (Mistral Small, Codestral) as "Shadow Soldiers" in the orchestrator strategy and project rules to handle routine and background tasks ("chndi kaam").
+- Converted raw Draw.io XML pipeline diagrams inside `nexus_orchestrator_architecture.md` and `browser_agentic_strategy.md` to visual **Mermaid flowchart blocks** for real-time visual feedback in Markdown preview.
+- Specified minimum and recommended system requirements for Nexus (8GB min RAM / 16GB recommended, 4-core CPU, 10GB free SSD).
+
+### Changed
+- Increased local memory cap allocation from **1GB RAM** to **4GB RAM** (up to 8GB dynamically on high-spec systems) to prevent concurrency crashes during heavy browser and desktop control runs.
+- Increased local disk storage quota from **5GB** to **10GB** in `rules.md` and `browser_agentic_strategy.md` to accommodate profile states and media assets.
+
+### Changed
+- Upgraded mouse capability methods (`pc_move_mouse`, `pc_click`, `pc_drag`, `pc_scroll`) in `PCControl` inside `pc_control.py` to use humanized Cubic Bezier movement curves with ease-in/ease-out acceleration and randomized control points.
+- Added target sub-pixel Gaussian noise jitter to cursor movements and drag targets to evade rigid automated coordinate patterns.
+- Integrated High-DPI coordinate scaling translations mapping canonical 1280x720 task card viewports to native monitor logical resolutions.
+- Implemented typing speed variance delay jitter (30ms - 120ms randomized delay per character) in `type_text` typing simulation.
+- Exposed a session-level `shared_context` memory store in `VoiceSession` and bridged `clipboard_read` and `clipboard_write` in `PCControl` to persist copied variables, allowing data to flow seamlessly between isolated browser scraping and desktop writing operations.
+- Updated `execute_pc_action` in `tools/system.py` to route the advanced mouse and clipboard capabilities: `pc_move_mouse`, `pc_click`, `pc_drag`, `pc_scroll`, `pc_clipboard_read`, and `pc_clipboard_write`.
+- Updated `switch_window` signature in `PCControl` to accept `session_id` for consistency.
+
+## [2026-06-20] — Task Card Intent Routing & HITL Admin Permission Modal Integration
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC (Local Developer Environment)
+
+### Added
+- Integrated `run_task_card` capability into `capability_registry_def.py` to support execution of dynamic pre-configured task card workflows.
+- Implemented `run_automation_tool` execution hook helper in `execution_hooks.py` to wrap automation/task cards with timing, contract validation, and verification logging.
+- Created `test_task_cards` integration test in `tests/test_orchestrator_concurrency_guardrails.py` to verify ActionRouter intent classification and Task Card PC control execution.
+- Added `pendingPermission` state and `authorizeAdminPermission` callback to `useNexusVoice` hook to receive and authorize security permission requests.
+- Bound `pendingPermission` and `authorizeAdminPermission` to `VoiceContext` and `NexusContext` interfaces.
+- Added a high-end cyberpunk glassmorphic "Security Authorization Required" modal overlay in frontend `Home` component (`page.tsx`) to request human-in-the-loop (HITL) admin approvals.
+
+### Changed
+- Upgraded `ActionRouter` in `action_router.py` to dynamically load task cards from `TaskCardEngine` and format them into the semantic classifier system prompt, allowing classification of task card intents and variable extraction into `runtime_inputs`.
+- Modified `VoiceSession` in `voice_session.py` to intercept and execute `run_task_card` actions through `TaskCardEngine` using `run_automation_tool`.
+- Modified `execute_card` in `task_cards.py` to return the first-failed step's error at the top level when a task card execution fails.
+
 ## [2026-06-20] — Ponytail Simplicity, Project Rules Isolation, Draw.io, VoltAgent & Agentation Setup
 
 ### Author
@@ -23,11 +213,17 @@ All notable changes to this project will be documented in this file.
   - **Section 7 (Hybrid Local-Cloud Egress)**: Hard 5GB local cache limits and Supabase data syncing split with client-side BYOK Settings encryption.
   - **Section 8 (Anti-Bot & Rate Limits)**: WebGL/Canvas spoofing, JA3/JA4 TLS profiles, search plateaus vs. IP pressure, and transparent 429 backoff retry loops.
   - **Section 9 (Dynamic Theme Engine)**: Solo Leveling Ranks visual styling guidelines mapped to CSS layout hooks.
-- Updated `C:/Users/JinWoo/.gemini/antigravity-ide/brain/4361a54f-fbaa-4440-8e5a-b112462127f6/browser_agentic_strategy.md` strategy report to document the dynamic Solo Leveling theme layout engine, expanded Task Cards catalog, administrative security permission guardrails, resource constraints splits, and copyable Draw.io XML flowchart.
-- Created [nexus_orchestrator_architecture.md](file:///d:/AI/backend/docs/nexus_orchestrator_architecture.md) detailing the orchestrator's capability routing matrix, verified model selection rationales, telemetry stack integration (Langfuse, LiteLLM, Arize Phoenix), and a detailed copyable Draw.io XML flowchart of the A-to-Z execution pipeline.
+- Updated `C:/Users/JinWoo/.gemini/antigravity-ide/brain/4361a54f-fbaa-4440-8e5a-b112462127f6/browser_agentic_strategy.md` strategy report to document the dynamic Solo Leveling theme layout engine, expanded Task Cards catalog, administrative security permission guardrails, resource constraints splits, and copyable Draw.io XML flowchart- Created [nexus_orchestrator_architecture.md](file:///d:/AI/backend/docs/nexus_orchestrator_architecture.md) detailing the orchestrator's capability routing matrix, verified model selection rationales, telemetry stack integration (Langfuse, LiteLLM, Arize Phoenix), and a detailed copyable Draw.io XML flowchart of the A-to-Z execution pipeline.
+- Implemented `SessionContext` concurrency pool in [browser_agent.py](file:///d:/AI/backend/nexus_core/core/browser_agent.py) to manage session-isolated Playwright browser contexts mapped by WebSocket `session_id`, ensuring cookie and profile isolation under `data/browser_profile_<session_id>`.
+- Created [guardrails.py](file:///d:/AI/backend/nexus_core/core/guardrails.py) defining strict safety filters (Blocked commands, Restricted operations, and Permitted whitelisted executables like `notepad.exe`) to intercept shell commands and enforce Human-in-the-Loop (HITL) approval locks.
+- Created [task_cards.py](file:///d:/AI/backend/nexus_core/core/task_cards.py) implementing a dynamic catalog workflow runner using templated inputs and verification contract checks.
+- Relocated and configured the orchestrator verification test suite under [test_orchestrator_concurrency_guardrails.py](file:///d:/AI/backend/tests/test_orchestrator_concurrency_guardrails.py).
 
 ### Changed
 - Synchronized [browser_agentic_strategy.md](file:///d:/AI/browser_agentic_strategy.md) (workspace version) with the brain strategy document to restore the missing **Cross-App Clipboard State Persistence** section under Section 12.
+- Updated `VoiceSession` in [voice_session.py](file:///d:/AI/backend/nexus_core/core/voice_session.py) and `websocket_endpoint` in [websocket_routes.py](file:///d:/AI/backend/nexus_core/api/websocket_routes.py) to parse and propagate `session_id` to PC Control and Browser Agent execution pipelines, and handle `authorize_admin` WebSocket messages.
+- Updated `execute_browser_action` in [browser_tools.py](file:///d:/AI/backend/nexus_core/tools/browser_tools.py) and `execute_pc_action` in [system.py](file:///d:/AI/backend/nexus_core/tools/system.py) to accept and forward the `session_id` parameter.
+- Modified `broadcast_workspace_state` in [execution_hooks.py](file:///d:/AI/backend/nexus_core/core/execution_hooks.py) to query and emit session-accurate visual screenshots and memory states.
 
 ## [2026-06-19] — Shadow Army Agentic Strategy & Code Load Audit
 

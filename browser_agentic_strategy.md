@@ -323,105 +323,76 @@ Bypassing advanced security platforms (Cloudflare Turnstile, Akamai, DataDome) i
 
 The following Draw.io XML flowchart represents the core Observe-Decide-Act-Verify cycle integrated with dynamic rank themes and permission guardrails. This XML can be copied directly and loaded into Draw.io: 
 
-```xml
-<mxfile host="Electron" modified="2026-06-20T12:00:00.000Z" agent="Antigravity" version="21.0.0" type="device">
-  <diagram id="nexus-orchestrator-loop" name="Page-1">
-    <mxGraphModel dx="1000" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" adaptiveColors="auto" math="0" shadow="0">
-      <root>
-        <mxCell id="0" />
-        <mxCell id="1" parent="0" />
-      
-        <!-- Header Title -->
-        <mxCell id="title" value="NEXUS ORCHESTRATOR UNIFIED EXECUTION LOOP" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=18;fontColor=#1a237e;" vertex="1" parent="1">
-          <mxGeometry x="327" y="30" width="1000" height="40" as="geometry" />
-        </mxCell>
-      
-        <!-- Start Node -->
-        <mxCell id="start_node" value="START: Request Received" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="1">
-          <mxGeometry x="777" y="100" width="160" height="70" as="geometry" />
-        </mxCell>
-      
-        <!-- Step 1: Observe -->
-        <mxCell id="observe_node" value="OBSERVE STATE<br/>- Extract compacted AXTree<br/>- Query active OS window list" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
-          <mxGeometry x="757" y="220" width="200" height="80" as="geometry" />
-        </mxCell>
-      
-        <!-- Step 2: Decide -->
-        <mxCell id="decide_node" value="DECIDE STEP<br/>- Evaluate limits & health<br/>- Select model target (Cerebras)<br/>- Apply Rank Theme visual state" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
-          <mxGeometry x="757" y="350" width="200" height="80" as="geometry" />
-        </mxCell>
-      
-        <!-- Step 3: Guardrail check -->
-        <mxCell id="guard_node" value="Is Action Safe?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
-          <mxGeometry x="787" y="480" width="140" height="100" as="geometry" />
-        </mxCell>
-
-        <!-- Step 4: Act (Safe path) -->
-        <mxCell id="act_node" value="ACT<br/>- Execute Playwright selector<br/>- Execute RobotJS mouse move" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
-          <mxGeometry x="757" y="630" width="200" height="80" as="geometry" />
-        </mxCell>
-
-        <!-- Admin Modal Check (Restricted path) -->
-        <mxCell id="admin_modal" value="Trigger HITL Admin<br/>Authorization Modal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
-          <mxGeometry x="500" y="490" width="180" height="80" as="geometry" />
-        </mxCell>
-
-        <!-- Block / Terminate (Unsafe path) -->
-        <mxCell id="terminate_node" value="Block Operation & Log<br/>Security Violation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
-          <mxGeometry x="1020" y="490" width="180" height="80" as="geometry" />
-        </mxCell>
-      
-        <!-- Connectors -->
-        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;strokeColor=#555555;" edge="1" parent="1" source="start_node" target="observe_node">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;strokeColor=#555555;" edge="1" parent="1" source="observe_node" target="decide_node">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;strokeColor=#555555;" edge="1" parent="1" source="decide_node" target="guard_node">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e4" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;strokeColor=#555555;" edge="1" parent="1" source="guard_node" target="act_node">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e5" value="Restricted" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;strokeColor=#555555;" edge="1" parent="1" source="guard_node" target="admin_modal">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e6" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;strokeColor=#555555;" edge="1" parent="1" source="guard_node" target="terminate_node">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=12;strokeColor=#555555;" edge="1" parent="1" source="admin_modal" target="act_node">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-      
-        <!-- Legend Box (Bottom-Left) -->
-        <mxCell id="legend_bg" value="<b>LEGEND</b>" style="swimlane;startSize=24;fillColor=#f5f5f5;strokeColor=#cccccc;html=1;fontSize=11;align=center;" vertex="1" parent="1">
-          <mxGeometry x="50" y="800" width="280" height="220" as="geometry" />
-        </mxCell>
-        <mxCell id="legend_process" value="Process / Flow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="legend_bg">
-          <mxGeometry x="10" y="35" width="120" height="25" as="geometry" />
-        </mxCell>
-        <mxCell id="legend_problem" value="Problems" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="legend_bg">
-          <mxGeometry x="140" y="35" width="120" height="25" as="geometry" />
-        </mxCell>
-        <mxCell id="legend_impact" value="Impact" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="legend_bg">
-          <mxGeometry x="10" y="70" width="120" height="25" as="geometry" />
-        </mxCell>
-        <mxCell id="legend_solution" value="Solutions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="legend_bg">
-          <mxGeometry x="140" y="70" width="120" height="25" as="geometry" />
-        </mxCell>
-        <mxCell id="legend_ref" value="Reference / Docs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="legend_bg">
-          <mxGeometry x="10" y="105" width="120" height="25" as="geometry" />
-        </mxCell>
-      
-        <!-- Scope Box -->
-        <mxCell id="scope_box" value="<b>Scope:</b> Nexus Orchestration Security Policy<br/><b>Author:</b> Antigravity Agent<br/><b>Date:</b> 2026-06-20" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#cccccc;align=left;spacingLeft=10;fontSize=11;html=1;" vertex="1" parent="1">
-          <mxGeometry x="50" y="1040" width="280" height="70" as="geometry" />
-        </mxCell>
-      </root>
-    </mxGraphModel>
-  </diagram>
-</mxfile>
+```mermaid
+graph TD
+    classDef monarch fill:#dae8fc,stroke:#6c8ebf,stroke-width:2px;
+    classDef marshal fill:#e1d5e7,stroke:#9673a6,stroke-width:2px;
+    classDef general fill:#d5e8d4,stroke:#82b366,stroke-width:2px;
+    classDef knight fill:#ffe6cc,stroke:#d6b656,stroke-width:2px;
+    classDef eye fill:#f8cecc,stroke:#b85450,stroke-width:2px;
+    classDef soldier fill:#f5f5f5,stroke:#cccccc,stroke-width:2px;
+    
+    %% Start Flow
+    Start([User Request Command]) --> Router[Action Router / Knights <br/> Groq Llama 3.3 70B]:::knight
+    
+    %% Intent Classification
+    Router -->|1. Parse Intent & Extract Variables| IntentCheck{Is Request a Task Card?}
+    
+    %% Routing Paths
+    IntentCheck -->|No: Standard Chat| ChatModel[Conversational / Chat <br/> Gemini 1.5 Flash]:::eye
+    IntentCheck -->|Yes: Task Card| GuardrailCheck[OS Policy Guardrail check]
+    
+    %% Guardrail logic
+    GuardrailCheck --> ScanCommand{Scan Command / Executable}
+    ScanCommand -->|Blocked: del C:\\Windows, rm -rf| Terminate[BLOCK Execution & Log Security Audit]:::eye
+    ScanCommand -->|Restricted: cmd.exe, pwsh, custom scripts| HITLGate[Pause Thread & trigger HITL Modal]
+    ScanCommand -->|Permitted: Notepad.exe, Paint.exe, Whitelisted path| LoadCard[Load Templated Task Card]
+    
+    %% HITL flow
+    HITLGate --> WebSocketSend[Emit WebSocket permission_request]
+    WebSocketSend --> UserApprove{Monarch UI Confirmation}:::monarch
+    UserApprove -->|Deny| Terminate
+    UserApprove -->|Approve| LoadCard
+    
+    %% Executor and Planner
+    LoadCard --> Planner[Macro-Planner / Grand Marshal <br/> Mistral Large / SambaNova 405B]:::marshal
+    Planner -->|Generate Step List| ExecutionLoop[Unified Agent Execution Loop]
+    
+    %% Observe-Decide-Act-Verify Loop
+    subgraph Observe-Decide-Act-Verify Loop
+        Obs[1. OBSERVE State] -->|Web: Extract Compact AXTree| Dec[2. DECIDE Action]
+        Obs -->|PC: Query active Window, Process, PID| Dec
+        Obs -->|Optional: Screenshot 1280px JPEG 50%| Dec
+        
+        Dec -->|Generals: Cerebras 120B / SambaNova 70B| Act[3. ACT / Execute]:::general
+        Dec -->|Minor Tasks / chndi kaam: SambaNova 3B / Mistral Small| Act:::soldier
+        
+        %% Humanization Layer
+        Act -->|High-DPI Coordinate translation| MouseTrack[Bezier Curve Cursor Path]
+        MouseTrack -->|Add Gaussian sub-pixel jitter| RealClick[PyAutoGUI Click / Drag / Scroll]
+        Act -->|Keystroke delay jitter 30ms-120ms| RealType[PyAutoGUI Character Writing]
+        
+        %% Clipboard persistence bridge
+        Act -->|Read/Write Clipboard| ClipboardBridge[(VoiceSession Shared Context <br/> Clipboard Bridge)]:::monarch
+        
+        RealClick --> Ver[4. VERIFY outcome]
+        RealType --> Ver
+        
+        Ver -->|Compare active URL / Window title| OutcomeCheck{Did Step Verify?}
+        OutcomeCheck -->|Yes: Success| NextStep[Proceed to Next Step / Loop]
+        OutcomeCheck -->|No: Fail| Backtrack[Backtrack / Plan Repair <br/> Grand Marshal / SambaNova 405B]:::marshal
+    end
+    
+    %% Loop progression
+    NextStep -->|More Steps| Obs
+    NextStep -->|All Steps Complete| Done[Complete Task & Speak Confirmation]:::monarch
+    Backtrack -->|Retry Limit Exceeded| Fail[Mark Task Failed & Report]:::eye
+    Backtrack -->|Adjusted Path| Obs
+    
+    %% Telemetry Layer
+    UnifiedTelemetry[Telemetry Gateway / LiteLLM Proxy] --> Langfuse[Langfuse: Latency, Cost, Prompt Versioning]
+    UnifiedTelemetry --> Phoenix[Arize Phoenix: Graph Visualizer]
+    ExecutionLoop -.->|Log Traces| UnifiedTelemetry
 ```
 
 ---

@@ -26,7 +26,7 @@ from core.output_processor import output_processor
 from core.action_router import action_router
 from tools.system import execute_pc_action
 from core.capability_registry_def import CAPABILITY_MAP, CONFIRMATION_LABELS
-from core.execution_hooks import wrap_execution, run_desktop_tool, run_browser_tool, broadcast_workspace_state
+from core.execution_hooks import wrap_execution, run_desktop_tool, run_browser_tool, run_automation_tool, broadcast_workspace_state
 from tools.task_tools import create_task, create_note
 from tools.memory_tools import update_preferences, get_user_memory, delete_user_preference
 from tools.file_tools import read_file, write_file, read_directory
@@ -119,6 +119,11 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
         self.recent_ai_outputs: Deque[str] = deque(maxlen=3)
         self.conversation_history: Deque[dict] = deque(maxlen=16)
 
+        # --- Shared Context / Clipboard Persistence Bridge ---
+        self.shared_context = {
+            "clipboard": ""
+        }
+
         # --- Gemini Live Integration ---
         self.gemini_manager = None
         if self.engine == "gemini_live":
@@ -142,17 +147,22 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             async def on_agent_message(text):
                 clean = output_processor.filter_reasoning(text)
                 if clean:
-                    action_intent = await action_router.route_intent(clean)
-                    if action_intent:
-                        logger.info(f"🎯 [ACTION ROUTER] Intercepted Gemini Live response intent: '{clean[:50]}'")
-                        if self.gemini_manager:
-                            await self.gemini_manager.interrupt()
-                        self.current_turn_id += 1
-                        asyncio.create_task(self.execute_action(action_intent, turn_id=self.current_turn_id))
-                    else:
-                        await self.safe_send_json({"type": "agent_message", "text": clean})
-                        self.conversation_history.append({"role": "assistant", "content": clean})
-                        asyncio.create_task(db.save_message(self.session_id, "assistant", clean))
+                    # 1. Send conversational text to UI immediately (zero delay)
+                    await self.safe_send_json({"type": "agent_message", "text": clean})
+                    self.conversation_history.append({"role": "assistant", "content": clean})
+                    asyncio.create_task(db.save_message(self.session_id, "assistant", clean))
+
+                    # 2. Check for action intents in the background (non-blocking)
+                    async def process_intent():
+                        action_intent = await action_router.route_intent(clean)
+                        if action_intent:
+                            logger.info(f"🎯 [ACTION ROUTER] Intercepted Gemini Live response intent: '{clean[:50]}'")
+                            if self.gemini_manager:
+                                await self.gemini_manager.interrupt()
+                            self.current_turn_id += 1
+                            await self.execute_action(action_intent, turn_id=self.current_turn_id)
+
+                    asyncio.create_task(process_intent())
 
             async def on_disconnect():
                 logger.warning("🔄 Falling back to Nexus STT (Groq) engine")
@@ -183,7 +193,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
         else:
             cap_def = CAPABILITY_MAP.get(action)
             if action.startswith("pc_"):
-                tool_params = {}
+                tool_params = {"session_id": self.session_id}
                 if cap_def and cap_def.target_param:
                     tool_params[cap_def.target_param] = params.get("target", "")
                 res = await run_desktop_tool(
@@ -199,12 +209,28 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                     "target": params.get("target", ""),
                     "selector": params.get("target", ""),
                     "text": params.get("target", ""),
-                    "action": params.get("target", "")
+                    "action": params.get("target", ""),
+                    # Phase 8: agentic task needs 'goal' — map from target or explicit goal
+                    "goal": params.get("goal", params.get("target", "")),
+                    "session_id": self.session_id
                 }
                 res = await run_browser_tool(
                     action,
                     params.get("target", ""),
                     execute_browser_action(action, browser_params),
+                )
+            elif action == "run_task_card":
+                from core.task_cards import task_card_engine
+                runtime_inputs = action_intent.get("runtime_inputs") or {}
+                card_id = params.get("target", "")
+                res = await run_automation_tool(
+                    action,
+                    card_id,
+                    task_card_engine.execute_card(
+                        card_id=card_id,
+                        runtime_inputs=runtime_inputs,
+                        session_id=self.session_id
+                    ),
                 )
 
             target_name = params.get("target", "").title()
@@ -250,6 +276,16 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             await self.metrics_worker_task
         except asyncio.CancelledError:
             pass
+        
+        # Clean up browser session and profiles
+        try:
+            from core.browser_agent import browser_agent
+            if self.session_id:
+                # Wrap in try/except or non-blocking call
+                await browser_agent.close(self.session_id)
+        except Exception as e:
+            logger.error(f"Failed to close browser agent on session stop: {e}")
+            
         logger.info("🛑 VoiceSession stopped.")
 
     async def start_response(self):
@@ -287,35 +323,28 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                     metadata={"type": "conversation_turn", "turn_id": turn_id, "timestamp": time.time()}
                 )
 
-            if gs.llm_provider is None:
-                return
-
+            from core.model_router import model_router, TaskClass
             from tools.memory_tools import MEMORY_TOOLS
-            messages = [
-                {"role": "system", "content": (
-                    "You are a memory extractor. If the user explicitly states a preference, "
-                    "a rule for how you should behave, a fact about themselves, or a request to "
-                    "remember something, call the update_preferences tool. If not, output 'NO_PREF'."
-                )},
-                {"role": "user", "content": f"User: {user_msg}\nAssistant: {ai_msg}"}
-            ]
-
-            resp = await gs.llm_provider.client.chat.completions.create(  # type: ignore
-                messages=messages,  # type: ignore
-                model="llama-3.1-8b-instant",
-                tools=MEMORY_TOOLS,  # type: ignore
-                tool_choice="auto",
-                temperature=0.1
+            
+            # Use Shadow Soldiers tier (cheap/fast) for memory extraction
+            extraction_prompt = (
+                "You are a memory extractor. If the user explicitly states a preference, "
+                "a rule for how you should behave, a fact about themselves, or a request to "
+                "remember something, call the update_preferences tool. If not, output 'NO_PREF'."
             )
-
-            msg = resp.choices[0].message
-            if msg.tool_calls:
-                for tool_call in msg.tool_calls:
-                    if tool_call.function.name == "update_preferences":
-                        args = json.loads(tool_call.function.arguments)
-                        if "preferences" in args:
-                            res = await update_preferences(args["preferences"])
-                            logger.info(f"🧠 [Memory Updated] {res}")
+            extraction_input = f"User: {user_msg}\nAssistant: {ai_msg}"
+            
+            # Try tool-calling path via execute_tool_call (uses Groq for reliability)
+            result = await model_router.execute_tool_call(
+                user_intent=extraction_input,
+                available_tools=MEMORY_TOOLS,
+                model="llama-3.1-8b-instant",
+            )
+            if result.get("tool_name") == "update_preferences":
+                args = result.get("arguments", {})
+                if "preferences" in args:
+                    res = await update_preferences(args["preferences"])
+                    logger.info(f"🧠 [Memory Updated via Shadow Soldiers] {res}")
         except Exception as e:
             logger.error(f"❌ [Memory Extractor] Error: {e}")
 
@@ -351,7 +380,8 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
 
         try:
             # Normalize
-            samples: np.ndarray = np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32)
+            np_array: Any = np.frombuffer(raw_audio, dtype=np.int16)
+            samples = np_array.astype(np.float32)
             max_val = float(np.max(np.abs(samples)))
             if max_val > 0:
                 samples = samples * (28000.0 / max_val)
@@ -390,17 +420,18 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 from google import genai
                 from google.genai import types
                 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+                contents_list: Any = [
+                    types.Part.from_bytes(data=wav_data, mime_type="audio/wav"),
+                    types.Part.from_text(text=(
+                        "Transcribe the audio exactly. Output ONLY the transcription text. "
+                        "Do not answer questions. Ensure Indian languages (Hindi, Marathi) "
+                        "are transcribed accurately if detected."
+                    ))
+                ]
                 resp = await asyncio.to_thread(
                     gemini_client.models.generate_content,
                     model="gemini-2.5-flash",
-                    contents=[
-                        types.Part.from_bytes(data=wav_data, mime_type="audio/wav"),
-                        types.Part.from_text(text=(
-                            "Transcribe the audio exactly. Output ONLY the transcription text. "
-                            "Do not answer questions. Ensure Indian languages (Hindi, Marathi) "
-                            "are transcribed accurately if detected."
-                        ))
-                    ]
+                    contents=contents_list
                 )
 
                 class MockTranscription:
@@ -517,7 +548,6 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
 
             from core.trace_emitter import emit_trace
             await emit_trace(self.websocket, "user_command", f"Command: {transcript}", "🗣️")
-            await emit_trace(self.websocket, "model_selected", f"Model routing: {gs.llm_provider.model}", "🧠")
 
             from tools.system import get_dynamic_system_tools
             from tools.file_tools import FILE_TOOLS
@@ -528,6 +558,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             from tools.browser_tools import BROWSER_TOOLS
             from core.capabilities import registry as cap_registry
             from core.registry import tool_registry
+            from core.model_router import model_router, TaskClass
 
             dynamic_system_tools = await get_dynamic_system_tools()
             ALL_TOOLS = (
@@ -535,7 +566,9 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 + MEMORY_TOOLS + THIRD_PARTY_TOOLS + SCRAPPER_TOOLS + BROWSER_TOOLS
             )
 
-            # --- FORCED TOOL ROUTING ---
+            await emit_trace(self.websocket, "model_selected", f"Routing via Shadow Army tier system", "🎖️")
+
+            # --- FORCED TOOL ROUTING (action_router fast-path) ---
             action_intent = await action_router.route_intent(transcript)
 
             if action_intent:
@@ -543,27 +576,22 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 await self.execute_action(action_intent, turn_id=turn_id)
                 return
 
-            # If engine is Gemini Live and CHAT intent, delegate
+            # Delegate Gemini Live CHAT to Gemini manager
             if self.engine == "gemini_live" and self.gemini_manager and self.gemini_manager.is_connected:
                 logger.info("🧠 [Gemini Live] Delegating CHAT intent to Gemini Live.")
                 await self.gemini_manager.send_text(transcript, turn_complete=True)
                 return
 
-            # --- Tool detection via standard LLM ---
+            # --- Tool detection via model_router.execute_tool_call (Shadow Army tier) ---
             try:
-                tool_response = await gs.llm_provider.client.chat.completions.create(  # type: ignore
-                    messages=messages,  # type: ignore
-                    model=gs.llm_provider.model,
-                    tools=ALL_TOOLS,  # type: ignore
-                    tool_choice="auto",
-                    temperature=0.1,
-                    max_tokens=256
+                tool_result = await model_router.execute_tool_call(
+                    user_intent=transcript,
+                    available_tools=ALL_TOOLS,
+                    model="llama-3.3-70b-versatile",
                 )
-                tool_msg = tool_response.choices[0].message
-                if tool_msg.tool_calls:
-                    tool_call = tool_msg.tool_calls[0]
-                    action = tool_call.function.name
-                    params = json.loads(tool_call.function.arguments)
+                if tool_result.get("tool_name"):
+                    action = tool_result["tool_name"]
+                    params = tool_result.get("arguments", {})
 
                     await emit_trace(self.websocket, "tool_selected", f"Selected tool: {action}", "🛠️", params)
                     perm = await cap_registry.check_permission("default_user", action)
@@ -585,14 +613,15 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                         await cap_registry.log_execution(action, params, "started", perm)
                         await emit_trace(self.websocket, "execution_started", f"Executing: {action}", "⏳")
 
-                        # Phase 4: mandatory execution hook for all LLM-dispatched tools
                         if action.startswith("pc_"):
+                            params["session_id"] = self.session_id
                             contract_result = await run_desktop_tool(
                                 action,
                                 params.get("app_name", params.get("target", "")),
                                 execute_pc_action(action, params),
                             )
                         elif action.startswith("browser_"):
+                            params["session_id"] = self.session_id
                             from tools.browser_tools import execute_browser_action
                             contract_result = await run_browser_tool(
                                 action,
@@ -634,7 +663,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             except Exception as tool_err:
                 logger.debug(f"Tool detection skipped: {tool_err}")
 
-            # --- Standard LLM streaming (Groq → Gemini fallback) ---
+            # --- Standard streaming chat via model_router (Knights → Groq) with Gemini fallback ---
             async def gemini_stream():
                 from google import genai
                 from google.genai import types
@@ -656,16 +685,20 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                     yield chunk.text or ""
 
             try:
-                groq_stream = await gs.llm_provider.client.chat.completions.create(  # type: ignore
-                    messages=messages,  # type: ignore
-                    model=gs.llm_provider.model,
-                    temperature=0.7,
-                    stream=True
-                )
-                async def unified_stream():
-                    async for chunk in groq_stream:
-                        yield chunk.choices[0].delta.content or ""
-                active_stream = unified_stream()
+                # Knights tier: Groq streaming for low-latency real-time voice
+                if gs.llm_provider is not None:
+                    groq_stream = await gs.llm_provider.client.chat.completions.create(  # type: ignore
+                        messages=messages,  # type: ignore
+                        model=gs.llm_provider.model,
+                        temperature=0.7,
+                        stream=True
+                    )
+                    async def unified_stream():
+                        async for chunk in groq_stream:
+                            yield chunk.choices[0].delta.content or ""
+                    active_stream = unified_stream()
+                else:
+                    raise RuntimeError("LLM provider unavailable")
             except Exception as e:
                 logger.warning(f"⚠️ [LLM] Groq failed: {e}. Falling back to Gemini.")
                 active_stream = gemini_stream()

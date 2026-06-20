@@ -1,122 +1,466 @@
+"""
+model_router.py
+================
+Phase 4 — Dynamic Capability Routing (Shadow Army Tier System)
+
+Replaces the hardcoded single-provider routing with a full limit-aware,
+multi-provider dispatcher keyed on TaskClass.
+
+Shadow Army Tier Hierarchy:
+  Monarch      → User / Jinwoo (HITL decisions)
+  Grand Marshal → Mistral Large / SambaNova 405B  (heavy planning)
+  Generals      → Cerebras 120B / SambaNova 70B   (fast browser loops)
+  Knights       → Groq Llama 3.3-70B / SambaNova 70B (fast routing, chat)
+  Eyes          → Gemini 1.5 Flash                (vision, multimodal)
+  Shadow Soldiers → SambaNova 3.2B / Mistral Small (cheap background tasks)
+  Infantry      → Local System / OpenRouter Free  (offline fallback)
+
+TaskClass → Tier → Model mapping is defined in TIER_ROUTING_TABLE.
+All existing callers of standard_chat() and execute_tool_call() are preserved.
+"""
+
 import logging
-from typing import Dict, Any, List, Optional
 import json
+import asyncio
+from enum import Enum
+from dataclasses import dataclass, field
+from typing import Dict, Any, List, Optional, Callable, Awaitable
+
+import config
 
 logger = logging.getLogger("nexus.model_router")
 
+
+# =============================================================================
+# 1. Enums & Data Structures
+# =============================================================================
+
+class TaskClass(str, Enum):
+    FAST_ROUTING   = "FAST_ROUTING"    # Intent parsing, JSON extraction — sub-200ms
+    CHAT           = "CHAT"            # Conversational turn — real-time voice
+    PLANNING       = "PLANNING"        # Multi-step orchestration, Task Card planning
+    BROWSER        = "BROWSER"         # Dense AXTree loops, web scraping
+    PC_CONTROL     = "PC_CONTROL"      # OS commands, window management
+    VISION         = "VISION"          # Screenshot OCR, element localization
+    LONG_CONTEXT   = "LONG_CONTEXT"    # Large AXTree history, app log parsing
+    CODE           = "CODE"            # Code generation / debugging
+    RESEARCH       = "RESEARCH"        # RAG / large context scans
+    CHEAP_TASK     = "CHEAP_TASK"      # Background minor tasks — "chndi kaam"
+
+
+class AgentTier(str, Enum):
+    GRAND_MARSHAL   = "Grand Marshal"
+    GENERALS        = "Generals"
+    KNIGHTS         = "Knights"
+    EYES            = "Eyes"
+    SHADOW_SOLDIERS = "Shadow Soldiers"
+    INFANTRY        = "Infantry"
+
+
+@dataclass
+class TierConfig:
+    tier: AgentTier
+    provider: str                   # "groq" | "cerebras" | "mistral" | "sambanova" | "gemini" | "openrouter"
+    model: str
+    max_tokens: int = 1024
+    temperature: float = 0.4
+    # Theme metadata broadcast to frontend
+    theme_primary: str = "#18181b"
+    theme_accent:  str = "#a1a1aa"
+
+
+# =============================================================================
+# 2. Routing Table — TaskClass → Primary TierConfig + Fallback chain
+# =============================================================================
+
+TIER_ROUTING_TABLE: Dict[TaskClass, List[TierConfig]] = {
+    TaskClass.FAST_ROUTING: [
+        TierConfig(AgentTier.KNIGHTS,       "groq",       "llama-3.1-8b-instant",                         max_tokens=256,  temperature=0.0, theme_primary="#1f1115", theme_accent="#ff3b30"),
+        TierConfig(AgentTier.SHADOW_SOLDIERS,"sambanova",  "Meta-Llama-3.2-3B-Instruct",                   max_tokens=256,  temperature=0.0, theme_primary="#150d1a", theme_accent="#a855f7"),
+        TierConfig(AgentTier.INFANTRY,       "openrouter", "meta-llama/llama-3.3-70b-instruct:free",       max_tokens=256,  temperature=0.0, theme_primary="#18181b", theme_accent="#a1a1aa"),
+    ],
+    TaskClass.CHAT: [
+        TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=1024, temperature=0.5, theme_primary="#1f1115", theme_accent="#ff3b30"),
+        TierConfig(AgentTier.GENERALS,       "sambanova",  "Meta-Llama-3.1-70B-Instruct",                  max_tokens=1024, temperature=0.5, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.INFANTRY,       "openrouter", "meta-llama/llama-3.3-70b-instruct:free",       max_tokens=1024, temperature=0.5, theme_primary="#18181b", theme_accent="#a1a1aa"),
+    ],
+    TaskClass.PLANNING: [
+        TierConfig(AgentTier.GRAND_MARSHAL,  "mistral",    "mistral-large-latest",                         max_tokens=2048, temperature=0.3, theme_primary="#0b091a", theme_accent="#8a2be2"),
+        TierConfig(AgentTier.GRAND_MARSHAL,  "sambanova",  "Meta-Llama-3.1-405B-Instruct",                 max_tokens=2048, temperature=0.3, theme_primary="#0b091a", theme_accent="#8a2be2"),
+        TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=2048, temperature=0.3, theme_primary="#1f1115", theme_accent="#ff3b30"),
+    ],
+    TaskClass.BROWSER: [
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.3-70b",                                 max_tokens=2048, temperature=0.2, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.GENERALS,       "sambanova",  "Meta-Llama-3.1-70B-Instruct",                  max_tokens=2048, temperature=0.2, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=2048, temperature=0.2, theme_primary="#1f1115", theme_accent="#ff3b30"),
+    ],
+    TaskClass.PC_CONTROL: [
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.3-70b",                                 max_tokens=1024, temperature=0.1, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.GENERALS,       "sambanova",  "Meta-Llama-3.1-70B-Instruct",                  max_tokens=1024, temperature=0.1, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=1024, temperature=0.1, theme_primary="#1f1115", theme_accent="#ff3b30"),
+    ],
+    TaskClass.VISION: [
+        TierConfig(AgentTier.EYES,           "gemini",     "gemini-1.5-flash",                             max_tokens=1024, temperature=0.3, theme_primary="#060f14", theme_accent="#00ff66"),
+        TierConfig(AgentTier.EYES,           "gemini",     "gemini-2.0-flash",                             max_tokens=1024, temperature=0.3, theme_primary="#060f14", theme_accent="#00ff66"),
+    ],
+    TaskClass.LONG_CONTEXT: [
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.3-70b",                                 max_tokens=4096, temperature=0.3, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.GRAND_MARSHAL,  "sambanova",  "Meta-Llama-3.1-405B-Instruct",                 max_tokens=4096, temperature=0.3, theme_primary="#0b091a", theme_accent="#8a2be2"),
+        TierConfig(AgentTier.EYES,           "gemini",     "gemini-1.5-flash",                             max_tokens=4096, temperature=0.3, theme_primary="#060f14", theme_accent="#00ff66"),
+    ],
+    TaskClass.CODE: [
+        TierConfig(AgentTier.GRAND_MARSHAL,  "mistral",    "codestral-latest",                             max_tokens=2048, temperature=0.2, theme_primary="#0b091a", theme_accent="#8a2be2"),
+        TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=2048, temperature=0.2, theme_primary="#1f1115", theme_accent="#ff3b30"),
+    ],
+    TaskClass.RESEARCH: [
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.3-70b",                                 max_tokens=4096, temperature=0.4, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.GRAND_MARSHAL,  "sambanova",  "Meta-Llama-3.1-405B-Instruct",                 max_tokens=4096, temperature=0.4, theme_primary="#0b091a", theme_accent="#8a2be2"),
+        TierConfig(AgentTier.KNIGHTS,        "groq",       "mixtral-8x7b-32768",                           max_tokens=4096, temperature=0.4, theme_primary="#1f1115", theme_accent="#ff3b30"),
+    ],
+    TaskClass.CHEAP_TASK: [
+        TierConfig(AgentTier.SHADOW_SOLDIERS,"sambanova",  "Meta-Llama-3.2-3B-Instruct",                   max_tokens=512,  temperature=0.5, theme_primary="#150d1a", theme_accent="#a855f7"),
+        TierConfig(AgentTier.SHADOW_SOLDIERS,"mistral",    "mistral-small-latest",                         max_tokens=512,  temperature=0.5, theme_primary="#150d1a", theme_accent="#a855f7"),
+        TierConfig(AgentTier.INFANTRY,       "openrouter", "meta-llama/llama-3.3-70b-instruct:free",       max_tokens=512,  temperature=0.5, theme_primary="#18181b", theme_accent="#a1a1aa"),
+    ],
+}
+
+
+# =============================================================================
+# 3. ModelRouter — Multi-client, Limit-Aware Dispatcher
+# =============================================================================
+
 class ModelRouter:
     """
-    Implements deterministic model routing for Nexus.
-    Groq: Reasoning, Planning, Coding, Tool Execution, Standard Chat.
-    Gemini Live: Real-time Audio/Video Streaming (handled separately in ws_main WebRTC hooks).
+    Limit-aware dynamic capability router implementing the Shadow Army tier system.
+
+    Usage:
+        response = await model_router.route_task(
+            task_class=TaskClass.BROWSER,
+            system_prompt="...",
+            messages=[{"role": "user", "content": "..."}],
+        )
+
+    Backwards-compatible API preserved:
+        response = await model_router.standard_chat(system_prompt, messages, model)
+        result   = await model_router.execute_tool_call(user_intent, tools, model)
     """
-    
-    def __init__(self, groq_api_key: str, mistral_api_key: Optional[str] = None):
-        self.groq_api_key = groq_api_key
-        self.mistral_api_key = mistral_api_key
-        self.groq_client: Any = None
-        self.mistral_client: Any = None
-        try:
-            from groq import AsyncGroq
-            self.groq_client = AsyncGroq(api_key=groq_api_key)
-        except ImportError:
-            logger.error("Groq library not found. Please install groq.")
 
-        try:
-            from mistralai.client import Mistral
-            self.mistral_client = Mistral(api_key=mistral_api_key) if mistral_api_key else None
-        except ImportError:
-            logger.warning("Mistral library not found. Mistral routing disabled.")
+    def __init__(self):
+        self._groq_client       = None
+        self._cerebras_client   = None
+        self._mistral_client    = None
+        self._sambanova_client  = None
+        self._gemini_client     = None
+        self._openrouter_client = None
+        self._initialized       = False
 
-    async def standard_chat(self, system_prompt: str, messages: List[Dict[str, str]], model: str = "llama-3.3-70b-versatile") -> str:
-        """
-        Standard text reasoning pipeline via Groq.
-        """
-        if not self.groq_client:
-            return "Error: Groq client not initialized."
-            
-        formatted_messages = [{"role": "system", "content": system_prompt}] + messages
-        
-        # Route to Mistral if it's a mistral or pixtral model
-        if "mistral" in model.lower() or "pixtral" in model.lower():
-            if not self.mistral_client:
-                return "Error: Mistral client not initialized. Check API key."
+    def _init_clients(self) -> None:
+        """Lazy initialization — only builds clients whose keys exist."""
+        if self._initialized:
+            return
+
+        # Groq
+        if config.GROQ_API_KEY:
             try:
-                # Use mistralai async client if available or sync depending on library version
-                # assuming mistralai SDK v1.0.0+ 
-                response = await self.mistral_client.chat.complete_async(
-                    model=model,
-                    messages=formatted_messages,
-                    temperature=0.7,
-                    max_tokens=1024,
-                )
-                content = response.choices[0].message.content
-                return content if content is not None else ""
-            except Exception as e:
-                logger.error(f"Mistral API error: {e}")
-                return f"Error: Failed to reach Mistral engine. Details: {str(e)}"
-        
-        # Default to Groq
-        try:
-            response = await self.groq_client.chat.completions.create(
-                messages=formatted_messages,
-                model=model,
-                temperature=0.7,
-                max_tokens=1024,
-            )
-            content = response.choices[0].message.content
-            return content if content is not None else ""
-        except Exception as e:
-            logger.error(f"Groq API error: {e}")
-            return f"Error: Failed to reach reasoning engine. Details: {str(e)}"
+                from groq import AsyncGroq
+                self._groq_client = AsyncGroq(api_key=config.GROQ_API_KEY)
+                logger.info("✅ [ModelRouter] Groq client initialized (Knights)")
+            except ImportError:
+                logger.warning("⚠️  [ModelRouter] groq library not installed.")
 
-    async def execute_tool_call(self, user_intent: str, available_tools: List[Dict[str, Any]], model: str = "llama-3.3-70b-versatile") -> Dict[str, Any]:
+        # Cerebras (OpenAI-compatible endpoint)
+        if config.CEREBRAS_API_KEY:
+            try:
+                from openai import AsyncOpenAI
+                self._cerebras_client = AsyncOpenAI(
+                    api_key=config.CEREBRAS_API_KEY,
+                    base_url="https://api.cerebras.ai/v1",
+                )
+                logger.info("✅ [ModelRouter] Cerebras client initialized (Generals)")
+            except ImportError:
+                logger.warning("⚠️  [ModelRouter] openai library not installed — Cerebras unavailable.")
+
+        # Mistral
+        if config.MISTRAL_API_KEY:
+            try:
+                from mistralai import Mistral
+                self._mistral_client = Mistral(api_key=config.MISTRAL_API_KEY)
+                logger.info("✅ [ModelRouter] Mistral client initialized (Grand Marshal / Code)")
+            except ImportError:
+                logger.warning("⚠️  [ModelRouter] mistralai library not installed.")
+
+        # SambaNova (OpenAI-compatible endpoint)
+        if config.SAMBANOVA_API_KEY:
+            try:
+                from openai import AsyncOpenAI
+                self._sambanova_client = AsyncOpenAI(
+                    api_key=config.SAMBANOVA_API_KEY,
+                    base_url="https://api.sambanova.ai/v1",
+                )
+                logger.info("✅ [ModelRouter] SambaNova client initialized (Grand Marshal / Shadow Soldiers)")
+            except ImportError:
+                logger.warning("⚠️  [ModelRouter] openai library not installed — SambaNova unavailable.")
+
+        # Gemini (google-generativeai)
+        if config.GEMINI_API_KEY:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=config.GEMINI_API_KEY)
+                self._gemini_client = genai
+                logger.info("✅ [ModelRouter] Gemini client initialized (Eyes)")
+            except ImportError:
+                logger.warning("⚠️  [ModelRouter] google-generativeai library not installed.")
+
+        # OpenRouter (OpenAI-compatible endpoint — Infantry fallback)
+        if config.OPENROUTER_API_KEY:
+            try:
+                from openai import AsyncOpenAI
+                self._openrouter_client = AsyncOpenAI(
+                    api_key=config.OPENROUTER_API_KEY,
+                    base_url="https://openrouter.ai/api/v1",
+                )
+                logger.info("✅ [ModelRouter] OpenRouter client initialized (Infantry fallback)")
+            except ImportError:
+                logger.warning("⚠️  [ModelRouter] openai library not installed — OpenRouter unavailable.")
+
+        self._initialized = True
+
+    def _get_client_for_provider(self, provider: str):
+        """Returns the initialized client for a given provider string."""
+        mapping = {
+            "groq":       self._groq_client,
+            "cerebras":   self._cerebras_client,
+            "mistral":    self._mistral_client,
+            "sambanova":  self._sambanova_client,
+            "gemini":     self._gemini_client,
+            "openrouter": self._openrouter_client,
+        }
+        return mapping.get(provider)
+
+    async def _emit_theme(self, tier_cfg: TierConfig) -> None:
         """
-        Uses Groq strictly for fast, deterministic function calling based on user intent.
+        Broadcasts active agent tier to all connected WebSocket sessions.
+        Frontend uses this to switch the Solo Leveling theme.
+        Non-blocking — never raises.
         """
-        if not self.groq_client:
-            return {"error": "Groq client not initialized."}
-            
+        try:
+            from core.execution_hooks import broadcast_workspace_state
+            import core.global_state as gs
+            if not gs.active_sessions:
+                return
+            for session in list(gs.active_sessions.values()):
+                if not session.is_connected:
+                    continue
+                await session.safe_send_json({
+                    "type": "theme_update",
+                    "data": {
+                        "agent_tier":    tier_cfg.tier.value,
+                        "provider":      tier_cfg.provider,
+                        "model":         tier_cfg.model,
+                        "theme_primary": tier_cfg.theme_primary,
+                        "theme_accent":  tier_cfg.theme_accent,
+                    }
+                })
+        except Exception as e:
+            logger.debug(f"theme_update emit skipped: {e}")
+
+    # -------------------------------------------------------------------------
+    # Core Dispatcher — route_task()
+    # -------------------------------------------------------------------------
+
+    async def route_task(
+        self,
+        task_class: TaskClass,
+        system_prompt: str,
+        messages: List[Dict[str, str]],
+        force_model: Optional[str] = None,
+    ) -> str:
+        """
+        Main entry point. Selects the correct tier from TIER_ROUTING_TABLE and
+        dispatches to the provider. Falls through the fallback chain on failure.
+
+        Args:
+            task_class:    What kind of task is this (BROWSER, PLANNING, etc.)
+            system_prompt: System instruction string
+            messages:      List of {"role": ..., "content": ...} dicts
+            force_model:   Override model string (for backwards compat callers)
+
+        Returns:
+            Model response content string. Never raises — returns error string on
+            total failure.
+        """
+        self._init_clients()
+
+        tier_chain = TIER_ROUTING_TABLE.get(task_class, TIER_ROUTING_TABLE[TaskClass.CHAT])
+        formatted  = [{"role": "system", "content": system_prompt}] + messages
+
+        for tier_cfg in tier_chain:
+            client = self._get_client_for_provider(tier_cfg.provider)
+            if client is None:
+                logger.debug(f"[ModelRouter] Skipping {tier_cfg.provider} — no API key / client.")
+                continue
+
+            model = force_model or tier_cfg.model
+            logger.info(
+                f"🎯 [ModelRouter] {task_class.value} → [{tier_cfg.tier.value}] "
+                f"{tier_cfg.provider}/{model}"
+            )
+
+            try:
+                result = await self._dispatch(
+                    client=client,
+                    provider=tier_cfg.provider,
+                    model=model,
+                    messages=formatted,
+                    max_tokens=tier_cfg.max_tokens,
+                    temperature=tier_cfg.temperature,
+                )
+                # Fire-and-forget theme emission
+                asyncio.create_task(self._emit_theme(tier_cfg))
+                return result
+
+            except Exception as e:
+                logger.warning(
+                    f"⚠️  [ModelRouter] {tier_cfg.provider}/{model} failed: {e}. "
+                    f"Trying next fallback..."
+                )
+                continue
+
+        return "⚠️ All model providers failed or have no API keys configured. Check your .env file."
+
+    async def _dispatch(
+        self,
+        client: Any,
+        provider: str,
+        model: str,
+        messages: List[Dict[str, str]],
+        max_tokens: int,
+        temperature: float,
+    ) -> str:
+        """Routes to provider-specific call signature."""
+        if provider == "groq":
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            content = resp.choices[0].message.content
+            return content if content is not None else ""
+
+        elif provider in ("cerebras", "sambanova", "openrouter"):
+            # All use OpenAI-compatible async client
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            content = resp.choices[0].message.content
+            return content if content is not None else ""
+
+        elif provider == "mistral":
+            resp = await client.chat.complete_async(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            content = resp.choices[0].message.content
+            return content if content is not None else ""
+
+        elif provider == "gemini":
+            # google-generativeai sync call wrapped in thread pool
+            gemini_model = client.GenerativeModel(model)
+            # Convert messages into Gemini format (extract last user message + system)
+            system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
+            user_parts = [m["content"] for m in messages if m["role"] != "system"]
+            prompt = f"{system_msg}\n\n" + "\n".join(user_parts) if system_msg else "\n".join(user_parts)
+            loop = asyncio.get_event_loop()
+            resp = await loop.run_in_executor(
+                None,
+                lambda: gemini_model.generate_content(prompt)
+            )
+            return resp.text if resp.text else ""
+
+        raise ValueError(f"Unknown provider: {provider}")
+
+    # =========================================================================
+    # Backwards-Compatible API — existing callers work unchanged
+    # =========================================================================
+
+    async def standard_chat(
+        self,
+        system_prompt: str,
+        messages: List[Dict[str, str]],
+        model: str = "llama-3.3-70b-versatile",
+    ) -> str:
+        """
+        Legacy entrypoint. Routes via CHAT task class.
+        model param is used as force_model override for exact backwards compat.
+        """
+        # Detect provider from model name to use correct task class
+        task_class = TaskClass.CHAT
+        if "codestral" in model or "code" in model.lower():
+            task_class = TaskClass.CODE
+        elif "mistral-large" in model or "405b" in model.lower():
+            task_class = TaskClass.PLANNING
+
+        return await self.route_task(
+            task_class=task_class,
+            system_prompt=system_prompt,
+            messages=messages,
+            force_model=model,
+        )
+
+    async def execute_tool_call(
+        self,
+        user_intent: str,
+        available_tools: List[Dict[str, Any]],
+        model: str = "llama-3.3-70b-versatile",
+    ) -> Dict[str, Any]:
+        """
+        Legacy entrypoint for function-calling. Still routes via Groq directly
+        since tool_choice support is most reliable there.
+        """
+        self._init_clients()
+
+        if not self._groq_client:
+            return {"error": "Groq client not initialized — GROQ_API_KEY missing."}
+
         messages = [
             {"role": "system", "content": "You are a precise function calling router. Call the appropriate tool based on the user's request. Do not add conversational fluff."},
-            {"role": "user", "content": user_intent}
+            {"role": "user",   "content": user_intent},
         ]
-        
+
         try:
-            response = await self.groq_client.chat.completions.create(
+            resp = await self._groq_client.chat.completions.create(
                 messages=messages,
                 model=model,
-                tools=available_tools, # type: ignore
+                tools=available_tools,  # type: ignore
                 tool_choice="auto",
-                temperature=0.1
+                temperature=0.1,
             )
-            
-            message = response.choices[0].message
+            message = resp.choices[0].message
             if message.tool_calls:
                 tool_call = message.tool_calls[0]
-                action = tool_call.function.name
-                params = json.loads(tool_call.function.arguments)
-                
-                # Trace pipeline logging
+                action    = tool_call.function.name
+                params    = json.loads(tool_call.function.arguments)
+
                 from core.database import db
-                trace_log = {
-                    "user_intent": user_intent,
-                    "model_used": model,
-                    "tool_selected": action
-                }
-                import asyncio
-                asyncio.create_task(db.log_tool_audit(action, params, "routed", json.dumps(trace_log)))
-                
-                return {
-                    "tool_name": action,
-                    "arguments": params
-                }
-            else:
-                return {"error": "No tool matched the intent."}
-                
+                asyncio.create_task(db.log_tool_audit(
+                    action, params, "routed",
+                    json.dumps({"user_intent": user_intent, "model_used": model, "tool_selected": action})
+                ))
+                return {"tool_name": action, "arguments": params}
+            return {"error": "No tool matched the intent."}
+
         except Exception as e:
-            logger.error(f"Groq tool call error: {e}")
+            logger.error(f"execute_tool_call failed: {e}")
             return {"error": f"Tool routing failed: {str(e)}"}
 
-# Singleton instance must be initialized with the API key in ws_main.py or config
-model_router = None
+
+# =============================================================================
+# Singleton — initialized on first use (lazy), never in import scope
+# =============================================================================
+model_router = ModelRouter()

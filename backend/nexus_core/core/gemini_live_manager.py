@@ -164,13 +164,14 @@ class GeminiLiveSessionManager:
             system_instruction=types.Content(role="system", parts=[types.Part.from_text(text=self.system_instruction)])
         )
         try:
-            async with self.client.aio.live.connect(model="gemini-2.5-flash-native-audio-latest", config=config) as session:
-                self.session = session
+            async with self.client.aio.live.connect(model="gemini-2.5-flash-native-audio-latest", config=config) as live_session:
+                session_any: Any = live_session
+                self.session = session_any
                 self.is_connected = True
                 self.session_ready.set()
                 
                 while self.is_connected:
-                    async for response in session.receive():
+                    async for response in session_any.receive():
                         raw_logger.debug(f"[INBOUND JSON] [Session: {self.session_id}] Size: {len(response.model_dump_json())} bytes | Content: {response.model_dump_json(exclude_none=True)}")
                         try:
                             server_content = getattr(response, "server_content", None)
@@ -187,6 +188,15 @@ class GeminiLiveSessionManager:
                                         if getattr(part, "inline_data", None) and getattr(part.inline_data, "data", None):
                                             pcm_data = part.inline_data.data
                                             out_b64 = base64.b64encode(pcm_data).decode('utf-8')
+                                            
+                                            import core.global_state as gs
+                                            from core.session_state import SessionState
+                                            session = gs.active_sessions.get(self.session_id)
+                                            if session:
+                                                session.agent_is_speaking = True
+                                                session.last_agent_speech_time = time.time()
+                                                session._change_state(SessionState.SPEAKING)
+                                            
                                             try:
                                                 await self.websocket.send_json({
                                                     "type": "audio_chunk",

@@ -21,6 +21,7 @@ import { logger } from "@/lib/logger";
 import { useEffect } from "react";
 import { GeminiVision, VisionSource } from "@/components/GeminiVision";
 import { AgentWorkspace } from "@/components/AgentWorkspace";
+import { ShadowArmyBadge } from "@/components/ShadowArmyBadge";
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -48,7 +49,9 @@ export default function Home() {
     isListening, isMuted, volume, 
     toggleListening, toggleMute, 
     isSending, isChecking,
-    voiceState, uiMode, setUiMode
+    voiceState, uiMode, setUiMode,
+    pendingPermission, authorizeAdminPermission,
+    activeAgentTier
   } = useNexus();
   const [activeTab, setActiveTab] = useState<'chat' | 'trace' | 'tasks' | 'memory'>('chat');
   const [visionSource, setVisionSource] = useState<VisionSource>("off");
@@ -362,6 +365,58 @@ export default function Home() {
           </div>
         )}
       </aside>
+
+      {/* HITL Admin Gating Permission Modal */}
+      {pendingPermission && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[9999] animate-in fade-in duration-200">
+          <div className="bg-[#0b0b14] border border-[#ff3366]/40 rounded-lg p-6 max-w-md w-full mx-4 shadow-[0_0_50px_rgba(255,51,102,0.15)] clip-cut relative overflow-hidden">
+            {/* Glowing top line */}
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#6137FF] via-[#ff3366] to-[#00FFFF]"></div>
+            
+            <div className="flex items-start gap-4 mb-4">
+              <div className="p-3 bg-[#ff3366]/10 border border-[#ff3366]/30 clip-cut-sm text-[#ff3366] shrink-0 animate-pulse">
+                <ShieldAlert size={24} />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-quantico font-bold tracking-widest text-white uppercase">
+                  Security Authorization Required
+                </h3>
+                <p className="text-[11px] font-mono text-zinc-400 mt-1 uppercase tracking-wider">
+                  Session: <span className="text-[#00FFFF]">{pendingPermission.sessionId}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-[#06060c] border border-white/5 rounded-md p-4 mb-6">
+              <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-2">Restricted Command</div>
+              <code className="text-[12px] font-mono text-white break-all block bg-[#0b0b14]/50 border border-white/5 p-2 rounded">
+                {pendingPermission.command}
+              </code>
+              <p className="text-[11px] text-zinc-400 mt-3 flex items-center gap-1.5 leading-relaxed">
+                <span>⚠️ This execution is suspended awaiting human-in-the-loop (HITL) admin authorization. Proceed with caution.</span>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 justify-end">
+              <button
+                onClick={() => authorizeAdminPermission(false)}
+                className="px-4 py-2 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white font-quantico text-[11px] uppercase tracking-wider transition-colors clip-cut-sm"
+              >
+                Deny Execution
+              </button>
+              <button
+                onClick={() => authorizeAdminPermission(true)}
+                className="px-4 py-2 bg-[#ff3366]/20 border border-[#ff3366]/60 hover:bg-[#ff3366]/30 hover:border-[#ff3366] text-[#ff3366] hover:text-white font-quantico text-[11px] uppercase tracking-wider transition-all shadow-[0_0_15px_rgba(255,51,102,0.2)] hover:shadow-[0_0_20px_rgba(255,51,102,0.4)] clip-cut-sm"
+              >
+                Approve & Execute
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shadow Army Active Tier Badge */}
+      <ShadowArmyBadge activeAgentTier={activeAgentTier ?? null} />
     </div>
   );
 }

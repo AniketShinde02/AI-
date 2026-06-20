@@ -139,6 +139,20 @@ async def delete_agent(agent_id: str):
     await db.delete_agent(agent_id)
     return {"status": "success"}
 
+class SwarmRunRequest(BaseModel):
+    goal: str
+    session_id: Optional[str] = "default_session"
+
+@rest_router.post("/api/agents/run")
+async def run_agent_swarm(req: SwarmRunRequest):
+    from core.agent_swarm import swarm_manager
+    res = await swarm_manager.execute_swarm_task(req.goal, req.session_id or "default_session")
+    return res
+
+@rest_router.get("/api/agents/runs")
+async def get_agent_runs(limit: int = 50):
+    return await db.get_agent_runs(limit)
+
 
 # ------------------------------------------------------------------
 # Workflows

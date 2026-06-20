@@ -1,12 +1,12 @@
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger("nexus.tools.tasks")
 
 # This will be injected by the LLM runner
-memory_engine = None
+memory_engine: Any = None
 
-async def create_task(title: str, priority: str = "medium", due_date: str = None) -> Dict[str, Any]:
+async def create_task(title: str, priority: str = "medium", due_date: Optional[str] = None) -> Dict[str, Any]:
     """
     Creates a new task in the user's task list.
     Args:

@@ -64,18 +64,17 @@ async def broadcast_workspace_state(
             except Exception:
                 pass
 
-        # Query browser screenshot (base64)
+        # Query browser screenshot and state isolated per session ID
         from core.browser_agent import browser_agent
-        browser_screenshot = await browser_agent.get_screenshot_base64()
 
         for session in list(gs.active_sessions.values()):
             if not session.is_connected:
                 continue
 
             task = current_task or getattr(session, "current_task", None)
-
-            # Phase D: Include browser memory state if available
-            browser_memory = browser_state or browser_agent.get_workspace_state()
+            
+            browser_screenshot = await browser_agent.get_screenshot_base64(session.session_id)
+            browser_memory = browser_state or browser_agent.get_workspace_state(session.session_id)
 
             payload = {
                 "type": "workspace_state",
@@ -248,3 +247,9 @@ async def run_file_tool(tool_id: str, target: str, execute_coro) -> Dict[str, An
 async def run_memory_tool(tool_id: str, target: str, execute_coro) -> Dict[str, Any]:
     """Hook for update_preferences / get_user_memory tools."""
     return await wrap_execution(tool_id, target, execute_coro, category="memory")
+
+
+async def run_automation_tool(tool_id: str, target: str, execute_coro) -> Dict[str, Any]:
+    """Hook for automation/task cards tools."""
+    return await wrap_execution(tool_id, target, execute_coro, category="automation")
+

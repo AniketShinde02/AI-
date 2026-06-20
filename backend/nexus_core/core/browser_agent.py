@@ -11,182 +11,44 @@ Capabilities:
   5. Goal-oriented Task Execution (Phase C) — run_browser_task()
   6. Browser Memory (Phase D) — tracks current_url, tab, last_action, page_title, session_state
 
-Phase E: Isolated Playwright profile (data/browser_profile) — never touches user Chrome.
+Phase E: Isolated Playwright profile (data/browser_profile_<session_id>) — never touches user Chrome.
 """
 import logging
 import asyncio
+import json
 import os
 import time
 import base64
+import shutil
 from typing import Dict, Any, Optional, List
-from dataclasses import dataclass, field, asdict
+
+from core.browser_stealth import _DOM_SNAPSHOT_JS, _A11Y_TREE_JS, _STEALTH_JS
+from core.browser_session_pool import BrowserMemory, SessionContext
 
 logger = logging.getLogger("nexus.browser_agent")
-
-
-# ---------------------------------------------------------------------------
-# Phase D: Browser Memory — tracks where the agent is and what it did last
-# ---------------------------------------------------------------------------
-
-@dataclass
-class BrowserMemory:
-    current_url: str = "about:blank"
-    page_title: str = ""
-    current_tab_index: int = 0
-    total_tabs: int = 1
-    last_action: str = ""
-    last_action_target: str = ""
-    last_action_result: str = ""
-    session_state: str = "idle"   # idle | navigating | interacting | completed | error
-    step_history: List[Dict[str, Any]] = field(default_factory=list)
-
-    def record_step(self, action: str, target: str, result: str, success: bool):
-        self.last_action = action
-        self.last_action_target = target
-        self.last_action_result = result
-        self.step_history.append({
-            "action": action,
-            "target": target,
-            "result": result[:200],
-            "success": success,
-            "timestamp": time.time(),
-        })
-        # Keep last 20 steps
-        if len(self.step_history) > 20:
-            self.step_history = self.step_history[-20:]
-
-    def to_dict(self) -> Dict[str, Any]:
-        d = asdict(self)
-        # Don't send full history over WS — too large
-        d["step_count"] = len(d.pop("step_history", []))
-        return d
-
-
-# ---------------------------------------------------------------------------
-# DOM / Accessibility extraction JS
-# ---------------------------------------------------------------------------
-
-_DOM_SNAPSHOT_JS = """
-() => {
-    const isVisible = (el) => {
-        const r = el.getBoundingClientRect();
-        const s = window.getComputedStyle(el);
-        return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
-    };
-    const text = [];
-    const buttons = [];
-    const inputs = [];
-    const links = [];
-
-    // Collect visible text (paragraphs, headings, spans with meaningful text)
-    document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, li, td, th, label, div[role]').forEach(el => {
-        if (isVisible(el) && el.innerText && el.innerText.trim().length > 3) {
-            const t = el.innerText.trim().replace(/\\s+/g, ' ');
-            if (t.length < 500) text.push(t);
-        }
-    });
-
-    // Buttons
-    document.querySelectorAll('button, [role="button"], input[type="submit"], input[type="button"]').forEach(el => {
-        if (isVisible(el)) {
-            const r = el.getBoundingClientRect();
-            buttons.push({
-                text: (el.innerText || el.value || el.ariaLabel || '').trim().substring(0, 100),
-                selector: el.id ? '#' + el.id : (el.className ? '.' + el.className.split(' ')[0] : 'button'),
-                x: Math.round(r.x + r.width/2),
-                y: Math.round(r.y + r.height/2),
-            });
-        }
-    });
-
-    // Inputs
-    document.querySelectorAll('input:not([type="hidden"]), textarea, [contenteditable="true"]').forEach(el => {
-        if (isVisible(el)) {
-            const r = el.getBoundingClientRect();
-            inputs.push({
-                type: el.type || el.tagName.toLowerCase(),
-                placeholder: el.placeholder || '',
-                label: (el.labels && el.labels[0] ? el.labels[0].innerText : el.ariaLabel || '').trim().substring(0, 80),
-                selector: el.id ? '#' + el.id : (el.name ? '[name="' + el.name + '"]' : 'input'),
-                x: Math.round(r.x + r.width/2),
-                y: Math.round(r.y + r.height/2),
-            });
-        }
-    });
-
-    // Links
-    document.querySelectorAll('a[href]').forEach(el => {
-        if (isVisible(el) && el.innerText.trim().length > 1) {
-            const r = el.getBoundingClientRect();
-            links.push({
-                text: el.innerText.trim().substring(0, 120),
-                href: el.href.substring(0, 200),
-                x: Math.round(r.x + r.width/2),
-                y: Math.round(r.y + r.height/2),
-            });
-        }
-    });
-
-    return {
-        url: window.location.href,
-        title: document.title,
-        text: [...new Set(text)].slice(0, 30),
-        buttons: buttons.slice(0, 20),
-        inputs: inputs.slice(0, 15),
-        links: links.slice(0, 30),
-    };
-}
-"""
-
-_A11Y_TREE_JS = """
-() => {
-    const walk = (el, depth) => {
-        if (depth > 4) return null;
-        const role = el.getAttribute('role') || el.tagName.toLowerCase();
-        const label = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || el.textContent?.trim().substring(0, 80) || '';
-        const r = el.getBoundingClientRect();
-        if (r.width === 0 && r.height === 0) return null;
-        const node = {
-            role,
-            label,
-            id: el.id || null,
-            x: Math.round(r.x + r.width/2),
-            y: Math.round(r.y + r.height/2),
-            children: [],
-        };
-        const interestingChildren = Array.from(el.children).filter(c => {
-            const cr = c.getBoundingClientRect();
-            return cr.width > 0 && cr.height > 0;
-        });
-        for (const child of interestingChildren.slice(0, 5)) {
-            const childNode = walk(child, depth + 1);
-            if (childNode) node.children.push(childNode);
-        }
-        return node;
-    };
-    return walk(document.body, 0);
-}
-"""
 
 
 class BrowserAgent:
     """
     Browser Agent V1 — Observe-Decide-Execute-Verify loop with DOM/A11y snapshots.
-    Uses an isolated Playwright persistent context (Phase E — data/browser_profile).
+    Supports session-isolated contexts (SessionContext) mapped by session_id.
     """
 
     def __init__(self):
-        self._browser = None
-        self._context = None
-        self._page = None
-        self._playwright = None
-        self.memory = BrowserMemory()
+        self._sessions: Dict[str, SessionContext] = {}
+
+    def _get_session(self, session_id: Optional[str] = None) -> SessionContext:
+        s_id = session_id or "default"
+        if s_id not in self._sessions:
+            self._sessions[s_id] = SessionContext(s_id)
+        return self._sessions[s_id]
 
     # ---------------------------------------------------------------------------
-    # Phase E: Isolated context management
+    # Isolated context management
     # ---------------------------------------------------------------------------
 
-    async def _ensure_page(self):
+    async def _ensure_page(self, session_id: Optional[str] = None):
+        session = self._get_session(session_id)
         try:
             from playwright.async_api import async_playwright
         except ImportError:
@@ -195,118 +57,131 @@ class BrowserAgent:
             )
 
         context_is_dead = False
-        if self._context:
+        if session._context:
             try:
-                _ = self._context.pages
+                _ = session._context.pages
             except Exception:
                 context_is_dead = True
 
-        if not self._page or self._page.is_closed() or context_is_dead:
+        if not session._page or session._page.is_closed() or context_is_dead:
             # Clean up stale instances
             try:
-                if self._context:
-                    await self._context.close()
+                if session._context:
+                    await session._context.close()
             except Exception:
                 pass
             try:
-                if self._playwright:
-                    await self._playwright.stop()
+                if session._playwright:
+                    await session._playwright.stop()
             except Exception:
                 pass
 
-            self._playwright = await async_playwright().start()
-            # Phase E: Isolated profile — never touches user's Chrome data
+            session._playwright = await async_playwright().start()
+            # Profile is isolated per session_id (never touches standard profile)
             user_data_dir = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                "data", "browser_profile"
+                "data", f"browser_profile_{session.session_id}"
             )
             os.makedirs(user_data_dir, exist_ok=True)
-            self._context = await self._playwright.chromium.launch_persistent_context(
+            session._context = await session._playwright.chromium.launch_persistent_context(
                 user_data_dir,
                 headless=False,
-                args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+                args=[
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--window-size=1280,720",
+                    "--disable-features=IsolateOrigins,site-per-process",
+                ],
                 viewport={"width": 1280, "height": 720},
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
-            if self._context.pages:
-                self._page = self._context.pages[0]
+            await session._context.add_init_script(_STEALTH_JS)
+
+            if session._context.pages:
+                session._page = session._context.pages[0]
             else:
-                self._page = await self._context.new_page()
+                session._page = await session._context.new_page()
 
-        return self._page
+        return session._page
 
-    async def _update_memory_from_page(self):
+    async def _update_memory_from_page(self, session_id: Optional[str] = None):
         """Sync BrowserMemory with current page state."""
+        session = self._get_session(session_id)
         try:
-            if not self._page or self._page.is_closed():
+            if not session._page or session._page.is_closed():
                 return
-            self.memory.current_url = self._page.url
-            self.memory.page_title = await self._page.title()
-            if self._context:
-                pages = self._context.pages
-                self.memory.total_tabs = len(pages)
+            session.memory.current_url = session._page.url
+            session.memory.page_title = await session._page.title()
+            if session._context:
+                pages = session._context.pages
+                session.memory.total_tabs = len(pages)
                 try:
-                    self.memory.current_tab_index = pages.index(self._page)
+                    session.memory.current_tab_index = pages.index(session._page)
                 except ValueError:
-                    self.memory.current_tab_index = 0
+                    session.memory.current_tab_index = 0
         except Exception as e:
-            logger.debug(f"Memory sync failed: {e}")
+            logger.debug(f"Memory sync failed for session {session_id}: {e}")
 
-    def get_workspace_state(self) -> Dict[str, Any]:
+    def get_workspace_state(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Return browser memory as a workspace state dict."""
-        return self.memory.to_dict()
+        session = self._get_session(session_id)
+        return session.memory.to_dict()
 
     # ---------------------------------------------------------------------------
     # Phase 1: DOM Snapshot
     # ---------------------------------------------------------------------------
 
-    async def get_dom_snapshot(self) -> Dict[str, Any]:
+    async def get_dom_snapshot(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Extract visible DOM elements: text, buttons, inputs, links."""
         try:
-            page = await self._ensure_page()
+            page = await self._ensure_page(session_id)
             result = await page.evaluate(_DOM_SNAPSHOT_JS)
             return {"success": True, "verified": True, "result": result}
         except Exception as e:
-            logger.error(f"DOM snapshot failed: {e}")
+            logger.error(f"DOM snapshot failed for session {session_id}: {e}")
             return {"success": False, "verified": False, "error": str(e)}
 
     # ---------------------------------------------------------------------------
     # Phase 2: Accessibility Tree
     # ---------------------------------------------------------------------------
 
-    async def get_accessibility_tree(self) -> Dict[str, Any]:
+    async def get_accessibility_tree(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Extract accessibility tree with role, label, coordinates."""
         try:
-            page = await self._ensure_page()
+            page = await self._ensure_page(session_id)
             tree = await page.evaluate(_A11Y_TREE_JS)
             return {"success": True, "verified": True, "result": tree}
         except Exception as e:
-            logger.error(f"A11y tree failed: {e}")
+            logger.error(f"A11y tree failed for session {session_id}: {e}")
             return {"success": False, "verified": False, "error": str(e)}
 
     # ---------------------------------------------------------------------------
     # Phase 3: Screenshot Capture (used only when DOM is insufficient)
     # ---------------------------------------------------------------------------
 
-    async def get_screenshot_base64(self) -> Optional[str]:
+    async def get_screenshot_base64(self, session_id: Optional[str] = None) -> Optional[str]:
         """Get current page screenshot as base64 JPEG (low quality for fast WS transport)."""
+        session = self._get_session(session_id)
         try:
-            if not self._page or self._page.is_closed():
+            if not session._page or session._page.is_closed():
                 return None
-            img_bytes = await self._page.screenshot(type="jpeg", quality=50)
+            img_bytes = await session._page.screenshot(type="jpeg", quality=50)
             return base64.b64encode(img_bytes).decode("utf-8")
         except Exception as e:
-            logger.error(f"Screenshot capture failed: {e}")
+            logger.error(f"Screenshot capture failed for session {session_id}: {e}")
             return None
 
-    async def screenshot(self, url: Optional[str] = None) -> Dict[str, Any]:
+    async def screenshot(self, url: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Take a screenshot, optionally navigating first."""
+        session = self._get_session(session_id)
         try:
-            page = await self._ensure_page()
+            page = await self._ensure_page(session_id)
             if url:
                 await page.goto(url, wait_until="networkidle", timeout=15000)
-            path = os.path.join(os.path.expanduser("~"), "nexus_screenshot.png")
+            path = os.path.join(os.path.expanduser("~"), f"nexus_screenshot_{session.session_id}.png")
             await page.screenshot(path=path)
-            await self._update_memory_from_page()
+            await self._update_memory_from_page(session_id)
             return {"success": True, "verified": True, "result": f"Screenshot saved to {path}"}
         except Exception as e:
             return {"success": False, "verified": False, "error": str(e)}
@@ -315,43 +190,41 @@ class BrowserAgent:
     # Phase 4: Observe-Decide-Execute-Verify helpers
     # ---------------------------------------------------------------------------
 
-    async def observe(self) -> Dict[str, Any]:
-        """
-        Observe the current page state. Returns a structured observation:
-          - page title, URL
-          - available buttons, inputs, links (from DOM snapshot)
-          - Falls back to screenshot description if DOM is empty.
-        """
-        dom = await self.get_dom_snapshot()
-        await self._update_memory_from_page()
+    async def observe(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Observe the current page state."""
+        session = self._get_session(session_id)
+        dom = await self.get_dom_snapshot(session_id)
+        await self._update_memory_from_page(session_id)
         return {
             "success": True,
             "verified": True,
-            "url": self.memory.current_url,
-            "title": self.memory.page_title,
+            "url": session.memory.current_url,
+            "title": session.memory.page_title,
             "dom": dom.get("result", {}),
-            "memory": self.memory.to_dict(),
+            "memory": session.memory.to_dict(),
         }
 
-    async def _verify_navigation(self, expected_url_fragment: Optional[str] = None) -> bool:
-        """Verify navigation succeeded by checking URL changed or title is non-empty."""
+    async def _verify_navigation(self, expected_url_fragment: Optional[str] = None, session_id: Optional[str] = None) -> bool:
+        """Verify navigation succeeded."""
+        session = self._get_session(session_id)
         try:
             await asyncio.sleep(0.5)
-            await self._update_memory_from_page()
-            if expected_url_fragment and expected_url_fragment.lower() in self.memory.current_url.lower():
+            await self._update_memory_from_page(session_id)
+            if expected_url_fragment and expected_url_fragment.lower() in session.memory.current_url.lower():
                 return True
-            if self.memory.page_title and self.memory.page_title != "about:blank":
+            if session.memory.page_title and session.memory.page_title != "about:blank":
                 return True
             return False
         except Exception:
             return False
 
-    async def _verify_element_visible(self, selector: str) -> bool:
-        """Verify an element exists and is visible after an action."""
+    async def _verify_element_visible(self, selector: str, session_id: Optional[str] = None) -> bool:
+        """Verify an element exists and is visible."""
+        session = self._get_session(session_id)
         try:
-            if not self._page or self._page.is_closed():
+            if not session._page or session._page.is_closed():
                 return False
-            el = await self._page.query_selector(selector)
+            el = await session._page.query_selector(selector)
             if el:
                 return await el.is_visible()
             return False
@@ -362,69 +235,81 @@ class BrowserAgent:
     # Core navigation + interaction
     # ---------------------------------------------------------------------------
 
-    async def open_url(self, url: str) -> Dict[str, Any]:
+    async def open_url(self, url: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Navigate to URL and verify success."""
+        import random
+        # IP Pressure Tracking Mitigation: Random delay before new navigations
+        await asyncio.sleep(random.uniform(1.5, 3.5))
+
+        session = self._get_session(session_id)
         start = time.perf_counter()
         try:
-            page = await self._ensure_page()
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-            await self._update_memory_from_page()
-            verified = await self._verify_navigation(url.split("//")[-1].split("/")[0])
+            page = await self._ensure_page(session_id)
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+
+            # Transparent 429 Handling
+            if response and response.status == 429:
+                logger.warning(f"⚠️ [Rate Limit] 429 encountered on {url}. Triggering delay.")
+                await asyncio.sleep(random.uniform(5.0, 10.0))
+                response = await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+
+            await self._update_memory_from_page(session_id)
+            verified = await self._verify_navigation(url.split("//")[-1].split("/")[0], session_id)
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            self.memory.record_step("open_url", url, f"Navigated to {self.memory.page_title}", verified)
-            self.memory.session_state = "navigating"
+            session.memory.record_step("open_url", url, f"Navigated to {session.memory.page_title}", verified)
+            session.memory.session_state = "navigating"
             return {
                 "success": True, "verified": verified,
                 "execution_time": elapsed, "tool": "browser_open_url",
                 "target": url, "error": None,
-                "result": f"Opened '{self.memory.page_title}' ({self.memory.current_url})"
+                "result": f"Opened '{session.memory.page_title}' ({session.memory.current_url})"
             }
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            logger.error(f"open_url failed for {url}: {e}")
-            self.memory.record_step("open_url", url, str(e), False)
-            self.memory.session_state = "error"
+            logger.error(f"open_url failed for {url} on session {session_id}: {e}")
+            session.memory.record_step("open_url", url, str(e), False)
+            session.memory.session_state = "error"
             return {"success": False, "verified": False, "execution_time": elapsed,
                     "tool": "browser_open_url", "target": url, "error": str(e)}
 
-    async def search(self, query: str) -> Dict[str, Any]:
+    async def search(self, query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Search via DuckDuckGo."""
         import urllib.parse
-        return await self.open_url(f"https://duckduckgo.com/?q={urllib.parse.quote(query)}")
+        return await self.open_url(f"https://duckduckgo.com/?q={urllib.parse.quote(query)}", session_id)
 
-    async def click(self, selector: str) -> Dict[str, Any]:
-        """Click an element and verify the click triggered a state change."""
+    async def click(self, selector: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Click an element and verify."""
+        session = self._get_session(session_id)
         start = time.perf_counter()
         try:
-            page = await self._ensure_page()
+            page = await self._ensure_page(session_id)
             url_before = page.url
             await page.click(selector, timeout=8000)
             await asyncio.sleep(0.5)
-            await self._update_memory_from_page()
-            # Verify: URL changed OR title changed
+            await self._update_memory_from_page(session_id)
             url_changed = page.url != url_before
-            verified = url_changed or bool(self.memory.page_title)
+            verified = url_changed or bool(session.memory.page_title)
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            self.memory.record_step("click", selector, f"Clicked. URL changed: {url_changed}", verified)
+            session.memory.record_step("click", selector, f"Clicked. URL changed: {url_changed}", verified)
             return {
                 "success": True, "verified": verified,
                 "execution_time": elapsed, "tool": "browser_click",
                 "target": selector, "error": None,
-                "result": f"Clicked '{selector}'. Page: {self.memory.page_title}"
+                "result": f"Clicked '{selector}'. Page: {session.memory.page_title}"
             }
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            logger.error(f"click failed on {selector}: {e}")
-            self.memory.record_step("click", selector, str(e), False)
+            logger.error(f"click failed on {selector} for session {session_id}: {e}")
+            session.memory.record_step("click", selector, str(e), False)
             return {"success": False, "verified": False, "execution_time": elapsed,
                     "tool": "browser_click", "target": selector, "error": str(e)}
 
-    async def extract(self, url: str) -> Dict[str, Any]:
-        """Navigate to URL and extract visible text content."""
+    async def extract(self, url: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Navigate to URL and extract text."""
         try:
-            page = await self._ensure_page()
+            page = await self._ensure_page(session_id)
             await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-            await self._update_memory_from_page()
+            await self._update_memory_from_page(session_id)
             text = await page.evaluate("document.body.innerText")
             return {
                 "success": True, "verified": True,
@@ -435,22 +320,22 @@ class BrowserAgent:
             return {"success": False, "verified": False, "tool": "browser_extract",
                     "target": url, "error": str(e)}
 
-    async def browser_type(self, selector: str, text: str) -> Dict[str, Any]:
-        """Type text into a field. Clears field first via triple-click."""
+    async def browser_type(self, selector: str, text: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Type text into a field."""
+        session = self._get_session(session_id)
         start = time.perf_counter()
         try:
-            page = await self._ensure_page()
+            page = await self._ensure_page(session_id)
             await page.click(selector, timeout=5000)
             await page.click(selector, click_count=3, timeout=5000)
             await page.type(selector, text, delay=30)
-            # Verify by reading back the field value
             value = await page.evaluate(
                 f"(sel) => {{ const el = document.querySelector(sel); return el ? (el.value || el.innerText) : ''; }}",
                 selector
             )
             verified = text in value or len(value) > 0
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            self.memory.record_step("type", selector, f"Typed {len(text)} chars", verified)
+            session.memory.record_step("type", selector, f"Typed {len(text)} chars", verified)
             return {
                 "success": True, "verified": verified,
                 "execution_time": elapsed, "tool": "browser_type",
@@ -459,16 +344,17 @@ class BrowserAgent:
             }
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            logger.error(f"browser_type failed on '{selector}': {e}")
-            self.memory.record_step("type", selector, str(e), False)
+            logger.error(f"browser_type failed on '{selector}' for session {session_id}: {e}")
+            session.memory.record_step("type", selector, str(e), False)
             return {"success": False, "verified": False, "execution_time": elapsed,
                     "tool": "browser_type", "target": selector, "error": str(e)}
 
-    async def browser_submit(self, selector: Optional[str] = None) -> Dict[str, Any]:
-        """Submit a form or press Enter. Verifies by checking URL/title change."""
+    async def browser_submit(self, selector: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Submit a form or press Enter."""
+        session = self._get_session(session_id)
         start = time.perf_counter()
         try:
-            page = await self._ensure_page()
+            page = await self._ensure_page(session_id)
             url_before = page.url
             submitted = False
 
@@ -495,22 +381,22 @@ class BrowserAgent:
                 submitted = True
 
             await asyncio.sleep(1.0)
-            await self._update_memory_from_page()
+            await self._update_memory_from_page(session_id)
             url_changed = page.url != url_before
-            verified = submitted and (url_changed or bool(self.memory.page_title))
+            verified = submitted and (url_changed or bool(session.memory.page_title))
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            self.memory.record_step("submit", selector or "active_element",
+            session.memory.record_step("submit", selector or "active_element",
                                      f"Submitted. URL changed: {url_changed}", verified)
             return {
                 "success": submitted, "verified": verified,
                 "execution_time": elapsed, "tool": "browser_submit",
                 "target": selector or "active_element", "error": None,
-                "result": f"Submitted. Now at: {self.memory.page_title}"
+                "result": f"Submitted. Now at: {session.memory.page_title}"
             }
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            logger.error(f"browser_submit failed: {e}")
-            self.memory.record_step("submit", selector or "active_element", str(e), False)
+            logger.error(f"browser_submit failed for session {session_id}: {e}")
+            session.memory.record_step("submit", selector or "active_element", str(e), False)
             return {"success": False, "verified": False, "execution_time": elapsed,
                     "tool": "browser_submit", "target": selector or "active_element",
                     "error": str(e)}
@@ -519,23 +405,24 @@ class BrowserAgent:
     # Tab management
     # ---------------------------------------------------------------------------
 
-    async def browser_tab_management(self, action: str, target: Optional[str] = None) -> Dict[str, Any]:
+    async def browser_tab_management(self, action: str, target: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Manage tabs: new, close, switch, list."""
+        session = self._get_session(session_id)
         start = time.perf_counter()
         try:
-            await self._ensure_page()
-            ctx = self._context
+            await self._ensure_page(session_id)
+            ctx = session._context
             assert ctx is not None, "Browser context not initialized"
             pages = ctx.pages
 
             if action == "new":
                 new_page = await ctx.new_page()
-                self._page = new_page
+                session._page = new_page
                 if target:
                     await new_page.goto(target, wait_until="domcontentloaded", timeout=15000)
-                await self._update_memory_from_page()
+                await self._update_memory_from_page(session_id)
                 elapsed = f"{time.perf_counter() - start:.2f}s"
-                self.memory.record_step("tab_new", target or "blank", "New tab opened", True)
+                session.memory.record_step("tab_new", target or "blank", "New tab opened", True)
                 return {
                     "success": True, "verified": True,
                     "execution_time": elapsed, "tool": "browser_tab_management",
@@ -544,13 +431,13 @@ class BrowserAgent:
                 }
 
             elif action == "close":
-                if self._page and not self._page.is_closed():
-                    await self._page.close()
+                if session._page and not session._page.is_closed():
+                    await session._page.close()
                     remaining = [p for p in ctx.pages if not p.is_closed()]
-                    self._page = remaining[-1] if remaining else await ctx.new_page()
-                await self._update_memory_from_page()
+                    session._page = remaining[-1] if remaining else await ctx.new_page()
+                await self._update_memory_from_page(session_id)
                 elapsed = f"{time.perf_counter() - start:.2f}s"
-                self.memory.record_step("tab_close", "current", f"{len(ctx.pages)} tabs remaining", True)
+                session.memory.record_step("tab_close", "current", f"{len(ctx.pages)} tabs remaining", True)
                 return {
                     "success": True, "verified": True,
                     "execution_time": elapsed, "tool": "browser_tab_management",
@@ -564,8 +451,8 @@ class BrowserAgent:
                     if target.isdigit():
                         idx = int(target)
                         if 0 <= idx < len(pages):
-                            self._page = pages[idx]
-                            await self._page.bring_to_front()
+                            session._page = pages[idx]
+                            await session._page.bring_to_front()
                             switched = True
                     else:
                         try:
@@ -574,16 +461,16 @@ class BrowserAgent:
                             best = rfp.extractOne(target, titles, scorer=fuzz.token_set_ratio, score_cutoff=50)
                             if best:
                                 idx = titles.index(best[0])
-                                self._page = pages[idx]
-                                await self._page.bring_to_front()
+                                session._page = pages[idx]
+                                await session._page.bring_to_front()
                                 switched = True
                         except ImportError:
                             pass
 
                 if switched:
-                    await self._update_memory_from_page()
+                    await self._update_memory_from_page(session_id)
                 elapsed = f"{time.perf_counter() - start:.2f}s"
-                self.memory.record_step("tab_switch", target or "", "Switched" if switched else "Tab not found", switched)
+                session.memory.record_step("tab_switch", target or "", "Switched" if switched else "Tab not found", switched)
                 return {
                     "success": switched, "verified": switched,
                     "execution_time": elapsed, "tool": "browser_tab_management",
@@ -617,7 +504,7 @@ class BrowserAgent:
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
             logger.error(f"browser_tab_management failed: {e}")
-            self.memory.record_step(f"tab_{action}", target or "", str(e), False)
+            session.memory.record_step(f"tab_{action}", target or "", str(e), False)
             return {
                 "success": False, "verified": False,
                 "execution_time": elapsed, "tool": "browser_tab_management",
@@ -633,33 +520,15 @@ class BrowserAgent:
         goal: str,
         steps: List[Dict[str, Any]],
         on_step_complete: Optional[Any] = None,  # async callback(step_result)
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute a multi-step browser task with Observe-Decide-Execute-Verify per step.
-
-        Args:
-            goal:      Human-readable goal description
-            steps:     List of step dicts: [{action, target, ...}, ...]
-            on_step_complete: Optional async callback invoked after each step
-
-        Returns:
-            {success, verified, steps_completed, steps_total, goal, results}
-
-        Step actions:
-            open_url    — target = URL
-            search      — target = query string
-            click       — target = CSS selector or visible text
-            type        — target = CSS selector, text = text to type
-            submit      — target = CSS selector (optional)
-            observe     — no target, returns page observation
-            screenshot  — no target, captures screenshot
-            wait        — target = seconds (str)
-            verify_url  — target = URL fragment to verify
-            verify_text — target = text to find on page
         """
-        logger.info(f"🤖 [BrowserTask] Goal: '{goal}' | Steps: {len(steps)}")
-        self.memory.session_state = "interacting"
-        self.memory.last_action = "start_task"
+        session = self._get_session(session_id)
+        logger.info(f"🤖 [BrowserTask] Goal: '{goal}' | Steps: {len(steps)} | Session: {session.session_id}")
+        session.memory.session_state = "interacting"
+        session.memory.last_action = "start_task"
 
         results = []
         completed = 0
@@ -672,40 +541,39 @@ class BrowserAgent:
             logger.info(f"  Step {i+1}/{total}: {action}({target!r})")
 
             # --- OBSERVE phase (before action) ---
-            observation = await self.observe()
+            observation = await self.observe(session_id)
 
             # --- EXECUTE phase ---
             step_result: Dict[str, Any] = {}
 
             try:
                 if action == "open_url":
-                    step_result = await self.open_url(target)
+                    step_result = await self.open_url(target, session_id)
                 elif action == "search":
-                    step_result = await self.search(target)
+                    step_result = await self.search(target, session_id)
                 elif action == "click":
-                    # Smart click: try selector first, then text-based click
-                    step_result = await self._smart_click(target)
+                    step_result = await self._smart_click(target, session_id)
                 elif action == "type":
-                    step_result = await self.browser_type(target, text)
+                    step_result = await self.browser_type(target, text, session_id)
                 elif action == "submit":
-                    step_result = await self.browser_submit(target or None)
+                    step_result = await self.browser_submit(target or None, session_id)
                 elif action == "observe":
                     step_result = {"success": True, "verified": True, "result": observation}
                 elif action == "screenshot":
-                    step_result = await self.screenshot()
+                    step_result = await self.screenshot(session_id=session_id)
                 elif action == "wait":
                     secs = float(target) if target else 1.0
                     await asyncio.sleep(min(secs, 10.0))
                     step_result = {"success": True, "verified": True, "result": f"Waited {secs}s"}
                 elif action == "verify_url":
-                    await self._update_memory_from_page()
-                    found = target.lower() in self.memory.current_url.lower()
+                    await self._update_memory_from_page(session_id)
+                    found = target.lower() in session.memory.current_url.lower()
                     step_result = {
                         "success": found, "verified": found,
                         "result": f"URL {'contains' if found else 'does not contain'} '{target}'"
                     }
                 elif action == "verify_text":
-                    found = await self._find_text_on_page(target)
+                    found = await self._find_text_on_page(target, session_id)
                     step_result = {
                         "success": found, "verified": found,
                         "result": f"Text '{target}' {'found' if found else 'NOT found'} on page"
@@ -715,7 +583,7 @@ class BrowserAgent:
 
             except Exception as e:
                 step_result = {"success": False, "verified": False, "error": str(e)}
-                logger.error(f"  Step {i+1} failed with exception: {e}")
+                logger.error(f"  Step {i+1} failed with exception on session {session_id}: {e}")
 
             # --- VERIFY phase ---
             step_result["step"] = i + 1
@@ -734,21 +602,21 @@ class BrowserAgent:
             else:
                 logger.warning(f"  ❌ Step {i+1} failed: {step_result.get('error', 'Unknown error')}")
 
-            # Notify caller (used for workspace state updates)
+            # Notify caller
             if on_step_complete:
                 try:
                     await on_step_complete(step_result)
                 except Exception:
                     pass
 
-            # Stop on critical failure (navigation errors usually cascade)
+            # Stop on critical failure
             if not step_result.get("success") and step.get("stop_on_fail", False):
                 logger.warning(f"  🛑 Stopping task at step {i+1} (stop_on_fail=True)")
                 break
 
         # Final memory update
-        await self._update_memory_from_page()
-        self.memory.session_state = "completed" if completed == total else "error"
+        await self._update_memory_from_page(session_id)
+        session.memory.session_state = "completed" if completed == total else "error"
 
         overall_success = completed > 0 and completed == total
         logger.info(f"🤖 [BrowserTask] Done: {completed}/{total} steps succeeded")
@@ -758,8 +626,8 @@ class BrowserAgent:
             "goal": goal,
             "steps_completed": completed,
             "steps_total": total,
-            "final_url": self.memory.current_url,
-            "final_title": self.memory.page_title,
+            "final_url": session.memory.current_url,
+            "final_title": session.memory.page_title,
             "results": results,
         }
 
@@ -767,11 +635,10 @@ class BrowserAgent:
     # Smart helpers for Phase C
     # ---------------------------------------------------------------------------
 
-    async def _smart_click(self, target: str) -> Dict[str, Any]:
-        """
-        Click by CSS selector. Falls back to text-based click via DOM search.
-        """
-        page = await self._ensure_page()
+    async def _smart_click(self, target: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Click by CSS selector. Falls back to text-based click via DOM search."""
+        session = self._get_session(session_id)
+        page = await self._ensure_page(session_id)
         url_before = page.url
         start = time.perf_counter()
 
@@ -779,14 +646,14 @@ class BrowserAgent:
         try:
             await page.click(target, timeout=5000)
             await asyncio.sleep(0.5)
-            await self._update_memory_from_page()
+            await self._update_memory_from_page(session_id)
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            self.memory.record_step("click", target, "Clicked (selector)", True)
+            session.memory.record_step("click", target, "Clicked (selector)", True)
             return {
                 "success": True, "verified": True,
                 "execution_time": elapsed, "tool": "browser_click",
                 "target": target, "error": None,
-                "result": f"Clicked '{target}'. Now: {self.memory.page_title}"
+                "result": f"Clicked '{target}'. Now: {session.memory.page_title}"
             }
         except Exception:
             pass
@@ -805,30 +672,30 @@ class BrowserAgent:
             )
             if clicked:
                 await asyncio.sleep(0.5)
-                await self._update_memory_from_page()
+                await self._update_memory_from_page(session_id)
                 elapsed = f"{time.perf_counter() - start:.2f}s"
-                self.memory.record_step("click", target, "Clicked (text match)", True)
+                session.memory.record_step("click", target, "Clicked (text match)", True)
                 return {
                     "success": True, "verified": True,
                     "execution_time": elapsed, "tool": "browser_click",
                     "target": target, "error": None,
-                    "result": f"Clicked text '{target}'. Now: {self.memory.page_title}"
+                    "result": f"Clicked text '{target}'. Now: {session.memory.page_title}"
                 }
         except Exception:
             pass
 
         elapsed = f"{time.perf_counter() - start:.2f}s"
-        self.memory.record_step("click", target, "No match found", False)
+        session.memory.record_step("click", target, "No match found", False)
         return {
             "success": False, "verified": False,
             "execution_time": elapsed, "tool": "browser_click",
             "target": target, "error": f"Could not find clickable element: '{target}'"
         }
 
-    async def _find_text_on_page(self, text: str) -> bool:
+    async def _find_text_on_page(self, text: str, session_id: Optional[str] = None) -> bool:
         """Check if specific text is visible on the current page."""
         try:
-            page = await self._ensure_page()
+            page = await self._ensure_page(session_id)
             result = await page.evaluate(
                 "(text) => document.body.innerText.toLowerCase().includes(text.toLowerCase())",
                 text
@@ -837,22 +704,270 @@ class BrowserAgent:
         except Exception:
             return False
 
-    async def close(self) -> None:
-        """Clean up Playwright resources."""
-        try:
-            if self._page and not self._page.is_closed():
-                await self._page.close()
-            if self._context:
-                await self._context.close()
-            if self._playwright:
-                await self._playwright.stop()
-        except Exception as e:
-            logger.error(f"Failed to close BrowserAgent: {e}")
-        finally:
-            self._page = None
-            self._context = None
-            self._playwright = None
-            self.memory.session_state = "idle"
+
+    # ---------------------------------------------------------------------------
+    # Phase 8: LLM-Driven Observe-Decide-Act-Verify Agentic Loop
+    # ---------------------------------------------------------------------------
+
+    _AGENTIC_SYSTEM_PROMPT = """You are a browser automation agent. Your job is to complete the user's goal by controlling a web browser.
+
+At each iteration you will receive:
+- GOAL: The overall objective
+- CURRENT STATE: URL, page title, visible buttons, inputs, links, and text on screen
+- HISTORY: Previous actions and results
+
+Respond with a JSON object (ONLY JSON, no markdown) describing the NEXT single action to take:
+
+{
+  "action": "<action_name>",
+  "target": "<CSS selector, URL, or text to interact with>",
+  "text": "<text to type, if action=type>",
+  "reasoning": "<1-2 sentence explanation>",
+  "done": false
+}
+
+Available actions:
+- open_url: Navigate to a URL. target = full URL.
+- click: Click an element. target = CSS selector or visible text.
+- type: Type text into a field. target = CSS selector. text = what to type.
+- submit: Submit a form or press Enter. target = optional CSS selector.
+- search: Type in the main search box and submit. target = search query.
+- wait: Wait N seconds. target = number of seconds as string.
+- verify_text: Check if text is visible. target = text to look for.
+- scroll: Scroll the page down. target = "down" or "up".
+
+If the goal is fully achieved, set "done": true.
+If you cannot proceed (error loop, missing auth, bot detection), set "done": true with reasoning explaining why.
+
+IMPORTANT: Output ONLY valid JSON. No backticks, no markdown, no extra text."""
+
+    async def run_agentic_task(
+        self,
+        goal: str,
+        session_id: Optional[str] = None,
+        max_iterations: int = 12,
+        on_step_complete: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """
+        LLM-driven autonomous Observe→Decide→Act→Verify loop.
+
+        Unlike run_browser_task (caller-defined steps), this method lets the
+        Generals-tier LLM (Cerebras 120B via model_router) decide what to do
+        at each step based on live DOM state observation.
+
+        Safeguards:
+        - Caps at max_iterations (default 12) — prevents infinite loops
+        - Detects stuck state (same URL + same page title 2x in a row) → stops
+        - All actions route through existing verified browser primitives
+
+        Returns a full trace including each iteration's observation and action.
+        """
+        from core.model_router import model_router, TaskClass
+
+        session = self._get_session(session_id)
+        session.memory.session_state = "interacting"
+        logger.info(f"🤖 [AgenticLoop] Goal: '{goal}' | Max iterations: {max_iterations} | Session: {session.session_id}")
+
+        trace: List[Dict[str, Any]] = []
+        history_lines: List[str] = []
+        completed_iterations = 0
+        last_fingerprint = ""
+
+        for iteration in range(1, max_iterations + 1):
+            logger.info(f"  [Iter {iteration}/{max_iterations}] Observing page state...")
+
+            # ── OBSERVE ──────────────────────────────────────────────────────
+            observation = await self.observe(session_id)
+            current_url   = observation.get("url", "about:blank")
+            current_title = observation.get("title", "")
+
+            # Collect DOM snapshot for context
+            dom_summary_parts = []
+            snap = observation.get("snapshot", {})
+            buttons = snap.get("buttons", [])[:8]
+            inputs  = snap.get("inputs", [])[:6]
+            links   = snap.get("links", [])[:8]
+            texts   = snap.get("text", [])[:10]
+
+            if buttons:
+                dom_summary_parts.append("Buttons: " + " | ".join(
+                    f"[{b.get('text', '?')}]({b.get('selector', '')})" for b in buttons
+                ))
+            if inputs:
+                dom_summary_parts.append("Inputs: " + " | ".join(
+                    f"[{i.get('type', 'text')} name={i.get('name', '')} id={i.get('id', '')}]" for i in inputs
+                ))
+            if links:
+                dom_summary_parts.append("Links: " + " | ".join(
+                    f"[{lk.get('text', '?')}]({lk.get('href', '')})" for lk in links if lk.get('text')
+                )[:400])
+            if texts:
+                dom_summary_parts.append("Text: " + " / ".join(str(t)[:80] for t in texts[:5]))
+
+            dom_summary = "\n".join(dom_summary_parts) if dom_summary_parts else "(no visible interactive elements)"
+
+            current_state = (
+                f"URL: {current_url}\n"
+                f"Title: {current_title}\n"
+                f"{dom_summary}"
+            )
+
+            # Stuck-state detection: same URL + same title twice → abort
+            fingerprint = f"{current_url}::{current_title}"
+            if fingerprint == last_fingerprint and iteration > 2:
+                logger.warning(f"  [AgenticLoop] Stuck state detected at '{current_url}'. Stopping.")
+                trace.append({"iteration": iteration, "observation": current_state, "action": None,
+                               "result": "STUCK_STATE", "success": False})
+                break
+            last_fingerprint = fingerprint
+
+            # ── DECIDE ───────────────────────────────────────────────────────
+            history_context = "\n".join(history_lines[-6:]) if history_lines else "(no prior actions)"
+            decide_messages = [{
+                "role": "user",
+                "content": (
+                    f"GOAL: {goal}\n\n"
+                    f"CURRENT STATE:\n{current_state}\n\n"
+                    f"HISTORY (last 6 actions):\n{history_context}\n\n"
+                    f"What is the NEXT single action to take? Reply with JSON only."
+                )
+            }]
+
+            raw_decision: str = ""
+            try:
+                raw_decision = await model_router.route_task(
+                    task_class=TaskClass.BROWSER,
+                    system_prompt=self._AGENTIC_SYSTEM_PROMPT,
+                    messages=decide_messages,
+                )
+                # Strip possible markdown fences
+                clean = raw_decision.strip()
+                if clean.startswith("```"):
+                    clean = clean.split("```")[1].lstrip("json").strip()
+                decision = json.loads(clean)
+            except json.JSONDecodeError:
+                logger.warning(f"  [AgenticLoop] LLM returned non-JSON: {raw_decision[:200]}")
+                trace.append({"iteration": iteration, "observation": current_state,
+                               "action": "PARSE_ERROR", "result": raw_decision, "success": False})
+                break
+            except Exception as e:
+                logger.error(f"  [AgenticLoop] LLM decision failed: {e}")
+                trace.append({"iteration": iteration, "observation": current_state,
+                               "action": "LLM_ERROR", "result": str(e), "success": False})
+                break
+
+            action   = decision.get("action", "")
+            target   = decision.get("target", "")
+            text     = decision.get("text", "")
+            is_done  = bool(decision.get("done", False))
+            reasoning = decision.get("reasoning", "")
+
+            logger.info(f"  [Iter {iteration}] Decision: {action}({target!r}) — {reasoning[:80]}")
+
+            if is_done:
+                logger.info(f"  [AgenticLoop] LLM signalled goal complete at iteration {iteration}.")
+                trace.append({"iteration": iteration, "observation": current_state,
+                               "action": "DONE", "result": reasoning, "success": True})
+                completed_iterations = iteration
+                break
+
+            # ── ACT ───────────────────────────────────────────────────────────
+            step_result: Dict[str, Any] = {}
+            try:
+                if action == "open_url":
+                    step_result = await self.open_url(target, session_id)
+                elif action == "click":
+                    step_result = await self._smart_click(target, session_id)
+                elif action == "type":
+                    step_result = await self.browser_type(target, text, session_id)
+                elif action == "submit":
+                    step_result = await self.browser_submit(target or None, session_id)
+                elif action == "search":
+                    step_result = await self.search(target, session_id)
+                elif action == "wait":
+                    secs = min(float(target) if target else 2.0, 10.0)
+                    await asyncio.sleep(secs)
+                    step_result = {"success": True, "verified": True, "result": f"Waited {secs}s"}
+                elif action == "verify_text":
+                    found = await self._find_text_on_page(target, session_id)
+                    step_result = {"success": found, "verified": found,
+                                   "result": f"Text '{target}' {'found' if found else 'NOT found'}"}
+                elif action == "scroll":
+                    page = await self._ensure_page(session_id)
+                    delta = 600 if (target or "down").lower() == "down" else -600
+                    await page.evaluate(f"window.scrollBy(0, {delta})")
+                    await asyncio.sleep(0.5)
+                    step_result = {"success": True, "verified": True, "result": f"Scrolled {target or 'down'}"}
+                else:
+                    step_result = {"success": False, "verified": False,
+                                   "error": f"Unknown action returned by LLM: '{action}'"}
+            except Exception as e:
+                step_result = {"success": False, "verified": False, "error": str(e)}
+                logger.error(f"  [AgenticLoop] Action '{action}' raised: {e}")
+
+            # ── VERIFY ───────────────────────────────────────────────────────
+            success = step_result.get("success", False)
+            result_str = str(step_result.get("result", step_result.get("error", "")))[:200]
+
+            history_lines.append(
+                f"[{iteration}] {action}({target!r}) → {'✅' if success else '❌'} {result_str}"
+            )
+            trace.append({
+                "iteration": iteration,
+                "observation": {"url": current_url, "title": current_title},
+                "action": action,
+                "target": target,
+                "text": text,
+                "reasoning": reasoning,
+                "result": step_result,
+                "success": success,
+            })
+
+            # Notify caller (e.g. voice_session can stream trace to frontend)
+            if on_step_complete:
+                try:
+                    await on_step_complete({
+                        "iteration": iteration,
+                        "action": action,
+                        "target": target,
+                        "success": success,
+                        "result": result_str,
+                    })
+                except Exception:
+                    pass
+
+            completed_iterations = iteration
+
+        # Final page state
+        await self._update_memory_from_page(session_id)
+        session.memory.session_state = "completed"
+        overall_success = any(t.get("action") == "DONE" for t in trace) or (
+            completed_iterations > 0 and trace[-1].get("success", False)
+        )
+
+        logger.info(
+            f"🤖 [AgenticLoop] Finished. Iterations: {completed_iterations}/{max_iterations} | "
+            f"Overall success: {overall_success}"
+        )
+        return {
+            "success": overall_success,
+            "verified": overall_success,
+            "goal": goal,
+            "iterations_used": completed_iterations,
+            "max_iterations": max_iterations,
+            "final_url": session.memory.current_url,
+            "final_title": session.memory.page_title,
+            "trace": trace,
+        }
+
+    async def close(self, session_id: Optional[str] = None) -> None:
+        """Clean up Playwright resources for a specific session."""
+        s_id = session_id or "default"
+        if s_id in self._sessions:
+            session = self._sessions[s_id]
+            await session.close()
+            del self._sessions[s_id]
+            logger.info(f"🧹 Cleaned up browser session: {s_id}")
 
 
 browser_agent = BrowserAgent()
