@@ -44,8 +44,8 @@ async def launch_session(session: SessionContext) -> Any:
             "Playwright is not installed. Run: pip install playwright && playwright install chromium"
         )
 
-    from core.browser_launcher import resolve_browser
-    from core.browser_stealth import _STEALTH_JS
+    from core.browser.session.resolver import resolve_browser
+    from core.browser.prompts import STEALTH_JS
 
     browser_hint = session.memory.browser_hint
     exe_path, channel, is_fallback = resolve_browser(user_hint=browser_hint)
@@ -68,7 +68,7 @@ async def launch_session(session: SessionContext) -> Any:
     session._context = await browser_driver.launch_persistent_context(
         session.profile_dir, **launch_kwargs
     )
-    await session._context.add_init_script(_STEALTH_JS)
+    await session._context.add_init_script(STEALTH_JS)
 
     # Multi-tab: track popup/new-tab pages automatically
     session._context.on("page", lambda new_page: setattr(session, "_page", new_page))

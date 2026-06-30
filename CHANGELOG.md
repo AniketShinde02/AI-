@@ -1,4 +1,23 @@
-## [2026-06-30] — Browser Domain Architecture Refactor (DDD Template)
+## [2026-06-30] — Desktop Domain Architecture Refactor (Phase 2)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **`core/desktop/` package**: New Domain-Driven Design package to handle OS-level interactions.
+  - `control.py`: Contains `PCControl` with OS input, application control, and clipboard methods.
+  - `discovery.py`: App discovery, `.lnk` parsing, and path resolution via SQLite.
+  - `facade.py`: `DesktopAgent` orchestrator that acts as the primary API for desktop operations.
+  - `__init__.py`: Minimal public API (`DesktopAgent`, `desktop_agent`, `pc_controller`, `run_discovery`, etc.).
+
+### Changed
+- **`core/pc_control.py`**: Converted to a zero-logic backward-compatibility shim.
+- **`core/app_discovery.py`**: Converted to a zero-logic backward-compatibility shim.
+- **Pyright**: 0 errors on the new `core/desktop/` package.
+- This completes Phase 2 of the Backend Migration Plan.
+
+
 
 ### Author
 - Antigravity AI
