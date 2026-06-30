@@ -20,13 +20,24 @@ class BrowserMemory:
     last_action: str = ""
     last_action_target: str = ""
     last_action_result: str = ""
+    last_successful_action: str = ""
     session_state: str = "idle"   # idle | navigating | interacting | completed | error
     step_history: List[Dict[str, Any]] = field(default_factory=list)
+    # V1.1 additions
+    nav_history: List[str] = field(default_factory=list)          # URL history
+    focused_element: str = ""                                      # current focused selector
+    pending_navigation: bool = False                               # is page navigating?
+    downloads: List[str] = field(default_factory=list)            # downloaded file paths
+    uploads: List[str] = field(default_factory=list)              # uploaded file paths
+    failure_matrix: List[Dict[str, Any]] = field(default_factory=list)  # recovery failures
+    browser_hint: Optional[str] = None                            # e.g. "brave", "chrome"
 
     def record_step(self, action: str, target: str, result: str, success: bool):
         self.last_action = action
         self.last_action_target = target
         self.last_action_result = result
+        if success:
+            self.last_successful_action = action
         self.step_history.append({
             "action": action,
             "target": target,
@@ -38,10 +49,18 @@ class BrowserMemory:
         if len(self.step_history) > 20:
             self.step_history = self.step_history[-20:]
 
+    def record_navigation(self, url: str):
+        """Track URL in nav history (last 20)."""
+        self.nav_history.append(url)
+        if len(self.nav_history) > 20:
+            self.nav_history = self.nav_history[-20:]
+
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         # Don't send full history over WS — too large
         d["step_count"] = len(d.pop("step_history", []))
+        d["failure_count"] = len(d.pop("failure_matrix", []))
+        d["nav_history"] = d.get("nav_history", [])[-5:]  # send last 5 only
         return d
 
 

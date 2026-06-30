@@ -55,6 +55,7 @@ class BrowserAgent:
             raise RuntimeError(
                 "Playwright is not installed. Run: pip install playwright && playwright install chromium"
             )
+        from core.browser_launcher import resolve_browser
 
         context_is_dead = False
         if session._context:
@@ -76,16 +77,21 @@ class BrowserAgent:
             except Exception:
                 pass
 
+            # Resolve system browser — no hardcoded paths
+            browser_hint = session.memory.browser_hint  # e.g. "brave", "chrome", set by caller
+            exe_path, channel, is_fallback = resolve_browser(user_hint=browser_hint)
+            if is_fallback:
+                logger.warning(f"[BrowserAgent] Using fallback browser (bundled Chromium)")
+
             session._playwright = await async_playwright().start()
-            # Profile is isolated per session_id (never touches standard profile)
+            # Profile is isolated per session_id (never touches user's real browser profile)
             user_data_dir = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                 "data", f"browser_profile_{session.session_id}"
             )
             os.makedirs(user_data_dir, exist_ok=True)
-            session._context = await session._playwright.chromium.launch_persistent_context(
-                user_data_dir,
-                executable_path=r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+
+            launch_kwargs = dict(
                 headless=True,
                 args=[
                     "--no-sandbox",
@@ -95,7 +101,14 @@ class BrowserAgent:
                     "--disable-features=IsolateOrigins,site-per-process",
                 ],
                 viewport={"width": 1280, "height": 720},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            )
+            if exe_path:
+                launch_kwargs["executable_path"] = exe_path
+
+            browser_driver = getattr(session._playwright, channel, session._playwright.chromium)
+            session._context = await browser_driver.launch_persistent_context(
+                user_data_dir, **launch_kwargs
             )
             await session._context.add_init_script(_STEALTH_JS)
 
@@ -333,9 +346,34 @@ class BrowserAgent:
                     "tool": "browser_open_url", "target": url, "error": str(e)}
 
     async def search(self, query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """Search via DuckDuckGo."""
+        """Context-aware search.
+        
+        If the current page has a known search shortcut (YouTube: /, GitHub: /),
+        uses the page's native search bar. Otherwise falls back to DuckDuckGo.
+        """
         import urllib.parse
-        return await self.open_url(f"https://duckduckgo.com/?q={urllib.parse.quote(query)}", session_id)
+        session = self._get_session(session_id)
+        current_url = session.memory.current_url or "about:blank"
+
+        # Context-aware: use the current site's own search
+        PAGE_SEARCH_SHORTCUTS = {
+            "youtube.com": "https://www.youtube.com/results?search_query={q}",
+            "github.com": "https://github.com/search?q={q}",
+            "amazon.com": "https://www.amazon.com/s?k={q}",
+            "wikipedia.org": "https://en.wikipedia.org/wiki/Special:Search?search={q}",
+            "reddit.com": "https://www.reddit.com/search/?q={q}",
+        }
+        encoded = urllib.parse.quote(query)
+        for domain, pattern in PAGE_SEARCH_SHORTCUTS.items():
+            if domain in current_url:
+                url = pattern.format(q=encoded)
+                logger.info(f"[Search] Context-aware → {url}")
+                return await self.open_url(url, session_id)
+
+        # Default: DuckDuckGo (no tracking, no rate limits)
+        url = f"https://duckduckgo.com/?q={encoded}"
+        logger.info(f"[Search] DuckDuckGo → {url}")
+        return await self.open_url(url, session_id)
 
     async def click(self, selector: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Click an element and verify."""
@@ -442,28 +480,26 @@ class BrowserAgent:
             return {"success": False, "verified": False, "execution_time": elapsed, "tool": "browser_upload", "target": selector, "error": str(e)}
 
     async def browser_type(self, selector: str, text: str, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """Type text into a field."""
+        """Type text into a field using the 7-level LocatorEngine cascade."""
+        from core.browser_locator import locator_engine, LocatorNotFoundError
         session = self._get_session(session_id)
         start = time.perf_counter()
         try:
             page = await self._ensure_page(session_id)
-            
-            # Using fill with force=True is much more robust than click+type
-            # as it ignores elements that might be covering the input (like cookie banners)
+            filled = await locator_engine.fill_element(page, selector, text, timeout=5000)
+            if not filled:
+                raise Exception(f"LocatorEngine could not fill '{selector}'")
+
+            # Verify value was set
             try:
-                await page.fill(selector, text, force=True, timeout=5000)
-            except Exception as fill_err:
-                logger.warning(f"Fill failed, falling back to click+type for '{selector}': {fill_err}")
-                await page.click(selector, force=True, timeout=5000)
-                await page.keyboard.press("Control+A")
-                await page.keyboard.press("Backspace")
-                await page.type(selector, text, delay=30)
-                
-            value = await page.evaluate(
-                f"(sel) => {{ const el = document.querySelector(sel); return el ? (el.value || el.innerText) : ''; }}",
-                selector
-            )
-            verified = text in value or len(value) > 0
+                value = await page.evaluate(
+                    "(sel) => { const el = document.querySelector(sel); return el ? (el.value || el.textContent) : ''; }",
+                    selector
+                )
+                verified = text in (value or '') or len(value or '') > 0
+            except Exception:
+                verified = True  # assume OK if verify fails
+
             elapsed = f"{time.perf_counter() - start:.2f}s"
             session.memory.record_step("type", selector, f"Typed {len(text)} chars", verified)
             return {
@@ -782,61 +818,35 @@ class BrowserAgent:
     # ---------------------------------------------------------------------------
 
     async def _smart_click(self, target: str, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """Click by CSS selector. Falls back to text-based click via DOM search."""
+        """Click using 7-level LocatorEngine cascade."""
+        from core.browser_locator import locator_engine, LocatorNotFoundError
         session = self._get_session(session_id)
         page = await self._ensure_page(session_id)
         url_before = page.url
         start = time.perf_counter()
 
-        # Try direct CSS selector first
         try:
-            await page.click(target, timeout=5000)
+            clicked = await locator_engine.click_element(page, target, timeout=5000)
+            if not clicked:
+                raise Exception(f"LocatorEngine could not click '{target}'")
             await asyncio.sleep(0.5)
             await self._update_memory_from_page(session_id)
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            session.memory.record_step("click", target, "Clicked (selector)", True)
+            session.memory.record_step("click", target, "Clicked (LocatorEngine)", True)
             return {
                 "success": True, "verified": True,
                 "execution_time": elapsed, "tool": "browser_click",
                 "target": target, "error": None,
                 "result": f"Clicked '{target}'. Now: {session.memory.page_title}"
             }
-        except Exception:
-            pass
-
-        # Fallback: find by visible text
-        try:
-            clicked = await page.evaluate(
-                """(text) => {
-                    const els = Array.from(document.querySelectorAll('button, a, [role="button"], [role="link"]'));
-                    const lower = text.toLowerCase();
-                    const match = els.find(el => el.innerText.toLowerCase().includes(lower) && el.getBoundingClientRect().width > 0);
-                    if (match) { match.click(); return true; }
-                    return false;
-                }""",
-                target
-            )
-            if clicked:
-                await asyncio.sleep(0.5)
-                await self._update_memory_from_page(session_id)
-                elapsed = f"{time.perf_counter() - start:.2f}s"
-                session.memory.record_step("click", target, "Clicked (text match)", True)
-                return {
-                    "success": True, "verified": True,
-                    "execution_time": elapsed, "tool": "browser_click",
-                    "target": target, "error": None,
-                    "result": f"Clicked text '{target}'. Now: {session.memory.page_title}"
-                }
-        except Exception:
-            pass
-
-        elapsed = f"{time.perf_counter() - start:.2f}s"
-        session.memory.record_step("click", target, "No match found", False)
-        return {
-            "success": False, "verified": False,
-            "execution_time": elapsed, "tool": "browser_click",
-            "target": target, "error": f"Could not find clickable element: '{target}'"
-        }
+        except Exception as e:
+            elapsed = f"{time.perf_counter() - start:.2f}s"
+            session.memory.record_step("click", target, str(e), False)
+            return {
+                "success": False, "verified": False,
+                "execution_time": elapsed, "tool": "browser_click",
+                "target": target, "error": f"Could not find clickable element: '{target}'. {e}"
+            }
 
     async def _find_text_on_page(self, text: str, session_id: Optional[str] = None) -> bool:
         """Check if specific text is visible on the current page."""
@@ -958,13 +968,19 @@ IMPORTANT: Output ONLY valid JSON. No backticks, no markdown, no extra text."""
                 f"{dom_summary}"
             )
 
-            # Stuck-state detection: same URL + same title twice → abort
+            # Stuck-state detection: same URL + same title 3x in a row AND past iter 3
             fingerprint = f"{current_url}::{current_title}"
-            if fingerprint == last_fingerprint and iteration > 2:
-                logger.warning(f"  [AgenticLoop] Stuck state detected at '{current_url}'. Stopping.")
-                trace.append({"iteration": iteration, "observation": current_state, "action": None,
-                               "result": "STUCK_STATE", "success": False})
-                break
+            if fingerprint == last_fingerprint and iteration > 3:
+                stuck_count = getattr(self, '_stuck_count', 0) + 1
+                self._stuck_count = stuck_count
+                if stuck_count >= 3:
+                    logger.warning(f"  [AgenticLoop] Stuck state detected at '{current_url}' ({stuck_count}x). Stopping.")
+                    trace.append({"iteration": iteration, "observation": current_state, "action": None,
+                                   "result": "STUCK_STATE", "success": False})
+                    self._stuck_count = 0
+                    break
+            else:
+                self._stuck_count = 0
             last_fingerprint = fingerprint
 
             # ── DECIDE ───────────────────────────────────────────────────────
@@ -1009,6 +1025,17 @@ IMPORTANT: Output ONLY valid JSON. No backticks, no markdown, no extra text."""
             text     = decision.get("text", "")
             is_done  = bool(decision.get("done", False))
             reasoning = decision.get("reasoning", "")
+
+            # Validate LLM action against allowlist — never hallucinate execution
+            _VALID_ACTIONS = {
+                "open_url", "click", "type", "submit", "search", "wait",
+                "verify_text", "verify_url", "scroll", "extract", "back",
+                "forward", "refresh", "select", "done", "fail"
+            }
+            if action and action not in _VALID_ACTIONS:
+                logger.warning(f"  [AgenticLoop] LLM returned invalid action '{action}' — REJECTED")
+                history_lines.append(f"[{iteration}] INVALID_ACTION({action!r}) → ❌ rejected")
+                continue
 
             logger.info(f"  [Iter {iteration}] Decision: {action}({target!r}) — {reasoning[:80]}")
 

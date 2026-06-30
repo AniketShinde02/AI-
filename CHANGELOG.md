@@ -1,3 +1,31 @@
+## [2026-06-30] — BrowserAgent V1.1 Production-Grade Rewrite
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **`core/browser_launcher.py`**: New module that reads the user's system default browser from the Windows Registry (HKCU HTTPS ProgID). Resolves executable path for Chrome, Brave, Edge. Falls back to bundled Chromium if default browser is Firefox or undetectable. Zero hardcoded paths.
+- **`core/browser_locator.py`**: 7-level locator cascade engine — ARIA Role → Label → Placeholder → Visible Text → Test ID (data-testid) → CSS → XPath. Each level has independent 3s timeout. LLM never drives Playwright directly.
+- **`core/browser_recovery.py`**: 5-level recovery engine. L1=retry, L2=DOM refresh+retry, L3=A11y re-snapshot, L4=screenshot visual confirmation, L5=fail+record. Logs every failure to `failure_matrix` for benchmark reporting.
+
+### Changed
+- **`core/browser_agent.py` — `_ensure_page()`**: Removed hardcoded Brave executable path. Now calls `BrowserLauncher.resolve_browser()` dynamically. Supports `session.memory.browser_hint` to let user specify browser per-session.
+- **`core/browser_agent.py` — `browser_type()`**: Rewritten to use `LocatorEngine.fill_element()` cascade instead of fragile CSS `fill(force=True)` + click fallback.
+- **`core/browser_agent.py` — `_smart_click()`**: Rewritten to use `LocatorEngine.click_element()` cascade.
+- **`core/browser_agent.py` — `search()`**: Context-aware. If current page is YouTube/GitHub/Amazon/Wikipedia/Reddit, uses the site's own search URL pattern. Falls back to DuckDuckGo.
+- **`core/browser_agent.py` — agentic loop stuck-state detection**: Threshold changed from "2 identical fingerprints after iter 2" to "3 identical fingerprints after iter 3". Prevents premature task abort.
+- **`core/browser_agent.py` — action allowlist validation**: LLM-returned actions now validated against explicit allowlist. Invalid/hallucinated actions are REJECTED with a warning, not executed.
+- **`core/browser_session_pool.py` — `BrowserMemory`**: Extended with: `nav_history`, `focused_element`, `pending_navigation`, `downloads`, `uploads`, `failure_matrix`, `last_successful_action`, `browser_hint`.
+
+### Fixed
+- **`.gitignore`**: Added `**/data/browser_profile_*/` glob pattern. Previously only `browser_profile/` was excluded, causing all session-specific Chromium profile data (LevelDB, ShaderCache, etc.) to be accidentally committed.
+- **Git cleanup**: Removed committed browser profile data from tracking via `git rm --cached`.
+
+### Notes
+- Q2 (profile isolation) resolved: staying isolated (no real user cookies) for safety. Agent has its own clean profile per session.
+- Q1 (Firefox fallback): silent fallback to bundled Chromium with a log warning. No UI alert for now.
+
 ## [2026-06-29] - Frontend Stability & Layout Restructuring
 
 ### Author
