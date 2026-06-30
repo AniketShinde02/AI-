@@ -43,8 +43,8 @@ class ProviderContext:
 
     def _build_state(self) -> ProviderState:
         try:
-            from core.provider_governor import governor, PROVIDER_LIMITS
-            from core.model_router import model_router
+            from core.provider.governor import governor, PROVIDER_LIMITS
+            from core.provider.router import model_router
 
             # Determine active provider from model_router if available
             active_provider = "groq"

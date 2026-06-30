@@ -19,6 +19,8 @@ from core.workspace.workspace_state import (
     ProviderState,
     SystemState,
 )
+from core.workspace.state import SessionState, SessionStateMixin
+from core.workspace.ux_cards import task_card_engine, TaskCardEngine
 
 __all__ = [
     "workspace_manager",
@@ -29,4 +31,8 @@ __all__ = [
     "MemoryState",
     "ProviderState",
     "SystemState",
+    "SessionState",
+    "SessionStateMixin",
+    "task_card_engine",
+    "TaskCardEngine",
 ]

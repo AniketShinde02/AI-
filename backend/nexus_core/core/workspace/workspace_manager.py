@@ -91,12 +91,12 @@ class WorkspaceManager:
         )
 
         return WorkspaceState(
-            desktop=desktop or DesktopState(),
-            browser=browser or BrowserState(),
+            desktop=desktop if isinstance(desktop, DesktopState) else DesktopState(),
+            browser=browser if isinstance(browser, BrowserState) else BrowserState(),
             execution=self._execution.snapshot(),
-            memory=memory or MemoryState(session_id=session_id),
-            provider=provider or ProviderState(),
-            system=system or SystemState(),
+            memory=memory if isinstance(memory, MemoryState) else MemoryState(session_id=session_id),
+            provider=provider if isinstance(provider, ProviderState) else ProviderState(),
+            system=system if isinstance(system, SystemState) else SystemState(),
         )
 
     # ------------------------------------------------------------------
