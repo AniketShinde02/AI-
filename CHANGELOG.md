@@ -1,3 +1,23 @@
+## [2026-06-30] — BrowserAgent V1.2 Production Hardening (Completed)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **`core/browser_state.py`**: Added `BrowserStateMachine` to enforce deterministic state transitions (`NAVIGATING`, `EXECUTING`, `VERIFYING`, etc.) and automatically broadcast `WORKSPACE_UPDATE` to WebSocket clients.
+- **Phase 7 (Infinite Scroll)**: Added `infinite_scroll` action to natively handle scrolling and waiting for network idle until bottom is reached.
+- **Phase 11 (Captcha Pause)**: `_verify_navigation` now automatically detects `recaptcha`, `turnstile`, and `hcaptcha` iframes. It pauses execution for up to 120s to allow human intervention and automatically resumes when solved.
+- **Phase 15 (Benchmarks)**: Added `tests/test_browser_v1_2.py` with integration tests for state machine, multi-tab, persistence, and infinite scroll.
+
+### Changed
+- **Navigation Verification (Phases 3 & 4)**: `open_url` now passes HTTP response. `_verify_navigation` validates HTTP `< 400`, explicitly waits for `networkidle` (SPA), and injects a `MutationObserver` to ensure JS hydration finishes before proceeding.
+- **iframe & Shadow DOM (Phases 5 & 6)**: `LocatorEngine` now dynamically iterates through `page.frames` across all 7 cascade levels, guaranteeing element resolution inside cross-origin iframes and open shadow roots.
+- **Smart Waits (Phase 12 & 14)**: `RecoveryEngine` replaced arbitrary `asyncio.sleep` with `wait_for_timeout` and `wait_for_load_state("networkidle")` during Level 2 and Level 3 recoveries.
+- **Uploads & Downloads (Phase 8 & 9)**: Rewritten to tightly couple locator clicks with Playwright's `expect_file_chooser()` and `expect_download()` to completely eliminate race conditions.
+- **Multi-Tab Management (Phase 13)**: Intercepts `page` events on the browser context. Any new tab automatically becomes the active `session._page`.
+- **Login Persistence (Phase 10)**: Modifed `browser_session_pool.py`. Profile directories starting with `user_` (e.g. `user_main_profile`) now survive backend restarts and session closures.
+
 ## [2026-06-30] — BrowserAgent V1.2 Production Hardening (Preparation)
 
 ### Author

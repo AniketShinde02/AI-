@@ -112,8 +112,11 @@ class BrowserAgent:
             )
             await session._context.add_init_script(_STEALTH_JS)
 
+            # Phase 13: Multi-Tab popup tracking
+            session._context.on("page", lambda new_page: setattr(session, '_page', new_page))
+
             if session._context.pages:
-                session._page = session._context.pages[0]
+                session._page = session._context.pages[-1]
             else:
                 session._page = await session._context.new_page()
 
@@ -277,18 +280,83 @@ class BrowserAgent:
             "memory": session.memory.to_dict(),
         }
 
-    async def _verify_navigation(self, expected_url_fragment: Optional[str] = None, session_id: Optional[str] = None) -> bool:
-        """Verify navigation succeeded."""
+    async def _verify_navigation(self, response: Optional[Any] = None, expected_url_fragment: Optional[str] = None, session_id: Optional[str] = None) -> bool:
+        """Phase 3 & 4: Strict Navigation & SPA Verification."""
+        from core.browser_state import BrowserStateEnum
         session = self._get_session(session_id)
+        
         try:
-            await asyncio.sleep(0.5)
+            if not session._page or session._page.is_closed():
+                return False
+
+            # Verify HTTP Status if response is available
+            if response:
+                status = response.status
+                if status >= 400:
+                    logger.warning(f"[_verify_navigation] HTTP Error {status}")
+                    return False
+
+            # SPA Detection: Wait for network to quiet down (max 3s)
+            try:
+                await session._page.wait_for_load_state("networkidle", timeout=3000)
+            except Exception:
+                # networkidle can fail if long-polling or websockets exist, that's OK
+                pass
+
+            # Phase 11: CAPTCHA Detection
+            captcha_selectors = ['iframe[src*="recaptcha"]', '#cf-turnstile', 'iframe[title*="reCAPTCHA"]', 'iframe[src*="hcaptcha"]']
+            for selector in captcha_selectors:
+                if await session._page.locator(selector).count() > 0:
+                    logger.warning(f"⚠️ CAPTCHA DETECTED ({selector}). Waiting up to 120s for human resolution...")
+                    if hasattr(session, 'state_machine'):
+                        await session.state_machine.transition_to(BrowserStateEnum.WAITING, {"reason": "captcha"})
+                    for _ in range(60):
+                        await asyncio.sleep(2.0)
+                        if await session._page.locator(selector).count() == 0:
+                            logger.info("✅ CAPTCHA resolved by human.")
+                            break
+                    else:
+                        logger.error("❌ CAPTCHA timeout.")
+                        return False
+
+            # SPA Detection: Check for hydration completion by evaluating active mutations
+            try:
+                await session._page.evaluate("""() => {
+                    return new Promise((resolve) => {
+                        if (document.readyState === 'complete') return resolve(true);
+                        let observer = new MutationObserver(() => {
+                            clearTimeout(timeout);
+                            observer.disconnect();
+                            resolve(true);
+                        });
+                        observer.observe(document.body, { childList: true, subtree: true });
+                        let timeout = setTimeout(() => {
+                            observer.disconnect();
+                            resolve(true);
+                        }, 1000);
+                    });
+                }""")
+            except Exception:
+                pass
+
             await self._update_memory_from_page(session_id)
-            if expected_url_fragment and expected_url_fragment.lower() in session.memory.current_url.lower():
-                return True
-            if session.memory.page_title and session.memory.page_title != "about:blank":
-                return True
-            return False
-        except Exception:
+            
+            # Record nav to memory
+            session.memory.record_navigation(session.memory.current_url)
+
+            # Strict verification criteria
+            if session.memory.page_title and "error" in session.memory.page_title.lower() and "404" in session.memory.page_title:
+                return False
+
+            if expected_url_fragment and expected_url_fragment.lower() not in session.memory.current_url.lower():
+                return False
+
+            if session.memory.page_title == "about:blank" and session.memory.current_url != "about:blank":
+                return False
+
+            return True
+        except Exception as e:
+            logger.error(f"[_verify_navigation] Verification failed: {e}")
             return False
 
     async def _verify_element_visible(self, selector: str, session_id: Optional[str] = None) -> bool:
@@ -311,10 +379,19 @@ class BrowserAgent:
     async def open_url(self, url: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Navigate to URL and verify success."""
         import random
-        # IP Pressure Tracking Mitigation: Random delay before new navigations
-        await asyncio.sleep(random.uniform(1.5, 3.5))
-
+        from core.browser_state import BrowserStateEnum
+        
         session = self._get_session(session_id)
+        # Ensure state machine exists
+        if not hasattr(session, 'state_machine'):
+            from core.browser_state import BrowserStateMachine
+            session.state_machine = BrowserStateMachine(session.session_id)
+
+        await session.state_machine.transition_to(BrowserStateEnum.NAVIGATING, {"url": url})
+        
+        # IP Pressure Tracking Mitigation: Random delay before new navigations
+        await asyncio.sleep(random.uniform(1.0, 2.5))
+
         start = time.perf_counter()
         try:
             page = await self._ensure_page(session_id)
@@ -323,25 +400,41 @@ class BrowserAgent:
             # Transparent 429 Handling
             if response and response.status == 429:
                 logger.warning(f"⚠️ [Rate Limit] 429 encountered on {url}. Triggering delay.")
+                await session.state_machine.transition_to(BrowserStateEnum.RECOVERING)
                 await asyncio.sleep(random.uniform(5.0, 10.0))
+                await session.state_machine.transition_to(BrowserStateEnum.NAVIGATING)
                 response = await page.goto(url, wait_until="domcontentloaded", timeout=15000)
 
-            await self._update_memory_from_page(session_id)
-            verified = await self._verify_navigation(url.split("//")[-1].split("/")[0], session_id)
+            await session.state_machine.transition_to(BrowserStateEnum.VERIFYING)
+            verified = await self._verify_navigation(
+                response=response,
+                expected_url_fragment=url.split("//")[-1].split("/")[0], 
+                session_id=session_id
+            )
             elapsed = f"{time.perf_counter() - start:.2f}s"
-            session.memory.record_step("open_url", url, f"Navigated to {session.memory.page_title}", verified)
-            session.memory.session_state = "navigating"
-            return {
-                "success": True, "verified": verified,
-                "execution_time": elapsed, "tool": "browser_open_url",
-                "target": url, "error": None,
-                "result": f"Opened '{session.memory.page_title}' ({session.memory.current_url})"
-            }
+            
+            if verified:
+                await session.state_machine.transition_to(BrowserStateEnum.COMPLETED)
+                session.memory.record_step("open_url", url, f"Navigated to {session.memory.page_title}", True)
+                return {
+                    "success": True, "verified": True,
+                    "execution_time": elapsed, "tool": "browser_open_url",
+                    "target": url, "error": None,
+                    "result": f"Opened '{session.memory.page_title}' ({session.memory.current_url})"
+                }
+            else:
+                await session.state_machine.transition_to(BrowserStateEnum.FAILED)
+                session.memory.record_step("open_url", url, "Verification failed", False)
+                return {
+                    "success": False, "verified": False,
+                    "execution_time": elapsed, "tool": "browser_open_url",
+                    "target": url, "error": "Navigation verification failed (check HTTP status or blank page)"
+                }
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
             logger.error(f"open_url failed for {url} on session {session_id}: {e}")
+            await session.state_machine.transition_to(BrowserStateEnum.FAILED)
             session.memory.record_step("open_url", url, str(e), False)
-            session.memory.session_state = "error"
             return {"success": False, "verified": False, "execution_time": elapsed,
                     "tool": "browser_open_url", "target": url, "error": str(e)}
 
@@ -423,6 +516,46 @@ class BrowserAgent:
             session.memory.record_step("click", selector, str(e), False)
             return {"success": False, "verified": False, "execution_time": elapsed,
                     "tool": "browser_click", "target": selector, "error": str(e)}
+    async def infinite_scroll(self, max_iterations: int = 5, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Phase 7: Infinite Scroll."""
+        from core.browser_state import BrowserStateEnum
+        session = self._get_session(session_id)
+        start = time.perf_counter()
+        try:
+            page = await self._ensure_page(session_id)
+            if hasattr(session, 'state_machine'):
+                await session.state_machine.transition_to(BrowserStateEnum.EXECUTING, {"action": "infinite_scroll"})
+            
+            for _ in range(max_iterations):
+                last_height = await page.evaluate("document.body.scrollHeight")
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=2000)
+                except Exception:
+                    await asyncio.sleep(1.0)
+                
+                new_height = await page.evaluate("document.body.scrollHeight")
+                if new_height == last_height:
+                    break  # Reached bottom
+            
+            await self._update_memory_from_page(session_id)
+            if hasattr(session, 'state_machine'):
+                await session.state_machine.transition_to(BrowserStateEnum.COMPLETED)
+            elapsed = f"{time.perf_counter() - start:.2f}s"
+            session.memory.record_step("scroll", "infinite", f"Scrolled to bottom", True)
+            return {
+                "success": True, "verified": True,
+                "execution_time": elapsed, "tool": "browser_infinite_scroll",
+                "target": "bottom", "error": None,
+                "result": "Scrolled"
+            }
+        except Exception as e:
+            elapsed = f"{time.perf_counter() - start:.2f}s"
+            if hasattr(session, 'state_machine'):
+                await session.state_machine.transition_to(BrowserStateEnum.FAILED)
+            session.memory.record_step("scroll", "infinite", str(e), False)
+            return {"success": False, "verified": False, "execution_time": elapsed, "tool": "browser_infinite_scroll", "target": "bottom", "error": str(e)}
+
 
     async def extract(self, url: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Navigate to URL and extract text."""
@@ -440,16 +573,31 @@ class BrowserAgent:
             return {"success": False, "verified": False, "tool": "browser_extract",
                     "target": url, "error": str(e)}
 
-    async def download(self, url: str, dest: str, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """Download a file from a URL to a local destination."""
+    async def download(self, target_selector: str, dest: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Phase 9: Download a file by clicking a target."""
+        from core.browser_state import BrowserStateEnum
+        from core.browser_locator import locator_engine
+        session = self._get_session(session_id)
         start = time.perf_counter()
         try:
             page = await self._ensure_page(session_id)
+            if hasattr(session, 'state_machine'):
+                await session.state_machine.transition_to(BrowserStateEnum.EXECUTING, {"action": "download"})
+            
+            locator = await locator_engine.locate(page, target_selector)
+            
             async with page.expect_download() as download_info:
-                await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                await locator.click(force=True, timeout=5000)
+            
             download = await download_info.value
             await download.save_as(dest)
+            
+            session.memory.downloads.append(dest)
+            if hasattr(session, 'state_machine'):
+                await session.state_machine.transition_to(BrowserStateEnum.COMPLETED)
+            
             elapsed = f"{time.perf_counter() - start:.2f}s"
+            session.memory.record_step("download", target_selector, f"Downloaded to {dest}", True)
             return {
                 "success": True, "verified": True, "execution_time": elapsed,
                 "tool": "browser_download", "target": dest, "error": None,
@@ -457,10 +605,16 @@ class BrowserAgent:
             }
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
+            if hasattr(session, 'state_machine'):
+                await session.state_machine.transition_to(BrowserStateEnum.FAILED)
+            session.memory.record_step("download", target_selector, str(e), False)
             return {"success": False, "verified": False, "execution_time": elapsed, "tool": "browser_download", "target": dest, "error": str(e)}
 
     async def upload(self, selector: str, file_path: str, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """Upload a local file to a specific file input element."""
+        """Phase 8: Upload file via file chooser."""
+        from core.browser_state import BrowserStateEnum
+        from core.browser_locator import locator_engine
+        session = self._get_session(session_id)
         start = time.perf_counter()
         try:
             import os
@@ -468,8 +622,23 @@ class BrowserAgent:
                 raise FileNotFoundError(f"File '{file_path}' not found.")
             
             page = await self._ensure_page(session_id)
-            await page.set_input_files(selector, file_path, timeout=8000)
+            if hasattr(session, 'state_machine'):
+                await session.state_machine.transition_to(BrowserStateEnum.EXECUTING, {"action": "upload"})
+            
+            locator = await locator_engine.locate(page, selector)
+            
+            async with page.expect_file_chooser() as fc_info:
+                await locator.click(force=True, timeout=5000)
+            
+            file_chooser = await fc_info.value
+            await file_chooser.set_files(file_path)
+            
+            session.memory.uploads.append(file_path)
+            if hasattr(session, 'state_machine'):
+                await session.state_machine.transition_to(BrowserStateEnum.COMPLETED)
+                
             elapsed = f"{time.perf_counter() - start:.2f}s"
+            session.memory.record_step("upload", selector, f"Uploaded {file_path}", True)
             return {
                 "success": True, "verified": True, "execution_time": elapsed,
                 "tool": "browser_upload", "target": selector, "error": None,
@@ -477,6 +646,9 @@ class BrowserAgent:
             }
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
+            if hasattr(session, 'state_machine'):
+                await session.state_machine.transition_to(BrowserStateEnum.FAILED)
+            session.memory.record_step("upload", selector, str(e), False)
             return {"success": False, "verified": False, "execution_time": elapsed, "tool": "browser_upload", "target": selector, "error": str(e)}
 
     async def browser_type(self, selector: str, text: str, session_id: Optional[str] = None) -> Dict[str, Any]:

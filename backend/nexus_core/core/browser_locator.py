@@ -55,30 +55,32 @@ class LocatorEngine:
         Raises:
             LocatorNotFoundError if all strategies fail
         """
-        strategies = [
-            ("ARIA Role", lambda: self._by_aria(page, target, role, timeout)),
-            ("Label", lambda: self._by_label(page, target, timeout)),
-            ("Placeholder", lambda: self._by_placeholder(page, target, timeout)),
-            ("Text", lambda: self._by_text(page, target, timeout)),
-            ("Test ID", lambda: self._by_test_id(page, target, timeout)),
-            ("CSS", lambda: self._by_css(page, target, timeout)),
-            ("XPath", lambda: self._by_xpath(page, target, timeout)),
-        ]
-
+        frames = getattr(page, 'frames', [page])
         last_err = None
-        for name, strategy in strategies:
-            try:
-                locator = await strategy()
-                if locator:
-                    logger.debug(f"[Locator] ✅ Strategy '{name}' matched for target: {target!r}")
-                    return locator
-            except Exception as e:
-                last_err = e
-                logger.debug(f"[Locator] ❌ Strategy '{name}' failed: {e}")
-                continue
+        
+        for frame in frames:
+            strategies = [
+                ("ARIA Role", lambda f=frame: self._by_aria(f, target, role, timeout)),
+                ("Label", lambda f=frame: self._by_label(f, target, timeout)),
+                ("Placeholder", lambda f=frame: self._by_placeholder(f, target, timeout)),
+                ("Text", lambda f=frame: self._by_text(f, target, timeout)),
+                ("Test ID", lambda f=frame: self._by_test_id(f, target, timeout)),
+                ("CSS", lambda f=frame: self._by_css(f, target, timeout)),
+                ("XPath", lambda f=frame: self._by_xpath(f, target, timeout)),
+            ]
+
+            for name, strategy in strategies:
+                try:
+                    locator = await strategy()
+                    if locator:
+                        logger.debug(f"[Locator] ✅ Strategy '{name}' matched for target: {target!r} in frame {frame.name}")
+                        return locator
+                except Exception as e:
+                    last_err = e
+                    continue
 
         raise LocatorNotFoundError(
-            f"All 7 locator strategies failed for target: {target!r}. Last error: {last_err}"
+            f"All 7 locator strategies failed across {len(frames)} frames for target: {target!r}. Last error: {last_err}"
         )
 
     async def _by_aria(self, page: Any, target: str, role: Optional[str], timeout: int) -> Optional[Any]:

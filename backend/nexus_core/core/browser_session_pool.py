@@ -103,9 +103,11 @@ class SessionContext:
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "data", f"browser_profile_{self.session_id}"
         )
-        if os.path.exists(user_data_dir):
+        if os.path.exists(user_data_dir) and not self.session_id.startswith("user_"):
             try:
                 shutil.rmtree(user_data_dir, ignore_errors=True)
             except Exception as e:
                 logger.error(f"Failed to remove browser profile directory {user_data_dir}: {e}")
+        elif self.session_id.startswith("user_"):
+            logger.info(f"Preserved persistent profile for session: {self.session_id}")
                 

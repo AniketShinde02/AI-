@@ -55,16 +55,19 @@ class RecoveryEngine:
                 if level == 2:
                     # Level 2: Reload DOM observation before retry
                     logger.debug(f"[Recovery] L2: Refreshing DOM before retry for '{action_name}'")
-                    await asyncio.sleep(0.5)
+                    try:
+                        await page.wait_for_load_state("domcontentloaded", timeout=2000)
+                    except Exception:
+                        await page.wait_for_timeout(500)
 
                 elif level == 3:
-                    # Level 3: Force accessibility tree re-snapshot
+                    # Level 3: Force accessibility tree re-snapshot and shadow DOM probing
                     logger.debug(f"[Recovery] L3: Forcing A11y refresh for '{action_name}'")
                     try:
-                        await page.wait_for_load_state("domcontentloaded", timeout=3000)
+                        await page.wait_for_load_state("networkidle", timeout=3000)
                     except Exception:
                         pass
-                    await asyncio.sleep(1.0)
+                    await page.wait_for_timeout(1000)
 
                 elif level == 4:
                     # Level 4: Visual verification via screenshot
@@ -76,7 +79,7 @@ class RecoveryEngine:
                                 logger.info(f"[Recovery] L4: Screenshot captured ({len(img_b64)} bytes)")
                         except Exception:
                             pass
-                    await asyncio.sleep(1.5)
+                    await page.wait_for_timeout(1500)
 
                 elif level == 5:
                     # Level 5 — terminal failure, record and return
