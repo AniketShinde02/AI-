@@ -1,4 +1,14 @@
-## [2026-06-30] — BrowserAgent V1.1 Production-Grade Rewrite
+## [2026-06-30] — BrowserAgent V1.2 Production Hardening (Preparation)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Notes
+- Commencing V1.2 Phase 1: Code Audit and implementation planning for deterministic State Machine, deep verification, iframe/shadow DOM support, and robust recovery.
+- Architecture remains frozen; focusing exclusively on reliability.
+
+
 
 ### Author
 - Antigravity AI
