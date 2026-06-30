@@ -1,4 +1,37 @@
+## [2026-06-30] — Browser Domain Architecture Refactor (DDD Template)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **`core/browser/` package**: New Domain-Driven Design package replacing the monolithic `browser_agent.py`.
+  - `models.py`: Zero-dependency shared types — `BrowserMemory`, `BrowserStateEnum`, `ActionResult`.
+  - `state_machine.py`: Deterministic state transitions with workspace broadcasts.
+  - `session/context.py`: SessionContext lifecycle and profile management.
+  - `session/launcher.py`: Playwright launch logic, DB hydration, stealth injection.
+  - `session/pool.py`: Session registry — get-or-create, close, close-all.
+  - `observation/extractor.py`: Stateless DOM snapshot, A11y tree, screenshot, text extraction.
+  - `verification/nav_verifier.py`: Navigation success verification (HTTP status, networkidle, MutationObserver).
+  - `execution/actions.py`: All discrete browser actions — open_url, click, type, submit, scroll, upload, download, tabs.
+  - `execution/agentic_loop.py`: LLM-driven Observe→Decide→Act→Verify autonomous loop.
+  - `prompts/scripts.py`: All JavaScript strings and LLM system prompts (pure data, zero logic).
+  - `resiliency/locator.py`: 7-level locator cascade with iframe/shadow DOM penetration.
+  - `resiliency/recovery.py`: Smart-wait 5-level recovery engine.
+  - `facade.py`: `BrowserAgent` — single public class orchestrating all subpackages.
+  - `__init__.py`: Minimal public API — `BrowserAgent`, `BrowserStateEnum`, `BrowserMemory`, `session_pool`.
+
+### Changed
+- **`core/browser_agent.py`**: Converted to a zero-logic backward-compatibility shim. Imports `BrowserAgent` from `core.browser.facade` and re-exports. All callers continue to work without modification.
+
+### Architecture
+- Establishes the canonical **domain template** for all future Nexus subsystems (Desktop, Memory, Planner, Vision, Security).
+- Strict dependency rule: `models.py` ← `resiliency/` ← `session/` ← `observation/` ← `verification/` ← `execution/` ← `facade.py`. No circular imports.
+- Each module: <300 LOC, single responsibility.
+- Verified: **0 Pyright errors** on the new `core/browser/` package.
+
 ## [2026-06-30] — BrowserAgent V1.2 Production Hardening (Completed)
+
 
 ### Author
 - Antigravity AI

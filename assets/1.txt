@@ -1,0 +1,22 @@
+The UI/UX design style shown in **image_481839.jpg** is primarily called a **Bento Grid** layout, mixed with **Neo-Brutalist / Cyberpunk** aesthetic elements.
+
+Here is a breakdown of the specific design trends making up this look:
+
+### 1. Bento Grid Layout
+
+The most prominent structural feature is the division of content into distinct, modular rectangles and squares with highly rounded corners. Inspired by Japanese bento boxes (and popularized heavily by Apple and Microsoft), this layout is standard for modern, data-dense dashboards because it keeps varied information organized and visually clean.
+
+### 2. Neo-Brutalist / High-Contrast Dark Mode
+
+Unlike traditional soft, muted dark modes, this style leans into stark, high-contrast choices:
+
+* **Pitch Black Backgrounds:** Using true `#000000` or deep near-black instead of soft grays.
+* **Acid / Cyberpunk Accents:** The bright, electric lime green (`#ADFF2F` / neon style) used for high-priority cards and active states is a classic staple of modern tech and SaaS interfaces looking for a futuristic, energetic feel.
+
+### 3. Key Micro-Trends Present
+
+* **Hyper-Rounded Corners (Squorcles):** The cards use large border-radii, giving them a smooth, organic feel despite the rigid grid.
+* **Minimalist Line Work:** Thin, subtle borders are used to separate modules instead of heavy drop shadows or complex gradients.
+* **Bold Typography Hierarchy:** Large, chunky numbers for data points paired with clean, geometric sans-serif text.
+
+Are you looking to replicate this specific aesthetic for a dashboard project, or do you want to explore tailwind configurations to achieve this exact neon-on-black look?

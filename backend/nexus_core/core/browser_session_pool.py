@@ -76,6 +76,7 @@ class SessionContext:
         self._context = None
         self._playwright = None
         self.memory = BrowserMemory()
+        self.state_machine: Any = None
 
     async def close(self) -> None:
         """Clean up local Playwright resources and profile directory."""
