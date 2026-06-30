@@ -341,6 +341,7 @@ Stonic-AI-Source-Code/
 **/*.db-journal
 **/*.db-wal
 **/data/browser_profile/
+**/data/browser_profile_*/
 **/data/browser_profile_audit/
 **/data/screenshots/
 **/DEBUG_GEMINI_*.log
