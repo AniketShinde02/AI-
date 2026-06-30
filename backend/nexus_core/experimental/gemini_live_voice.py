@@ -54,7 +54,7 @@ async def gemini_live_websocket(websocket: WebSocket, session_id: str = "default
             pass
 
     try:
-        async with client.aio.live.connect(model="gemini-2.5-flash-native-audio-preview-12-2025", config=config) as session: # type: ignore
+        async with client.aio.live.connect(model="gemini-3.1-flash-live-preview", config=config) as session: # type: ignore
             await log_to_client("info", "Connected to Gemini Live API")
             
             # Trigger initial greeting
@@ -83,12 +83,7 @@ async def gemini_live_websocket(websocket: WebSocket, session_id: str = "default
                             pcm_data = message["bytes"]
                             # Send to Gemini
                             await session.send(
-                                input=types.LiveClientRealtimeInput(
-                                    media_chunks=[types.Blob(
-                                        mime_type="audio/pcm;rate=16000",
-                                        data=pcm_data
-                                    )]
-                                )
+                                input={"data": pcm_data, "mime_type": "audio/pcm;rate=16000"}
                             )
                             
                 except WebSocketDisconnect:

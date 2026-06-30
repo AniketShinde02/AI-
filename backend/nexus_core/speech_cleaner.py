@@ -8,7 +8,7 @@ logger = logging.getLogger("nexus.speech_cleaner")
 class SpeechCleaner:
     def __init__(self):
         # Llama 3.1 8B is perfect for this—fast and understands Hinglish incredibly well
-        self.model = "llama-3.1-8b-instant"
+        self.model = "gpt-oss-20b"
         self.client = None
         self._initialized = False
 

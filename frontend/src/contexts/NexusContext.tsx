@@ -85,7 +85,18 @@ export function NexusProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [uiMode, setUiMode] = useState<"voice" | "chat">("voice");
-  const [selectedModel, setSelectedModel] = useState("llama-3.3-70b-versatile");
+  const [selectedModel, _setSelectedModel] = useState("gemini-2.5-flash-native-audio-dialog");
+
+  // Load initial preferences on mount
+  useEffect(() => {
+    const savedModel = localStorage.getItem("nexus_llm_model");
+    if (savedModel) _setSelectedModel(savedModel);
+  }, []);
+
+  const setSelectedModel = (model: string) => {
+    _setSelectedModel(model);
+    localStorage.setItem("nexus_llm_model", model);
+  };
   const [persona, setPersona] = useState<string>("nexus_male");
   const [perplexityMode, setPerplexityMode] = useState(true);
   const [ttsProvider, setTtsProvider] = useState("gemini");
@@ -263,9 +274,10 @@ export function NexusProvider({ children }: { children: ReactNode }) {
       voice,
       speed,
       pitch,
-      volume: voiceVolume
+      volume: voiceVolume,
+      model: selectedModel
     });
-  }, [persona, ttsProvider, language, voiceEngine, voice, speed, pitch, voiceVolume, updateSettings]);
+  }, [persona, ttsProvider, language, voiceEngine, voice, speed, pitch, voiceVolume, selectedModel, updateSettings]);
 
   React.useEffect(() => {
     setCallbacks({

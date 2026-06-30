@@ -15,12 +15,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import core.rag_oracle as rag_oracle_module
-from tools.system import execute_pc_action
-from core.execution_hooks import wrap_execution, run_desktop_tool, run_file_tool, run_memory_tool
-from tools.task_tools import create_task, create_note
-from tools.memory_tools import update_preferences, get_user_memory, delete_user_preference
-from tools.file_tools import read_file, write_file, read_directory
-from tools.third_party_tools import get_weather
+from core.planner.executor import get_executor
 
 try:
     from PIL import ImageGrab
@@ -168,59 +163,13 @@ async def execute_tool(request: dict):
             args = call.get("args", {})
             logger.info(f"🛠️ Executing tool: {name} with args: {args}")
 
-            if name == "search_web":
-                sim_res = {"success": True, "verified": True, "result": "Nexus search results dummy payload."}
-                out = await wrap_execution(name, args.get("query", ""), asyncio.sleep(0.001, result=sim_res), category="other")
-                results.append({
-                    "query": args.get("query"),
-                    "status": "simulated_success",
-                    "snippet": "Nexus search results dummy payload.",
-                    "output": out
-                })
-            elif name in ["pc_open_app", "pc_close_app", "pc_type_text", "pc_press_shortcut", "pc_take_screenshot"]:
-                out = await run_desktop_tool(name, args.get("app_name", args.get("target", "")), execute_pc_action(name, args))
+            executor = get_executor(name)
+            if executor:
+                is_desktop = name.startswith("pc_")
+                out = await executor.run(name, args, max_retries=1, visual_verification=is_desktop)
                 results.append({"action": name, "output": out})
-            elif name == "create_task":
-                out = await wrap_execution(name, args.get("title", ""), create_task(args.get("title", ""), args.get("priority", "medium"), args.get("due_date")), category="other")
-                results.append({"title": args.get("title"), "output": out})
-            elif name == "create_note":
-                out = await wrap_execution(name, args.get("title", ""), create_note(args.get("title", ""), args.get("content", "")), category="other")
-                results.append({"title": args.get("title"), "output": out})
-            elif name == "update_preferences":
-                out = await run_memory_tool(name, str(args.get("preferences", "")), update_preferences(args.get("preferences", {})))
-                results.append({"preferences": args.get("preferences"), "output": out})
-            elif name == "get_user_memory":
-                out = await run_memory_tool(name, "", get_user_memory())
-                results.append({"output": out})
-            elif name == "delete_user_preference":
-                out = await run_memory_tool(name, f"{args.get('category')}:{args.get('key')}", delete_user_preference(args.get("category", ""), args.get("key", "")))
-                results.append({"category": args.get("category"), "key": args.get("key"), "output": out})
-            elif name == "read_file":
-                out = await run_file_tool(name, args.get("file_path", ""), read_file(args.get("file_path", "")))
-                results.append({"file_path": args.get("file_path"), "output": out})
-            elif name == "write_file":
-                out = await run_file_tool(name, args.get("file_name", ""), write_file(args.get("file_name", ""), args.get("content", "")))
-                results.append({"file_name": args.get("file_name"), "output": out})
-            elif name == "read_directory":
-                out = await run_file_tool(name, args.get("directory_path", ""), read_directory(args.get("directory_path", "")))
-                results.append({"directory_path": args.get("directory_path"), "output": out})
-            elif name == "get_weather":
-                out = await wrap_execution(name, args.get("city", ""), get_weather(args.get("city", "")), category="other")
-                results.append({"city": args.get("city"), "output": out})
-            elif name == "ingest_codebase":
-                if rag_oracle_module.oracle_instance:
-                    out = await wrap_execution(name, args.get("dir_path", ""), rag_oracle_module.oracle_instance.ingest_codebase(args.get("dir_path", "")), category="other")
-                    results.append({"dir_path": args.get("dir_path"), "output": out})
-                else:
-                    results.append({"error": "RAG Oracle not initialized"})
-            elif name == "consult_oracle":
-                if rag_oracle_module.oracle_instance:
-                    out = await wrap_execution(name, args.get("query", ""), rag_oracle_module.oracle_instance.consult_oracle(args.get("query", "")), category="other")
-                    results.append({"query": args.get("query"), "output": out})
-                else:
-                    results.append({"error": "RAG Oracle not initialized"})
             else:
-                results.append({"status": "unknown_tool"})
+                results.append({"status": "unknown_tool", "tool": name})
 
         return {"status": "success", "results": results}
     except Exception as e:

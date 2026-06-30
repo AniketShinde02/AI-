@@ -17,3 +17,7 @@ pyperclip
 pygetwindow
 pywin32
 pillow
+openai
+mistralai
+google-genai>=2.9.0
+protobuf>=6.31.1

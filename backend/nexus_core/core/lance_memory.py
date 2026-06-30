@@ -2,6 +2,8 @@ import os
 import logging
 from typing import List, Dict, Any, Optional
 import httpx
+import hashlib
+import time
 
 logger = logging.getLogger("nexus.lance_memory")
 
@@ -39,16 +41,16 @@ class SemanticMemory:
         # Legacy stub for ws_main.py so it doesn't crash if called
         pass
 
-    async def _get_embedding(self, text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> Optional[List[float]]:
-        """Fetch embeddings from Gemini API directly using httpx."""
+    async def _get_embedding(self, text: str, task_type: str = "RETRIEVAL_DOCUMENT", max_retries: int = 3) -> Optional[List[float]]:
+        """Fetch embeddings from Gemini API directly using httpx with async exponential backoff."""
         if not self.gemini_api_key:
             logger.error("Missing Gemini API Key for semantic memory.")
             return None
             
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key={self.gemini_api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={self.gemini_api_key}"
         
         payload = {
-            "model": "models/gemini-embedding-2",
+            "model": "models/text-embedding-004",
             "content": {
                 "parts": [{"text": text}]
             },
@@ -56,29 +58,57 @@ class SemanticMemory:
         }
         
         async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, json=payload, timeout=10.0)
-                if response.status_code == 200:
-                    data = response.json()
-                    return data.get("embedding", {}).get("values")
-                else:
-                    logger.error(f"Embedding failed: {response.text}")
+            for attempt in range(max_retries):
+                try:
+                    response = await client.post(url, json=payload, timeout=10.0)
+                    if response.status_code == 200:
+                        data = response.json()
+                        return data.get("embedding", {}).get("values")
+                    elif response.status_code == 429 or response.status_code >= 500:
+                        wait_time = 2 ** attempt
+                        logger.warning(f"Embedding rate limited or server error ({response.status_code}). Retrying in {wait_time}s...")
+                        await asyncio.sleep(wait_time)
+                        continue
+                    else:
+                        logger.error(f"Embedding failed: {response.text}")
+                        return None
+                except (httpx.ReadTimeout, httpx.ConnectError) as e:
+                    wait_time = 2 ** attempt
+                    logger.warning(f"Embedding request network issue ({type(e).__name__}). Retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                except Exception as e:
+                    logger.error(f"Embedding request failed: {e}")
                     return None
-            except Exception as e:
-                logger.error(f"Embedding request failed: {e}")
-                return None
+            logger.error("Max retries exceeded for embedding request.")
+            return None
 
-    async def add_memory(self, text: str, metadata: Dict[str, Any]):
-        """Add a chunk of text to semantic memory."""
+    async def add_memory(self, text: str, metadata: Dict[str, Any], source: str = "system"):
+        """Add a chunk of text to semantic memory with deduplication."""
         await self._ensure_initialized()
         if not self.db:
             return False
+            
+        content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        
+        if self.memory_table is not None:
+            # Prevent duplicate memories from polluting LanceDB
+            existing = await self.memory_table.search().where(f"content_hash = '{content_hash}'").limit(1).to_list()
+            if existing:
+                logger.debug("Memory already exists in LanceDB. Skipping duplicate.")
+                return True
             
         embedding = await self._get_embedding(text)
         if not embedding:
             return False
 
-        record = [{"vector": embedding, "text": text, "metadata": str(metadata)}]
+        record = [{
+            "vector": embedding,
+            "text": text,
+            "metadata": str(metadata),
+            "content_hash": content_hash,
+            "source": source,
+            "timestamp": int(time.time())
+        }]
         
         if self.memory_table is None:
             self.memory_table = await self.db.create_table("semantic_memory", data=record)

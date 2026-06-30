@@ -41,13 +41,7 @@ from providers.tts import TTSProviderRouter, ProviderStatus
 import torch # type: ignore
 from silero_vad import load_silero_vad, VADIterator # type: ignore
 
-# Import Backend Tools for Gemini Live Bridge
-from tools.system import execute_pc_action
-from tools.task_tools import create_task, create_note
-from tools.memory_tools import update_preferences, get_user_memory, delete_user_preference
 
-from tools.file_tools import read_file, write_file, read_directory
-from tools.third_party_tools import get_weather
 from core.rag_oracle import RAGOracle
 import core.rag_oracle as rag_oracle_module
 

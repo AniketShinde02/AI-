@@ -35,3 +35,54 @@ def verify_feature_sync(feature: str, status: str, result: str, evidence: str) -
         loop.create_task(verify_feature(feature, status, result, evidence))
     except RuntimeError:
         asyncio.run(verify_feature(feature, status, result, evidence))
+
+class VerificationEngine:
+    async def verify_action(self, tool_id: str, target: str, contract: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Uses VisionParser to take a screenshot and visually verify if the tool action succeeded.
+        """
+        try:
+            from core.pc_control import pc_controller
+            import uuid
+            import os
+            import base64
+            from io import BytesIO
+            from PIL import ImageGrab
+            from core.vision_parser import vision_parser
+
+            logger.info(f"🔍 [VerificationEngine] Capturing screen to verify {tool_id}({target})")
+            
+            # 1. Grab screenshot
+            img = ImageGrab.grab(all_screens=True)
+            buffered = BytesIO()
+            img.convert('RGB').save(buffered, format="JPEG", quality=80)
+            img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            
+            # 2. Formulate verification prompt
+            prompt = (
+                f"You are the Nexus Verification Engine. I just executed the desktop action '{tool_id}' "
+                f"with target '{target}'. Look at the current screen. Did this action succeed? "
+                f"Respond with a strict JSON object: {{\"verified\": true/false, \"reason\": \"your explanation\"}}"
+            )
+            
+            # 3. Analyze
+            analysis = await vision_parser.analyze_screenshot(img_str, prompt=prompt, use_som=False)
+            
+            # 4. Parse JSON
+            import json
+            import re
+            json_match = re.search(r"\{.*\}", analysis, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group(0))
+                return {
+                    "verified": bool(data.get("verified", False)),
+                    "reason": data.get("reason", analysis)
+                }
+            else:
+                return {"verified": False, "reason": "Could not parse JSON from Vision model: " + analysis}
+                
+        except Exception as e:
+            logger.error(f"VerificationEngine failed: {e}")
+            return {"verified": False, "reason": str(e)}
+
+verification_engine = VerificationEngine()

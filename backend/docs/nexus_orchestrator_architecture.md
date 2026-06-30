@@ -101,7 +101,7 @@ To ensure that the backend loop operates transparently and developer-friendly (l
 
 ## 4. Mermaid Flowchart: Nexus Orchestrator Architecture
 
-The following Mermaid flowchart represents the comprehensive Nexus Orchestrator architecture, details the interaction between the client, core system, database, and telemetry layers, and outlines model routing responsibilities (including SambaNova and Mistral Shadow Soldiers):
+The following Mermaid flowchart represents the comprehensive Nexus Orchestrator architecture, details the interaction between the client, core system, database, and telemetry layers, and outlines model routing responsibilities (including Mistral and Mistral Shadow Soldiers):
 
 ```mermaid
 graph TD
@@ -141,11 +141,11 @@ graph TD
     %% 4. Model Responsibility Routing (Shadow Army)
     subgraph Shadow Army Model Tiers
         Monarch[Shadow Monarch: User / Jinwoo <br/> HITL Guardrail Gate]:::client
-        Marshal[Grand Marshal: Mistral Large <br/> Macro Planning / SambaNova 405B]:::llm
-        Generals[Generals: Cerebras 120B / SambaNova 405B <br/> AXTree Loops Execution]:::llm
-        Knights[Knights: SambaNova 3.3 70B / Groq 8B <br/> Sub-second Intent Classification]:::llm
+        Marshal[Grand Marshal: Mistral Large <br/> Macro Planning / Mistral 405B]:::llm
+        Generals[Generals: Cerebras 120B / Mistral 405B <br/> AXTree Loops Execution]:::llm
+        Knights[Knights: Mistral 3.3 70B / Groq 8B <br/> Sub-second Intent Classification]:::llm
         Eyes[Eyes: Gemini 1.5 Flash <br/> Vision OCR & Elements Localization]:::llm
-        Soldiers[Shadow Soldiers: SambaNova 3.2 3B / Mistral Small / Codestral <br/> Minor Tasks / Code Edits / chndi kaam]:::llm
+        Soldiers[Shadow Soldiers: Mistral 3.2 3B / Mistral Small / Codestral <br/> Minor Tasks / Code Edits / chndi kaam]:::llm
         Infantry[Infantry: PyAutoGUI, Playwright Local <br/> Primitive API calls]:::core
     end
 

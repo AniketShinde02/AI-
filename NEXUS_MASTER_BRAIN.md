@@ -105,7 +105,7 @@ To maintain uninterrupted voice operation, Nexus must gracefully navigate strict
 *   **Gemini (Vision/Live Voice)**: 15 RPM / 1,500 RPD for Flash 1.5. *Critical Bottleneck*: 15 RPM is easily exhausted in active voice conversations.
 *   **DeepSeek (Top Reasoning)**: Dynamic rate limiting based on load (typically 10-30 RPM). Returns 429 during high traffic.
 *   **Mistral API**: Strict 1 RPS (Requests Per Second) global limit on Free Tier.
-*   **SambaNova**: 240 RPM / 48,000 RPD on Developer Tier (Llama 3.3 70B). 200,000 TPD on Free Tier.
+*   **Mistral**: 240 RPM / 48,000 RPD on Developer Tier (Llama 3.3 70B). 200,000 TPD on Free Tier.
 *   **OpenRouter**: 20 RPM / 50 RPD on Standard Free Tier. Scaled to 1,000 RPD with lifetime credits >$10.
 
 ### Voice & Audio Services

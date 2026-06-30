@@ -14,7 +14,7 @@ async def emit_trace(websocket, event_type: str, text: str, icon: str = "⚡", m
         return
 
     from core.output_processor import output_processor
-    clean_text = output_processor.filter_reasoning(text)
+    clean_text, _ = output_processor.filter_reasoning(text)
     if not clean_text:
         return
 

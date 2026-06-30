@@ -18,8 +18,8 @@ CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
 # Grand Marshal / Planning (Mistral — High reasoning, precise tool calls)
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
-# Grand Marshal / Shadow Soldiers (SambaNova — 405B planning + 3B cheap tasks)
-SAMBANOVA_API_KEY = os.getenv("SAMBANOVA_API_KEY")
+# Grand Marshal / Shadow Soldiers
+
 
 # Eyes (Gemini — Vision, streaming audio, multimodal)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -41,6 +41,11 @@ PIPER_FEMALE_MODEL = os.getenv("PIPER_FEMALE_MODEL", f"{BASE_PIPER}/hi_IN-priyam
 # ElevenLabs / Cartesia TTS
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 CARTESIA_API_KEY   = os.getenv("CARTESIA_API_KEY")
+
+# =============================================================================
+# Feature Flags
+# =============================================================================
+ENABLE_DAG_ORCHESTRATOR: bool = False
 
 # =============================================================================
 # LLM Defaults (used as hardcoded fallbacks only)

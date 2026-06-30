@@ -24,10 +24,9 @@ from core.gemini_live_manager import GeminiLiveSessionManager
 from core.database import db
 from core.output_processor import output_processor
 from core.action_router import action_router
-from tools.system import execute_pc_action
+
 from core.capability_registry_def import CAPABILITY_MAP, CONFIRMATION_LABELS
-from core.execution_hooks import wrap_execution, run_desktop_tool, run_browser_tool, run_automation_tool, broadcast_workspace_state
-from tools.task_tools import create_task, create_note
+from core.workspace.broadcast import broadcast_workspace_state
 from tools.memory_tools import update_preferences, get_user_memory, delete_user_preference
 from tools.file_tools import read_file, write_file, read_directory
 from tools.third_party_tools import get_weather
@@ -50,8 +49,9 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
     This class owns: __init__, lifecycle, run_pipeline, run_llm_and_tts, memory extraction.
     """
 
-    def __init__(self, websocket: WebSocket, engine: str = "nexus", session_id: str = ""):
+    def __init__(self, websocket: WebSocket, engine: str = "nexus", session_id: str = "", model: str = "gemini-2.5-flash-native-audio-dialog"):
         self.session_id = session_id
+        self.model = "gemini-2.0-flash" if model == "models/gemini-2.0-flash-exp" else model
         self.websocket = websocket
         self.engine = engine
         self.audio_buffer = bytearray()
@@ -131,7 +131,8 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             self.gemini_manager = GeminiLiveSessionManager(
                 websocket=self.websocket,
                 system_instruction=get_gemini_live_system_instruction(),
-                session_id=self.session_id
+                session_id=self.session_id,
+                model=self.model
             )
 
     # ------------------------------------------------------------------
@@ -145,31 +146,38 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             self.gemini_manager.system_instruction = get_gemini_live_system_instruction(identity)
 
             async def on_agent_message(text):
-                clean = output_processor.filter_reasoning(text)
+                clean, trace_val = output_processor.filter_reasoning(text)
+                if trace_val:
+                    await self.safe_send_json({"type": "trace", "text": trace_val})
                 if clean:
                     # 1. Send conversational text to UI immediately (zero delay)
                     await self.safe_send_json({"type": "agent_message", "text": clean})
                     self.conversation_history.append({"role": "assistant", "content": clean})
                     asyncio.create_task(db.save_message(self.session_id, "assistant", clean))
 
-                    # 2. Check for action intents in the background (non-blocking)
-                    async def process_intent():
-                        action_intent = await action_router.route_intent(clean)
-                        if action_intent:
-                            logger.info(f"🎯 [ACTION ROUTER] Intercepted Gemini Live response intent: '{clean[:50]}'")
-                            if self.gemini_manager:
-                                await self.gemini_manager.interrupt()
-                            self.current_turn_id += 1
-                            await self.execute_action(action_intent, turn_id=self.current_turn_id)
-
-                    asyncio.create_task(process_intent())
+            async def on_tool_call(func_call):
+                try:
+                    action = getattr(func_call, "name", "unknown")
+                    # Convert protobuf map/args to dict
+                    args_obj = getattr(func_call, "args", {})
+                    params = dict(args_obj) if hasattr(args_obj, "items") else {}
+                    action_intent = {"tool": action, "target": params.get("target", "")}
+                    
+                    logger.info(f"🎯 [GEMINI TOOL CALL] Intercepted native function call: {action}")
+                    await self.safe_send_json({"type": "trace", "text": f"🎯 [Tool Call] {action}"})
+                    if self.gemini_manager:
+                        await self.gemini_manager.interrupt()
+                    self.current_turn_id += 1
+                    await self.execute_action(action_intent, turn_id=self.current_turn_id)
+                except Exception as e:
+                    logger.error(f"❌ Failed to parse Gemini tool call: {e}")
 
             async def on_disconnect():
                 logger.warning("🔄 Falling back to Nexus STT (Groq) engine")
                 self.engine = "nexus"
                 await self.safe_send_json({"type": "engine_mode", "mode": "groq"})
 
-            await self.gemini_manager.connect(on_agent_message, on_disconnect)
+            await self.gemini_manager.connect(on_agent_message, on_disconnect, on_tool_call)
 
     async def execute_action(self, action_intent: dict, turn_id: int):
         from core.capabilities import registry as cap_registry
@@ -192,46 +200,51 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             return
         else:
             cap_def = CAPABILITY_MAP.get(action)
-            if action.startswith("pc_"):
-                tool_params = {"session_id": self.session_id}
-                if cap_def and cap_def.target_param:
-                    tool_params[cap_def.target_param] = params.get("target", "")
-                res = await run_desktop_tool(
-                    action,
-                    params.get("target", ""),
-                    execute_pc_action(action, tool_params),
-                )
-            elif action.startswith("browser_"):
-                from tools.browser_tools import execute_browser_action
-                browser_params = {
-                    "url": params.get("target", ""),
-                    "query": params.get("target", ""),
-                    "target": params.get("target", ""),
-                    "selector": params.get("target", ""),
-                    "text": params.get("target", ""),
-                    "action": params.get("target", ""),
-                    # Phase 8: agentic task needs 'goal' — map from target or explicit goal
-                    "goal": params.get("goal", params.get("target", "")),
-                    "session_id": self.session_id
-                }
-                res = await run_browser_tool(
-                    action,
-                    params.get("target", ""),
-                    execute_browser_action(action, browser_params),
-                )
+            from core.planner.executor import get_executor
+
+            if action == "browser_agentic_task":
+                import config
+                target_goal = params.get("goal", params.get("target", ""))
+                if getattr(config, "ENABLE_DAG_ORCHESTRATOR", False):
+                    from core.planner.compiler import planner_compiler
+                    from core.planner.executor import ExecutionEngine
+                    graph = await planner_compiler.compile_goal(target_goal, self.session_id)
+                    if graph:
+                        engine = ExecutionEngine(self.session_id)
+                        res = await engine.execute_graph(graph)
+                        res["result"] = "DAG Orchestrator finished execution."
+                        res["verified"] = True
+                    else:
+                        res = {"success": False, "error": "DAG Compilation failed", "verified": False}
+                else:
+                    from core.agent_swarm import swarm_manager
+                    swarm_res = await swarm_manager.execute_swarm_task(target_goal, self.session_id)
+                    res = {
+                        "success": swarm_res.get("success", False),
+                        "result": swarm_res.get("result", "Done."),
+                        "verified": True
+                    }
             elif action == "run_task_card":
                 from core.task_cards import task_card_engine
                 runtime_inputs = action_intent.get("runtime_inputs") or {}
                 card_id = params.get("target", "")
-                res = await run_automation_tool(
-                    action,
-                    card_id,
-                    task_card_engine.execute_card(
-                        card_id=card_id,
-                        runtime_inputs=runtime_inputs,
-                        session_id=self.session_id
-                    ),
+                res = await task_card_engine.execute_card(
+                    card_id=card_id,
+                    runtime_inputs=runtime_inputs,
+                    session_id=self.session_id
                 )
+            else:
+                # All pc_* and browser_* (non-agentic) go through Domain Executors
+                tool_params = dict(params)
+                tool_params["session_id"] = self.session_id
+                if cap_def and cap_def.target_param:
+                    tool_params[cap_def.target_param] = params.get("target", "")
+                executor = get_executor(action)
+                if executor:
+                    needs_vision = action in {"pc_click", "pc_type_text", "pc_open_app", "pc_press_shortcut"}
+                    res = await executor.run(action, tool_params, max_retries=1, visual_verification=needs_vision)
+                else:
+                    res = {"success": False, "error": f"No executor registered for: {action}", "verified": False}
 
             target_name = params.get("target", "").title()
             if res.get("success"):
@@ -338,7 +351,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             result = await model_router.execute_tool_call(
                 user_intent=extraction_input,
                 available_tools=MEMORY_TOOLS,
-                model="llama-3.1-8b-instant",
+                model="gpt-oss-20b",
             )
             if result.get("tool_name") == "update_preferences":
                 args = result.get("arguments", {})
@@ -409,6 +422,9 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 raise RuntimeError("STT provider not initialized — startup lifecycle may have failed")
 
             try:
+                from core.provider_governor import governor
+                await governor.wait_if_needed("groq", estimated_tokens=0)  # Audio, negligible text tokens
+
                 transcription = await gs.stt_provider.client.audio.transcriptions.create(
                     file=("audio.wav", wav_data),
                     model="whisper-large-v3",
@@ -419,6 +435,9 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 logger.warning(f"⚠️ [STT] Groq failed: {e}. Falling back to Gemini.")
                 from google import genai
                 from google.genai import types
+                from core.provider_governor import governor
+                await governor.wait_if_needed("gemini", estimated_tokens=0)
+                
                 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
                 contents_list: Any = [
                     types.Part.from_bytes(data=wav_data, mime_type="audio/wav"),
@@ -549,30 +568,32 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             from core.trace_emitter import emit_trace
             await emit_trace(self.websocket, "user_command", f"Command: {transcript}", "🗣️")
 
-            from tools.system import get_dynamic_system_tools
-            from tools.file_tools import FILE_TOOLS
-            from tools.task_tools import TASK_TOOLS
-            from tools.memory_tools import MEMORY_TOOLS
-            from tools.third_party_tools import THIRD_PARTY_TOOLS
-            from tools.scrapper_tools import SCRAPPER_TOOLS
-            from tools.browser_tools import BROWSER_TOOLS
+            from core.capability_registry_def import CAPABILITY_DEFINITIONS
             from core.capabilities import registry as cap_registry
             from core.registry import tool_registry
             from core.model_router import model_router, TaskClass
 
-            dynamic_system_tools = await get_dynamic_system_tools()
-            ALL_TOOLS = (
-                dynamic_system_tools + FILE_TOOLS + TASK_TOOLS
-                + MEMORY_TOOLS + THIRD_PARTY_TOOLS + SCRAPPER_TOOLS + BROWSER_TOOLS
-            )
+            ALL_TOOLS = [cap.groq_schema for cap in CAPABILITY_DEFINITIONS]
 
             await emit_trace(self.websocket, "model_selected", f"Routing via Shadow Army tier system", "🎖️")
 
             # --- FORCED TOOL ROUTING (action_router fast-path) ---
+            from core.workspace.broadcast import broadcast_workspace_state
+            # QUEUED → request received
+            await broadcast_workspace_state(status="queued", current_task=transcript[:80])
+            # PLANNING → routing intent
+            await broadcast_workspace_state(status="planning", current_task=transcript[:80])
             action_intent = await action_router.route_intent(transcript)
 
             if action_intent:
                 logger.info(f"🎯 [ACTION ROUTER] Intercepted intent: '{transcript[:50]}'")
+                # EXECUTING → tool selected and starting
+                await broadcast_workspace_state(
+                    active_capability=action_intent.get("tool"),
+                    status="executing",
+                    current_task=transcript[:80],
+                    tool_target=action_intent.get("target","")
+                )
                 await self.execute_action(action_intent, turn_id=turn_id)
                 return
 
@@ -613,28 +634,19 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                         await cap_registry.log_execution(action, params, "started", perm)
                         await emit_trace(self.websocket, "execution_started", f"Executing: {action}", "⏳")
 
-                        if action.startswith("pc_"):
-                            params["session_id"] = self.session_id
-                            contract_result = await run_desktop_tool(
-                                action,
-                                params.get("app_name", params.get("target", "")),
-                                execute_pc_action(action, params),
-                            )
-                        elif action.startswith("browser_"):
-                            params["session_id"] = self.session_id
-                            from tools.browser_tools import execute_browser_action
-                            contract_result = await run_browser_tool(
-                                action,
-                                params.get("url", params.get("query", params.get("target", ""))),
-                                execute_browser_action(action, params),
+                        params["session_id"] = self.session_id
+                        from core.planner.executor import get_executor
+                        executor = get_executor(action)
+                        if executor:
+                            is_desktop = action.startswith("pc_")
+                            contract_result = await executor.run(
+                                capability=action,
+                                params=params,
+                                max_retries=1,
+                                visual_verification=is_desktop
                             )
                         else:
-                            contract_result = await wrap_execution(
-                                action,
-                                str(list(params.values())[:1]),
-                                tool_registry.execute(action, params, ["admin"]),
-                                category="other",
-                            )
+                            contract_result = {"success": False, "error": f"Unknown capability: {action}", "verified": False}
 
                         status = "success" if contract_result.get("success") else "failed"
                         await cap_registry.log_execution(action, params, status, perm)
@@ -677,7 +689,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                         )
                 config = types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.7)
                 stream = await async_client.aio.models.generate_content_stream(
-                    model="gemini-2.5-flash",
+                    model="gemini-2.0-flash",
                     contents=gemini_messages,
                     config=config
                 )
@@ -687,9 +699,26 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             try:
                 # Knights tier: Groq streaming for low-latency real-time voice
                 if gs.llm_provider is not None:
+                    mapped_model = self.model
+                    if "llama" in mapped_model.lower():
+                        mapped_model = "llama-3.3-70b-versatile"
+                    elif "gpt-oss-20b" in mapped_model.lower():
+                        mapped_model = "llama-3.1-8b-instant"
+                    elif "gpt-oss-120b" in mapped_model.lower():
+                        mapped_model = "llama-3.3-70b-versatile"
+                    elif "mixtral" in mapped_model.lower():
+                        mapped_model = "mixtral-8x7b-32768"
+                    elif "gemma" in mapped_model.lower():
+                        mapped_model = "gemma2-9b-it"
+                    elif "pixtral" in mapped_model.lower() or "mistral" in mapped_model.lower():
+                        mapped_model = "mixtral-8x7b-32768" # Groq doesn't support pixtral/mistral-large, fallback to mixtral
+                    
+                    if "gemini" in mapped_model.lower():
+                        raise RuntimeError("Gemini model selected, skipping Groq")
+
                     groq_stream = await gs.llm_provider.client.chat.completions.create(  # type: ignore
                         messages=messages,  # type: ignore
-                        model=gs.llm_provider.model,
+                        model=mapped_model,
                         temperature=0.7,
                         stream=True
                     )
@@ -722,7 +751,10 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
 
                     if is_boundary or is_long:
                         text_to_queue = current_sentence.strip()
-                        text_to_queue = output_processor.filter_reasoning(text_to_queue) or ""
+                        clean_text, trace_val = output_processor.filter_reasoning(text_to_queue)
+                        text_to_queue = clean_text or ""
+                        if trace_val:
+                            await self.safe_send_json({"type": "trace", "text": trace_val})
                         if text_to_queue and re.search(r'[a-zA-Z\u0900-\u097f]', text_to_queue):
                             await self.safe_send_json({
                                 "type": "agent_partial", "text": text_to_queue, "turn_id": turn_id
@@ -733,7 +765,10 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
 
             # Final flush
             if current_sentence.strip():
-                text_to_queue = output_processor.filter_reasoning(current_sentence.strip()) or ""
+                clean_text, trace_val = output_processor.filter_reasoning(current_sentence.strip())
+                text_to_queue = clean_text or ""
+                if trace_val:
+                    await self.safe_send_json({"type": "trace", "text": trace_val})
                 if text_to_queue and re.search(r'[a-zA-Z\u0900-\u097f]', text_to_queue):
                     await self.safe_send_json({
                         "type": "agent_partial", "text": text_to_queue, "turn_id": turn_id
@@ -745,7 +780,10 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             await self.tts_queue.put({"text": "", "turn_id": turn_id, "is_sentinel": True})
 
             self.llm_latency = time.perf_counter() - llm_start_time
-            full_ai_text = output_processor.filter_reasoning(full_ai_text) or ""
+            clean_full, trace_full = output_processor.filter_reasoning(full_ai_text)
+            full_ai_text = clean_full or ""
+            if trace_full:
+                await self.safe_send_json({"type": "trace", "text": trace_full})
             logger.info(f"⚡ [LLM] Turn {turn_id} completed in {self.llm_latency:.2f}s")
             self.conversation_history.append({"role": "assistant", "content": full_ai_text})
             asyncio.create_task(db.save_message(self.session_id, "assistant", full_ai_text.strip()))
@@ -756,6 +794,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
 
         except Exception as e:
             logger.error(f"❌ LLM Pipeline Error: {e}")
+            await self.safe_send_json({"type": "agent_message", "text": f"Error: LLM pipeline failed - {str(e)}", "is_final": True})
             await self.tts_queue.put({"text": "", "turn_id": turn_id, "is_sentinel": True})
         finally:
             self.llm_is_streaming = False

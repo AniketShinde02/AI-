@@ -19,7 +19,7 @@ import {
 
 const MODELS = [
   { id: "llama-3.3-70b-versatile",  label: "Llama 3.3 70B",  badge: "Fast"     },
-  { id: "llama-3.1-8b-instant",     label: "Llama 3.1 8B",   badge: "Instant"  },
+  { id: "gpt-oss-20b",     label: "GPT OSS 20B",   badge: "Instant"  },
   { id: "mixtral-8x7b-32768",       label: "Mixtral 8×7B",   badge: "Long ctx" },
   { id: "gemma2-9b-it",             label: "Gemma 2 9B",     badge: "Light"    },
   { id: "mistral-large-latest",     label: "Mistral Large",  badge: "Mistral"  },
@@ -155,7 +155,7 @@ export function InputArea() {
               </button>
 
               {modelOpen && (
-                <div className="absolute bottom-full mb-3 left-0 w-56 border border-[#6137FF]/40 bg-[#06060c] shadow-[0_0_30px_rgba(0,0,0,0.9)] overflow-hidden z-50 clip-cut">
+                <div className="absolute bottom-full mb-3 left-0 w-max min-w-[14rem] border border-[#6137FF]/40 bg-[#06060c] shadow-[0_0_30px_rgba(0,0,0,0.9)] overflow-hidden z-50 clip-cut">
                   <div className="px-4 py-3 border-b border-white/5 bg-black/50">
                     <span className="text-[9px] font-quantico font-bold text-[#6137FF] uppercase tracking-[0.3em]">
                       Neural_Model_Select

@@ -233,7 +233,14 @@ class SessionTTSMixin:
     # -----------------------------------------------------------------
 
     async def metrics_worker(self):
-        """Streams system metrics to the client every 1.5 seconds."""
+        """Streams system metrics to the client every 1.5 seconds.
+
+        ⚠️  DO NOT remove the inner try/except around safe_send_json.
+        During uvicorn hot-reload, this loop can outlive the WebSocket connection.
+        A bare send to a dead socket raises RuntimeError (not CancelledError),
+        which previously caused 'Metrics Worker crashed: ' errors in the logs.
+        The fix: catch any send-level exception and break cleanly.
+        """
         logger.debug("📊 Metrics Worker started.")
         try:
             while self.is_connected:  # type: ignore[attr-defined]
@@ -256,7 +263,11 @@ class SessionTTSMixin:
                 }
 
                 if self.is_connected:  # type: ignore[attr-defined]
-                    await self.safe_send_json({"type": "system_metrics", "data": metrics})
+                    try:
+                        await self.safe_send_json({"type": "system_metrics", "data": metrics})
+                    except Exception:
+                        # WS is dead (hot-reload, client disconnect, etc.) — exit quietly.
+                        break
 
         except asyncio.CancelledError:
             pass

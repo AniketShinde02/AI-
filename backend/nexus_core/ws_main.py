@@ -37,4 +37,4 @@ app.include_router(ws_router)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001, ws="wsproto", log_level="info", ws_ping_interval=20.0, ws_ping_timeout=20.0)
+    uvicorn.run(app, host="0.0.0.0", port=8001, ws="wsproto", loop="asyncio", log_level="info", ws_ping_interval=20.0, ws_ping_timeout=20.0)

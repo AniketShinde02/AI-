@@ -219,8 +219,9 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
     
     // Choose endpoint based on voice engine preference
     let engine = typeof window !== 'undefined' ? localStorage.getItem('nexus_voice_engine') : 'standard';
+    let llmModel = typeof window !== 'undefined' ? localStorage.getItem('nexus_llm_model') || 'gemini-2.0-flash' : 'gemini-2.0-flash';
     const endpoint = engine === 'gemini_live' ? 'gemini-live' : 'nexus';
-    const wsUrl = `ws://localhost:8001/ws/${endpoint}?session_id=${sessionId}`;
+    const wsUrl = `ws://localhost:8001/ws/${endpoint}?session_id=${sessionId}&model=${llmModel}`;
     
     logger.info(`[WS] ${connectionStateRef.current === "reconnecting" ? "Reconnecting" : "Connecting"} to: ${wsUrl}`);
     if (socketRef.current) {

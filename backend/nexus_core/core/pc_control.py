@@ -22,9 +22,15 @@ def _get_dpi_and_resolution() -> Tuple[int, int, float]:
     
     try:
         user32 = ctypes.windll.user32
-        w = user32.GetSystemMetrics(0)
-        h = user32.GetSystemMetrics(1)
+        # SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79
+        w = user32.GetSystemMetrics(78)
+        h = user32.GetSystemMetrics(79)
         
+        # Fallback if virtual screen fails
+        if w == 0 or h == 0:
+            w = user32.GetSystemMetrics(0) # SM_CXSCREEN
+            h = user32.GetSystemMetrics(1) # SM_CYSCREEN
+            
         hdc = user32.GetDC(0)
         gdc = ctypes.windll.gdi32.GetDeviceCaps
         logical_dpi = 96
@@ -63,8 +69,10 @@ pyautogui.PAUSE = 0.5 # Add half-second delay between actions
 def _create_contract(success: bool, tool: str, target: str, verification: str, execution_time: str) -> Dict[str, Any]:
     return {
         "success": success,
+        "verified": success,          # verified = same as success for all PC tools
         "tool": tool,
         "target": target,
+        "result": verification,       # execution_hooks expects 'result' key
         "verification": verification,
         "execution_time": execution_time
     }
@@ -277,6 +285,20 @@ class PCControl:
         except Exception as e:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_maximize_app", app_name, str(e), t)
+
+    async def file_explorer(self, target_path: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        logger.info(f"PC Control: Opening File Explorer at {target_path}")
+        start_time = time.perf_counter()
+        try:
+            target = target_path.strip()
+            if not target:
+                target = "shell:MyComputerFolder" # default
+            subprocess.Popen(f'explorer "{target}"')
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(True, "pc_file_explorer", target, "File Explorer opened", t)
+        except Exception as e:
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(False, "pc_file_explorer", target_path, str(e), t)
 
     # --- COORDINATE TRANSLATION ---
     def scale_coords(self, x: int, y: int) -> Tuple[int, int]:
@@ -557,19 +579,69 @@ class PCControl:
             save_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "screenshots")
             os.makedirs(save_path, exist_ok=True)
             import uuid
+            import base64
+            from io import BytesIO
+            
             filename = f"nexus_capture_{uuid.uuid4().hex[:8]}.png"
             full_path = os.path.join(save_path, filename)
             
-            img = ImageGrab.grab()
+            img = ImageGrab.grab(all_screens=True)
             img.save(full_path)
+            
+            buffered = BytesIO()
+            img.convert('RGB').save(buffered, format="JPEG", quality=85)
+            img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            
+            # Send to Vision pipeline
+            try:
+                from core.vision_parser import vision_parser
+                analysis = await vision_parser.analyze_screenshot(
+                    img_str, 
+                    prompt="Describe the screen concisely. What applications are open? What is currently visible?",
+                    use_som=False
+                )
+            except Exception as e:
+                analysis = f"Vision failed: {e}"
             
             t = f"{time.perf_counter() - start_time:.2f}s"
             # Verify file exists
             if os.path.exists(full_path):
-                return _create_contract(True, "pc_take_screenshot", "Screen", f"File written: {filename}", t)
+                return _create_contract(True, "pc_take_screenshot", "Screen", f"Saved: {filename} | Vision: {analysis}", t)
             return _create_contract(True, "pc_take_screenshot", "Screen", "File missing", t)
         except Exception as e:
             t = f"{time.perf_counter() - start_time:.2f}s"
             return _create_contract(False, "pc_take_screenshot", "Screen", str(e), t)
+
+    async def analyze_screen(self, query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        start_time = time.perf_counter()
+        try:
+            save_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "screenshots")
+            os.makedirs(save_path, exist_ok=True)
+            import uuid
+            import base64
+            from io import BytesIO
+            
+            filename = f"nexus_capture_{uuid.uuid4().hex[:8]}.png"
+            full_path = os.path.join(save_path, filename)
+            
+            img = ImageGrab.grab(all_screens=True)
+            img.save(full_path)
+            
+            buffered = BytesIO()
+            img.convert('RGB').save(buffered, format="JPEG", quality=85)
+            img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            
+            # Send to Vision pipeline with dynamic query
+            try:
+                from core.vision_parser import vision_parser
+                analysis = await vision_parser.analyze_screenshot(img_str, prompt=query, use_som=False)
+            except Exception as e:
+                analysis = f"Vision failed: {e}"
+            
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(True, "vision_analyze_screen", query, analysis, t)
+        except Exception as e:
+            t = f"{time.perf_counter() - start_time:.2f}s"
+            return _create_contract(False, "vision_analyze_screen", query, str(e), t)
 
 pc_controller = PCControl()

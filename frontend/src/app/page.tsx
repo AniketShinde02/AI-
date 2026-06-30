@@ -51,7 +51,7 @@ export default function Home() {
     isSending, isChecking,
     voiceState, uiMode, setUiMode,
     pendingPermission, authorizeAdminPermission,
-    activeAgentTier
+    activeAgentTier, workspaceState
   } = useNexus();
   const [activeTab, setActiveTab] = useState<'chat' | 'trace' | 'tasks' | 'memory'>('chat');
   const [visionSource, setVisionSource] = useState<VisionSource>("off");
@@ -170,8 +170,6 @@ export default function Home() {
           <SystemTelemetry />
         </div>
 
-        {/* Agent Workspace Panel */}
-        <AgentWorkspace />
       </aside>
 
       {/* CENTER COLUMN */}
@@ -239,69 +237,78 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Thinking Area */}
-          <div className="col-span-7 p-6 flex flex-col justify-center relative overflow-hidden bg-[#06060c] border border-white/5 hover:border-[#6137FF]/30 transition-colors shadow-lg clip-cut z-0">
+          {/* Playwright Sandbox Area */}
+          <div className="col-span-7 p-6 flex flex-col min-h-[300px] relative overflow-hidden bg-[#06060c] border border-white/5 hover:border-[#6137FF]/30 transition-colors shadow-lg clip-cut z-0">
             {/* Deep shadow accent */}
-            <div className="absolute bottom-0 right-0 w-64 h-64 bg-[radial-gradient(circle_at_bottom_right,rgba(97,55,255,0.1)_0%,transparent_70%)] pointer-events-none"></div>
+            <div className="absolute bottom-0 right-0 w-64 h-64 bg-[radial-gradient(circle_at_bottom_right,rgba(97,55,255,0.1)_0%,transparent_70%)] pointer-events-none z-0"></div>
             
-            <div className="flex items-center gap-6 mb-6 relative z-10">
-              <div className="w-16 h-16 bg-black border border-[#6137FF]/40 flex items-center justify-center relative clip-cut shadow-[inset_0_0_20px_rgba(97,55,255,0.2)]">
-                <Brain size={24} className="text-[#00FFFF]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="text-xl font-quantico font-bold tracking-[0.2em] text-white uppercase drop-shadow-md">AI Assistant</h3>
-                </div>
-                <NexusStatus state={voiceState} />
-              </div>
+            <div className="flex items-center justify-between mb-4 shrink-0 relative z-10">
+              <span className="text-[10px] font-quantico font-bold text-zinc-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                <Globe size={14} className="text-[#00FFFF]" /> Playwright Sandbox Frame
+              </span>
+              {workspaceState?.browser_screenshot && (
+                <span className="text-[9px] font-mono font-bold text-emerald-400 flex items-center gap-1.5 animate-pulse bg-emerald-400/10 px-2 py-0.5 border border-emerald-400/30 clip-cut-sm">
+                  <div className="w-1.5 h-1.5 bg-emerald-400 shadow-[0_0_8px_#10b981] rounded-full"></div> LIVE
+                </span>
+              )}
             </div>
 
-            <div className="space-y-6 relative z-10">
-              <div className="flex items-start gap-4 p-4 bg-black/40 border border-white/5 clip-cut-sm">
-                <div className="mt-1.5 w-2 h-2 bg-[#00FFFF] shadow-[0_0_10px_#00FFFF] shrink-0 transform rotate-45"></div>
-                <p className="text-[14px] font-sans text-zinc-300 font-medium tracking-wide leading-relaxed">"{greeting}, Aniket. Initializing neural link for optimal assistance."</p>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[9px] font-quantico font-bold text-[#6137FF] uppercase tracking-[0.3em]">
-                    <span>Neural Processing</span>
-                    <span className="text-[#00FFFF]">{isListening ? '98.5%' : '14.2%'}</span>
-                  </div>
-                  <div className="h-1 w-full bg-black border border-white/10 overflow-hidden relative">
-                    <div className={`absolute top-0 left-0 h-full bg-[#00FFFF] shadow-[0_0_10px_#00FFFF] transition-all duration-700 ${isListening ? 'w-full' : 'w-[14%]'}`}></div>
-                  </div>
+            {/* Frame Container */}
+            <div className="flex-1 bg-black border border-white/10 relative overflow-hidden flex items-center justify-center min-h-0 z-10 clip-cut-sm">
+              {workspaceState?.browser_screenshot ? (
+                <div className="w-full h-full relative group/frame bg-zinc-900">
+                  <img 
+                    src={`data:image/jpeg;base64,${workspaceState.browser_screenshot}`} 
+                    alt="Browser Frame" 
+                    className="w-full h-full object-contain"
+                  />
+                  {/* HUD Scanlines */}
+                  <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none opacity-40"></div>
+                  {/* Glowing Corner Accents */}
+                  <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-[#00FFFF]/50 pointer-events-none"></div>
+                  <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-[#00FFFF]/50 pointer-events-none"></div>
                 </div>
-                <div className="h-1 w-[65%] bg-black border border-white/10 overflow-hidden relative">
-                  <div className={`absolute top-0 left-0 h-full bg-[#6137FF] shadow-[0_0_10px_#6137FF] transition-all duration-1000 delay-100 ${isListening ? 'w-[90%]' : 'w-[8%]'}`}></div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-3 text-zinc-600 w-full h-full bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(255,255,255,0.02)_10px,rgba(255,255,255,0.02)_20px)]">
+                  <Globe size={32} className="opacity-20 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" />
+                  <span className="text-[10px] font-quantico font-bold text-zinc-500 uppercase tracking-[0.3em] drop-shadow-md">Browser Session Inactive</span>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Autonomous Shell */}
-        <div className="flex-1 flex flex-col overflow-hidden relative bg-[#06060c] border border-white/10 shadow-2xl clip-cut">
-          <div className="p-3 border-b border-white/10 flex items-center justify-between bg-black/80">
-            <div className="flex items-center gap-4">
-              <span className="text-[10px] font-quantico font-bold uppercase tracking-[0.3em] text-zinc-400">Autonomous Shell</span>
-              <div className="flex gap-2">
-                <div className="px-3 py-1 bg-black text-[#00FFFF] text-[9px] font-bold border border-[#00FFFF]/30 uppercase tracking-widest clip-cut-sm shadow-[inset_0_0_10px_rgba(0,255,255,0.1)]">Instance_042</div>
-                <div className="px-3 py-1 bg-black text-[#6137FF] text-[9px] font-bold border border-[#6137FF]/30 uppercase tracking-widest clip-cut-sm shadow-[inset_0_0_10px_rgba(97,55,255,0.1)]">Active</div>
+        {/* Bottom Split: Autonomous Shell & Agent Workspace */}
+        <div className="flex-1 flex flex-row gap-4 min-h-0 shrink-0">
+          
+          {/* Autonomous Shell (Left Side) */}
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative bg-[#06060c] border border-white/10 shadow-2xl clip-cut">
+            <div className="p-3 border-b border-white/10 flex items-center justify-between bg-black/80 shrink-0">
+              <div className="flex items-center gap-4">
+                <span className="text-[10px] font-quantico font-bold uppercase tracking-[0.3em] text-zinc-400">Autonomous Shell</span>
+                <div className="flex gap-2">
+                  <div className="px-3 py-1 bg-black text-[#00FFFF] text-[9px] font-bold border border-[#00FFFF]/30 uppercase tracking-widest clip-cut-sm shadow-[inset_0_0_10px_rgba(0,255,255,0.1)]">Instance_042</div>
+                  <div className="px-3 py-1 bg-black text-[#6137FF] text-[9px] font-bold border border-[#6137FF]/30 uppercase tracking-widest clip-cut-sm shadow-[inset_0_0_10px_rgba(97,55,255,0.1)]">Active</div>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <RefreshCw size={14} className="text-[#6137FF] hover:text-[#00FFFF] cursor-pointer transition-colors" />
+                <ExternalLink size={14} className="text-zinc-600 hover:text-white cursor-pointer transition-colors" />
               </div>
             </div>
-            <div className="flex gap-4">
-              <RefreshCw size={14} className="text-[#6137FF] hover:text-[#00FFFF] cursor-pointer transition-colors" />
-              <ExternalLink size={14} className="text-zinc-600 hover:text-white cursor-pointer transition-colors" />
+
+            <div className="flex-1 flex flex-col overflow-hidden bg-[#06060c]/95 relative">
+              {/* Subtle grid background for terminal */}
+              <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none"></div>
+              <SystemLogs variant="shell" />
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col overflow-hidden bg-[#06060c]/95 relative">
-            {/* Subtle grid background for terminal */}
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none"></div>
-            <SystemLogs variant="shell" />
+          {/* Bottom Command Center (Right Side) */}
+          <div className="flex-1 flex flex-col min-h-0 shrink-0">
+            <AgentWorkspace />
           </div>
-
+          
         </div>
       </main>
 

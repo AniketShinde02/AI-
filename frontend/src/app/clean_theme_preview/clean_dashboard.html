@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI Workspace Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;family=Public+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface-variant": "#45474c",
+                        "on-background": "#1b1b1d",
+                        "error-container": "#ffdad6",
+                        "on-secondary-container": "#61646d",
+                        "tertiary-fixed": "#f8dfba",
+                        "outline": "#75777d",
+                        "on-tertiary-fixed": "#261903",
+                        "on-secondary": "#ffffff",
+                        "secondary-container": "#e0e2ec",
+                        "surface-tint": "#555f71",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#d9e3f9",
+                        "primary": "#182232",
+                        "inverse-on-surface": "#f3f0f1",
+                        "surface-bright": "#fbf8fa",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#eae7e9",
+                        "on-primary-fixed": "#121c2c",
+                        "surface-container": "#f0edef",
+                        "secondary-fixed-dim": "#c4c6d0",
+                        "primary-container": "#2d3748",
+                        "tertiary": "#2c1f07",
+                        "inverse-primary": "#bdc7dc",
+                        "on-tertiary-fixed-variant": "#554429",
+                        "surface-container-highest": "#e4e2e3",
+                        "on-tertiary-container": "#b29c7b",
+                        "primary-fixed-dim": "#bdc7dc",
+                        "surface-variant": "#e4e2e3",
+                        "secondary-fixed": "#e0e2ec",
+                        "background": "#fbf8fa",
+                        "inverse-surface": "#303032",
+                        "tertiary-fixed-dim": "#dbc39f",
+                        "surface": "#fbf8fa",
+                        "on-secondary-fixed": "#181c23",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed-variant": "#3d4759",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "tertiary-container": "#43341a",
+                        "surface-dim": "#dcd9db",
+                        "on-primary-container": "#96a0b5",
+                        "on-error": "#ffffff",
+                        "on-surface": "#1b1b1d",
+                        "surface-container-low": "#f6f3f4",
+                        "outline-variant": "#c5c6cd",
+                        "on-error-container": "#93000a",
+                        "secondary": "#5b5e67"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "display": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Public Sans"],
+                        "mono": ["JetBrains Mono"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #fbf8fa; color: #1b1b1d; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .custom-shadow { box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col md:flex-row overflow-hidden">
+<!-- NavigationDrawer (Sidebar - Desktop Only) -->
+<aside class="fixed left-0 top-0 h-full z-40 hidden md:flex flex-col h-screen w-64 border-r border-outline-variant bg-surface shadow-sm">
+<div class="p-6">
+<span class="text-headline-sm font-headline font-bold text-primary">AI Workspace</span>
+</div>
+<nav class="flex-1 px-4 space-y-2 mt-4">
+<!-- Dashboard Active -->
+<div class="flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container rounded-lg cursor-pointer active:scale-95 duration-150 transition-colors">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-body text-label-sm font-medium">Dashboard</span>
+</div>
+<!-- Agents -->
+<div class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors cursor-pointer active:scale-95 duration-150">
+<span class="material-symbols-outlined">smart_toy</span>
+<span class="font-body text-label-sm font-medium">Agents</span>
+</div>
+<!-- Logs -->
+<div class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors cursor-pointer active:scale-95 duration-150">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-body text-label-sm font-medium">Logs</span>
+</div>
+<!-- Settings -->
+<div class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-high transition-colors cursor-pointer active:scale-95 duration-150">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body text-label-sm font-medium">Settings</span>
+</div>
+</nav>
+<div class="p-4 border-t border-outline-variant">
+<div class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container transition-colors cursor-pointer">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-xs">
+                    JD
+                </div>
+<div class="flex-1 overflow-hidden">
+<p class="text-xs font-bold truncate">John Doe</p>
+<p class="text-[10px] text-on-surface-variant truncate">Admin Access</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Wrapper -->
+<main class="flex-1 flex flex-col h-screen md:ml-64 relative">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-4 h-16 sticky top-0 z-30 bg-surface-bright border-b border-outline-variant transition-all duration-200">
+<div class="flex items-center gap-4">
+<button class="md:hidden p-2 rounded-full hover:bg-surface-container transition-all" onclick="toggleMobileMenu()">
+<span class="material-symbols-outlined text-primary">menu</span>
+</button>
+<h1 class="font-headline text-headline-sm font-black text-on-surface">Agent Session</h1>
+</div>
+<div class="flex items-center gap-2">
+<span class="hidden md:block text-xs font-medium text-on-surface-variant mr-2">Status: <span class="text-green-600">Online</span></span>
+<div class="w-8 h-8 rounded-full overflow-hidden bg-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A clean, professional headshot of a diverse male executive wearing a charcoal suit, set against a blurred minimalist office background with soft daylight filtering through large windows. High-contrast photography style, modern light-mode aesthetic, slate gray accents." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzGDa0ry0NTHS3D-Cn8oCxJL9e9CDO1KDbcSbiAGLmw4I-yuzCICIHrPwn3ABJ_jH4RsmX9YDwlztpKqRjunjLOmGqGRxNaue9bIkAJWBr4HzbYiWSrg7cd4kd6qWvEkW-A1pBzykvVUD8SGURUn7G2wTZgT6hI_rzC1XQsxEkQgAI2iUpmCeq9Lm2eHWeDPS_FYx8dOqOiyQFQbiUEqgYM0S8in6n5otLdPAydaphmctTvlcJV5SQyPRJQZuwOTlXJAEbx5OxKAE"/>
+</div>
+</div>
+</header>
+<!-- Bento Layout Content -->
+<div class="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6 space-y-6 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-6">
+<!-- Left Column: Chat Section (Col 1-8) -->
+<section class="lg:col-span-8 flex flex-col bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden custom-shadow h-[600px] md:h-[calc(100vh-160px)]">
+<div class="px-6 py-4 border-b border-outline-variant flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+<span class="font-bold text-sm">Alpha-7 Agent Chat</span>
+</div>
+<span class="text-[10px] bg-secondary-container px-2 py-1 rounded text-on-secondary-container font-bold">GPT-4 ENGINE</span>
+</div>
+<div class="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide" id="chat-feed">
+<!-- System Message -->
+<div class="flex justify-center">
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold bg-surface-container px-3 py-1 rounded-full">Session Started: 09:41 AM</span>
+</div>
+<!-- Bot Message -->
+<div class="flex gap-4 max-w-[85%]">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex-shrink-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container text-sm">smart_toy</span>
+</div>
+<div class="space-y-1">
+<div class="bg-surface-container-high p-4 rounded-tr-2xl rounded-br-2xl rounded-bl-2xl text-sm leading-relaxed">
+                                Hello! I've successfully connected to the research database. I'm currently scanning for the 2024 fiscal reports you requested. How would you like me to prioritize the analysis?
+                            </div>
+<span class="text-[10px] text-on-surface-variant ml-1">09:42 AM</span>
+</div>
+</div>
+<!-- User Message -->
+<div class="flex gap-4 max-w-[85%] ml-auto flex-row-reverse">
+<div class="w-8 h-8 rounded-lg bg-secondary text-on-secondary flex-shrink-0 flex items-center justify-center font-bold text-xs">
+                            JD
+                        </div>
+<div class="space-y-1 text-right">
+<div class="bg-primary text-on-primary p-4 rounded-tl-2xl rounded-br-2xl rounded-bl-2xl text-sm leading-relaxed">
+                                Focus on identifying anomalies in the overhead expenditures for Q3 compared to the previous two years.
+                            </div>
+<span class="text-[10px] text-on-surface-variant mr-1">09:44 AM</span>
+</div>
+</div>
+<!-- Bot Message -->
+<div class="flex gap-4 max-w-[85%]">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex-shrink-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container text-sm">smart_toy</span>
+</div>
+<div class="space-y-1">
+<div class="bg-surface-container-high p-4 rounded-tr-2xl rounded-br-2xl rounded-bl-2xl text-sm leading-relaxed">
+                                Understood. Initial scan complete. I've found a 14% variance in 'Cloud Infrastructure' costs during September. I am now cross-referencing this with the deployment logs.
+                            </div>
+<span class="text-[10px] text-on-surface-variant ml-1">09:45 AM</span>
+</div>
+</div>
+</div>
+<!-- Chat Input -->
+<div class="p-4 bg-surface-bright border-t border-outline-variant">
+<div class="relative flex items-center">
+<input class="w-full bg-surface-container-low border-outline-variant focus:ring-1 focus:ring-primary focus:border-primary rounded-xl py-3 pl-4 pr-12 text-sm transition-all" placeholder="Instruct the agent..." type="text"/>
+<button class="absolute right-2 p-2 bg-primary text-on-primary rounded-lg hover:scale-105 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-sm">send</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Right Column: Widgets (Col 9-12) -->
+<div class="lg:col-span-4 space-y-6 flex flex-col h-full">
+<!-- Active Tasks Widget -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant p-5 custom-shadow">
+<div class="flex items-center justify-between mb-4">
+<h3 class="font-bold text-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">checklist</span>
+                            Active Tasks
+                        </h3>
+<span class="text-[10px] font-bold text-primary">3 RUNNING</span>
+</div>
+<div class="space-y-3">
+<!-- Task Item -->
+<div class="p-3 rounded-lg border border-outline-variant bg-surface flex items-center justify-between group hover:border-primary transition-colors cursor-pointer">
+<div class="flex flex-col gap-1">
+<span class="text-xs font-bold">Cloud Audit Q3</span>
+<span class="text-[10px] text-on-surface-variant">Task #42 • Progress 65%</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-blue-500"></div>
+<span class="text-[10px] font-bold uppercase text-on-surface-variant">Running</span>
+</div>
+</div>
+<!-- Task Item -->
+<div class="p-3 rounded-lg border border-outline-variant bg-surface flex items-center justify-between opacity-70">
+<div class="flex flex-col gap-1">
+<span class="text-xs font-bold">Vector DB Sync</span>
+<span class="text-[10px] text-on-surface-variant">Task #41 • Success</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-green-600 text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-[10px] font-bold uppercase text-on-surface-variant">Done</span>
+</div>
+</div>
+<!-- Task Item -->
+<div class="p-3 rounded-lg border border-outline-variant bg-surface flex items-center justify-between group hover:border-primary transition-colors cursor-pointer">
+<div class="flex flex-col gap-1">
+<span class="text-xs font-bold">Report Synthesis</span>
+<span class="text-[10px] text-on-surface-variant">Task #43 • Queued</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-orange-400"></div>
+<span class="text-[10px] font-bold uppercase text-on-surface-variant">Pending</span>
+</div>
+</div>
+</div>
+</section>
+<!-- System Logs -->
+<section class="flex-1 bg-primary text-on-primary rounded-xl overflow-hidden custom-shadow flex flex-col min-h-[250px]">
+<div class="px-4 py-3 bg-white/10 flex items-center justify-between border-b border-white/5">
+<span class="font-mono text-[10px] font-bold tracking-widest uppercase">System Terminal</span>
+<span class="material-symbols-outlined text-xs">terminal</span>
+</div>
+<div class="p-4 font-mono text-[11px] leading-relaxed space-y-1 overflow-y-auto scrollbar-hide text-on-primary-container">
+<p><span class="text-green-400 opacity-80">[09:40:12]</span> <span class="text-white">INITIALIZING ENGINE...</span></p>
+<p><span class="text-green-400 opacity-80">[09:40:14]</span> <span class="text-white">AGENT ALPHA CONNECTED</span></p>
+<p><span class="text-green-400 opacity-80">[09:41:05]</span> CORE TEMP: 42°C | STABLE</p>
+<p><span class="text-green-400 opacity-80">[09:42:22]</span> REQUEST: FETCH_FINANCIAL_DATA_2024</p>
+<p><span class="text-green-400 opacity-80">[09:42:45]</span> DB_SQL_EXECUTE: SUCCESS (432 ROWS)</p>
+<p><span class="text-green-400 opacity-80">[09:44:10]</span> TASK #42 STARTED: ANALYZING_ANOMALIES</p>
+<p><span class="text-blue-400 opacity-80">[09:45:15]</span> <span class="bg-blue-900/50 px-1">ALERT: CLOUD_COST_SPIKE_DETECTED</span></p>
+<p><span class="text-green-400 opacity-80">[09:46:02]</span> PARSING_DEPLOYMENT_LOGS...</p>
+<p><span class="animate-pulse">_</span></p>
+</div>
+</section>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-2 bg-surface-container border-t border-outline-variant md:hidden shadow-lg">
+<div class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-xl p-2 active:scale-90 transition-transform cursor-pointer">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-label text-label-sm">Dashboard</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-secondary-container p-2 active:scale-90 transition-transform hover:bg-secondary-fixed-dim cursor-pointer">
+<span class="material-symbols-outlined">smart_toy</span>
+<span class="font-label text-label-sm">Agents</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-secondary-container p-2 active:scale-90 transition-transform hover:bg-secondary-fixed-dim cursor-pointer">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-label text-label-sm">Logs</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-secondary-container p-2 active:scale-90 transition-transform hover:bg-secondary-fixed-dim cursor-pointer">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label text-label-sm">Profile</span>
+</div>
+</nav>
+<!-- Mobile Mobile Overlay Sidebar -->
+<div class="fixed inset-0 bg-black/50 z-50 hidden transition-opacity duration-300 opacity-0" id="mobile-sidebar">
+<div class="w-64 h-full bg-surface transition-transform duration-300 -translate-x-full" id="sidebar-content">
+<div class="p-6 flex justify-between items-center">
+<span class="text-headline-sm font-headline font-bold text-primary">AI Workspace</span>
+<button class="p-2 rounded-full hover:bg-surface-container" onclick="toggleMobileMenu()">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<nav class="px-4 space-y-2 mt-4">
+<div class="flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container rounded-lg font-medium">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span>Dashboard</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-on-surface-variant">
+<span class="material-symbols-outlined">smart_toy</span>
+<span>Agents</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-on-surface-variant">
+<span class="material-symbols-outlined">terminal</span>
+<span>Logs</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-on-surface-variant">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</div>
+</nav>
+</div>
+</div>
+<script>
+        function toggleMobileMenu() {
+            const sidebar = document.getElementById('mobile-sidebar');
+            const content = document.getElementById('sidebar-content');
+            
+            if (sidebar.classList.contains('hidden')) {
+                sidebar.classList.remove('hidden');
+                setTimeout(() => {
+                    sidebar.classList.add('opacity-100');
+                    content.classList.remove('-translate-x-full');
+                }, 10);
+            } else {
+                sidebar.classList.remove('opacity-100');
+                content.classList.add('-translate-x-full');
+                setTimeout(() => {
+                    sidebar.classList.add('hidden');
+                }, 300);
+            }
+        }
+
+        // Auto-scroll chat to bottom
+        const chatFeed = document.getElementById('chat-feed');
+        chatFeed.scrollTop = chatFeed.scrollHeight;
+
+        // Interaction for tasks
+        document.querySelectorAll('section div.p-3.rounded-lg.cursor-pointer').forEach(item => {
+            item.addEventListener('click', () => {
+                item.style.backgroundColor = '#e0e2ec';
+                setTimeout(() => {
+                    item.style.backgroundColor = '';
+                }, 200);
+            });
+        });
+    </script>
+</body></html>

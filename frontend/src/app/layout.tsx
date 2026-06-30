@@ -3,6 +3,8 @@ import { Inter, Geist, Quantico } from "next/font/google";
 import "./globals.css";
 import "../bones/registry";
 
+export const dynamic = 'force-dynamic';
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {

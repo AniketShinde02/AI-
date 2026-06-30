@@ -8,11 +8,11 @@ multi-provider dispatcher keyed on TaskClass.
 
 Shadow Army Tier Hierarchy:
   Monarch      → User / Jinwoo (HITL decisions)
-  Grand Marshal → Mistral Large / SambaNova 405B  (heavy planning)
-  Generals      → Cerebras 120B / SambaNova 70B   (fast browser loops)
-  Knights       → Groq Llama 3.3-70B / SambaNova 70B (fast routing, chat)
-  Eyes          → Gemini 1.5 Flash                (vision, multimodal)
-  Shadow Soldiers → SambaNova 3.2B / Mistral Small (cheap background tasks)
+  Grand Marshal → Mistral Large                 (heavy planning)
+  Generals      → Cerebras 120B / Mistral       (fast browser loops)
+  Knights       → Groq Llama 3.3-70B            (fast routing, chat)
+  Eyes          → Gemini 1.5-flash / 2.0-flash  (vision)
+  Shadow Soldiers → Mistral Small               (cheap background tasks)
   Infantry      → Local System / OpenRouter Free  (offline fallback)
 
 TaskClass → Tier → Model mapping is defined in TIER_ROUTING_TABLE.
@@ -22,6 +22,7 @@ All existing callers of standard_chat() and execute_tool_call() are preserved.
 import logging
 import json
 import asyncio
+import time
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional, Callable, Awaitable
@@ -60,7 +61,7 @@ class AgentTier(str, Enum):
 @dataclass
 class TierConfig:
     tier: AgentTier
-    provider: str                   # "groq" | "cerebras" | "mistral" | "sambanova" | "gemini" | "openrouter"
+    provider: str                   # "groq" | "cerebras" | "mistral" | "gemini" | "openrouter"
     model: str
     max_tokens: int = 1024
     temperature: float = 0.4
@@ -76,27 +77,22 @@ class TierConfig:
 TIER_ROUTING_TABLE: Dict[TaskClass, List[TierConfig]] = {
     TaskClass.FAST_ROUTING: [
         TierConfig(AgentTier.KNIGHTS,       "groq",       "llama-3.1-8b-instant",                         max_tokens=256,  temperature=0.0, theme_primary="#1f1115", theme_accent="#ff3b30"),
-        TierConfig(AgentTier.SHADOW_SOLDIERS,"sambanova",  "Meta-Llama-3.2-3B-Instruct",                   max_tokens=256,  temperature=0.0, theme_primary="#150d1a", theme_accent="#a855f7"),
         TierConfig(AgentTier.INFANTRY,       "openrouter", "meta-llama/llama-3.3-70b-instruct:free",       max_tokens=256,  temperature=0.0, theme_primary="#18181b", theme_accent="#a1a1aa"),
     ],
     TaskClass.CHAT: [
         TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=1024, temperature=0.5, theme_primary="#1f1115", theme_accent="#ff3b30"),
-        TierConfig(AgentTier.GENERALS,       "sambanova",  "Meta-Llama-3.1-70B-Instruct",                  max_tokens=1024, temperature=0.5, theme_primary="#0e1626", theme_accent="#00f0ff"),
         TierConfig(AgentTier.INFANTRY,       "openrouter", "meta-llama/llama-3.3-70b-instruct:free",       max_tokens=1024, temperature=0.5, theme_primary="#18181b", theme_accent="#a1a1aa"),
     ],
     TaskClass.PLANNING: [
         TierConfig(AgentTier.GRAND_MARSHAL,  "mistral",    "mistral-large-latest",                         max_tokens=2048, temperature=0.3, theme_primary="#0b091a", theme_accent="#8a2be2"),
-        TierConfig(AgentTier.GRAND_MARSHAL,  "sambanova",  "Meta-Llama-3.1-405B-Instruct",                 max_tokens=2048, temperature=0.3, theme_primary="#0b091a", theme_accent="#8a2be2"),
         TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=2048, temperature=0.3, theme_primary="#1f1115", theme_accent="#ff3b30"),
     ],
     TaskClass.BROWSER: [
-        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.3-70b",                                 max_tokens=2048, temperature=0.2, theme_primary="#0e1626", theme_accent="#00f0ff"),
-        TierConfig(AgentTier.GENERALS,       "sambanova",  "Meta-Llama-3.1-70B-Instruct",                  max_tokens=2048, temperature=0.2, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.1-70b",                                 max_tokens=2048, temperature=0.2, theme_primary="#0e1626", theme_accent="#00f0ff"),
         TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=2048, temperature=0.2, theme_primary="#1f1115", theme_accent="#ff3b30"),
     ],
     TaskClass.PC_CONTROL: [
-        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.3-70b",                                 max_tokens=1024, temperature=0.1, theme_primary="#0e1626", theme_accent="#00f0ff"),
-        TierConfig(AgentTier.GENERALS,       "sambanova",  "Meta-Llama-3.1-70B-Instruct",                  max_tokens=1024, temperature=0.1, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.1-70b",                                 max_tokens=1024, temperature=0.1, theme_primary="#0e1626", theme_accent="#00f0ff"),
         TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=1024, temperature=0.1, theme_primary="#1f1115", theme_accent="#ff3b30"),
     ],
     TaskClass.VISION: [
@@ -104,8 +100,7 @@ TIER_ROUTING_TABLE: Dict[TaskClass, List[TierConfig]] = {
         TierConfig(AgentTier.EYES,           "gemini",     "gemini-2.0-flash",                             max_tokens=1024, temperature=0.3, theme_primary="#060f14", theme_accent="#00ff66"),
     ],
     TaskClass.LONG_CONTEXT: [
-        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.3-70b",                                 max_tokens=4096, temperature=0.3, theme_primary="#0e1626", theme_accent="#00f0ff"),
-        TierConfig(AgentTier.GRAND_MARSHAL,  "sambanova",  "Meta-Llama-3.1-405B-Instruct",                 max_tokens=4096, temperature=0.3, theme_primary="#0b091a", theme_accent="#8a2be2"),
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.1-70b",                                 max_tokens=4096, temperature=0.3, theme_primary="#0e1626", theme_accent="#00f0ff"),
         TierConfig(AgentTier.EYES,           "gemini",     "gemini-1.5-flash",                             max_tokens=4096, temperature=0.3, theme_primary="#060f14", theme_accent="#00ff66"),
     ],
     TaskClass.CODE: [
@@ -114,11 +109,9 @@ TIER_ROUTING_TABLE: Dict[TaskClass, List[TierConfig]] = {
     ],
     TaskClass.RESEARCH: [
         TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.3-70b",                                 max_tokens=4096, temperature=0.4, theme_primary="#0e1626", theme_accent="#00f0ff"),
-        TierConfig(AgentTier.GRAND_MARSHAL,  "sambanova",  "Meta-Llama-3.1-405B-Instruct",                 max_tokens=4096, temperature=0.4, theme_primary="#0b091a", theme_accent="#8a2be2"),
         TierConfig(AgentTier.KNIGHTS,        "groq",       "mixtral-8x7b-32768",                           max_tokens=4096, temperature=0.4, theme_primary="#1f1115", theme_accent="#ff3b30"),
     ],
     TaskClass.CHEAP_TASK: [
-        TierConfig(AgentTier.SHADOW_SOLDIERS,"sambanova",  "Meta-Llama-3.2-3B-Instruct",                   max_tokens=512,  temperature=0.5, theme_primary="#150d1a", theme_accent="#a855f7"),
         TierConfig(AgentTier.SHADOW_SOLDIERS,"mistral",    "mistral-small-latest",                         max_tokens=512,  temperature=0.5, theme_primary="#150d1a", theme_accent="#a855f7"),
         TierConfig(AgentTier.INFANTRY,       "openrouter", "meta-llama/llama-3.3-70b-instruct:free",       max_tokens=512,  temperature=0.5, theme_primary="#18181b", theme_accent="#a1a1aa"),
     ],
@@ -149,7 +142,6 @@ class ModelRouter:
         self._groq_client       = None
         self._cerebras_client   = None
         self._mistral_client    = None
-        self._sambanova_client  = None
         self._gemini_client     = None
         self._openrouter_client = None
         self._initialized       = False
@@ -183,33 +175,23 @@ class ModelRouter:
         # Mistral
         if config.MISTRAL_API_KEY:
             try:
-                from mistralai import Mistral
+                try:
+                    from mistralai import Mistral  # type: ignore
+                except ImportError:
+                    from mistralai.client import Mistral  # type: ignore
                 self._mistral_client = Mistral(api_key=config.MISTRAL_API_KEY)
                 logger.info("✅ [ModelRouter] Mistral client initialized (Grand Marshal / Code)")
             except ImportError:
                 logger.warning("⚠️  [ModelRouter] mistralai library not installed.")
 
-        # SambaNova (OpenAI-compatible endpoint)
-        if config.SAMBANOVA_API_KEY:
-            try:
-                from openai import AsyncOpenAI
-                self._sambanova_client = AsyncOpenAI(
-                    api_key=config.SAMBANOVA_API_KEY,
-                    base_url="https://api.sambanova.ai/v1",
-                )
-                logger.info("✅ [ModelRouter] SambaNova client initialized (Grand Marshal / Shadow Soldiers)")
-            except ImportError:
-                logger.warning("⚠️  [ModelRouter] openai library not installed — SambaNova unavailable.")
-
-        # Gemini (google-generativeai)
+        # Gemini (google-genai)
         if config.GEMINI_API_KEY:
             try:
-                import google.generativeai as genai
-                genai.configure(api_key=config.GEMINI_API_KEY)
-                self._gemini_client = genai
+                from google import genai
+                self._gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
                 logger.info("✅ [ModelRouter] Gemini client initialized (Eyes)")
             except ImportError:
-                logger.warning("⚠️  [ModelRouter] google-generativeai library not installed.")
+                logger.warning("⚠️  [ModelRouter] google-genai library not installed.")
 
         # OpenRouter (OpenAI-compatible endpoint — Infantry fallback)
         if config.OPENROUTER_API_KEY:
@@ -231,7 +213,6 @@ class ModelRouter:
             "groq":       self._groq_client,
             "cerebras":   self._cerebras_client,
             "mistral":    self._mistral_client,
-            "sambanova":  self._sambanova_client,
             "gemini":     self._gemini_client,
             "openrouter": self._openrouter_client,
         }
@@ -244,7 +225,7 @@ class ModelRouter:
         Non-blocking — never raises.
         """
         try:
-            from core.execution_hooks import broadcast_workspace_state
+            from core.workspace.broadcast import broadcast_workspace_state
             import core.global_state as gs
             if not gs.active_sessions:
                 return
@@ -291,6 +272,13 @@ class ModelRouter:
         """
         self._init_clients()
 
+        if force_model == "gpt-oss-20b":
+            force_model = "llama-3.1-8b-instant"
+        elif force_model == "gpt-oss-120b":
+            force_model = "llama3.1-70b"
+        elif force_model == "models/gemini-2.0-flash-exp" or force_model == "gemini-2.5-flash-native-audio-dialog":
+            force_model = "gemini-2.0-flash"
+
         tier_chain = TIER_ROUTING_TABLE.get(task_class, TIER_ROUTING_TABLE[TaskClass.CHAT])
         formatted  = [{"role": "system", "content": system_prompt}] + messages
 
@@ -307,6 +295,23 @@ class ModelRouter:
             )
 
             try:
+                # ── Provider Governor Integration ──
+                from core.provider_governor import governor
+                
+                # Estimate token footprint (handle multimodal arrays gracefully)
+                text_content = ""
+                for m in formatted:
+                    if isinstance(m.get("content"), str):
+                        text_content += m["content"]
+                    elif isinstance(m.get("content"), list):
+                        for item in m["content"]:
+                            if item.get("type") == "text":
+                                text_content += item.get("text", "")
+                
+                estimated_tokens = len(text_content) // 4
+                
+                await governor.wait_if_needed(tier_cfg.provider, estimated_tokens)
+                
                 result = await self._dispatch(
                     client=client,
                     provider=tier_cfg.provider,
@@ -320,10 +325,22 @@ class ModelRouter:
                 return result
 
             except Exception as e:
-                logger.warning(
-                    f"⚠️  [ModelRouter] {tier_cfg.provider}/{model} failed: {e}. "
-                    f"Trying next fallback..."
-                )
+                err_str = str(e).lower()
+                if "429" in err_str or "too many requests" in err_str:
+                    logger.warning(
+                        f"🔥 [ModelRouter] 429 Rate Limit hit on {tier_cfg.provider}/{model}. "
+                        f"ProviderGovernor limit breached or server overloaded. Failing over..."
+                    )
+                    from core.workspace.broadcast import broadcast_workspace_state
+                    asyncio.create_task(broadcast_workspace_state(
+                        status="rate_limit_cooldown",
+                        last_result=f"429 hit on {tier_cfg.provider}. Failing over to fallback tier..."
+                    ))
+                else:
+                    logger.warning(
+                        f"⚠️  [ModelRouter] {tier_cfg.provider}/{model} failed: {e}. "
+                        f"Trying next fallback..."
+                    )
                 continue
 
         return "⚠️ All model providers failed or have no API keys configured. Check your .env file."
@@ -348,7 +365,7 @@ class ModelRouter:
             content = resp.choices[0].message.content
             return content if content is not None else ""
 
-        elif provider in ("cerebras", "sambanova", "openrouter"):
+        elif provider in ("cerebras", "openrouter"):
             # All use OpenAI-compatible async client
             resp = await client.chat.completions.create(
                 model=model,
@@ -370,16 +387,34 @@ class ModelRouter:
             return content if content is not None else ""
 
         elif provider == "gemini":
-            # google-generativeai sync call wrapped in thread pool
-            gemini_model = client.GenerativeModel(model)
-            # Convert messages into Gemini format (extract last user message + system)
-            system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
-            user_parts = [m["content"] for m in messages if m["role"] != "system"]
-            prompt = f"{system_msg}\n\n" + "\n".join(user_parts) if system_msg else "\n".join(user_parts)
-            loop = asyncio.get_event_loop()
-            resp = await loop.run_in_executor(
-                None,
-                lambda: gemini_model.generate_content(prompt)
+            # google-genai aio generate_content
+            system_msg = next((m["content"] for m in messages if m["role"] == "system" and isinstance(m["content"], str)), "")
+            user_parts = []
+            if system_msg:
+                user_parts.append(system_msg)
+                
+            for m in messages:
+                if m["role"] != "system":
+                    if isinstance(m["content"], str):
+                        user_parts.append(m["content"])
+                    elif isinstance(m["content"], list):
+                        for item in m["content"]:
+                            if item.get("type") == "text":
+                                user_parts.append(item.get("text", ""))
+                            elif item.get("type") == "image_url":
+                                b64 = item["image_url"]["url"].split(",")[-1]
+                                import base64
+                                from google.genai import types
+                                user_parts.append(
+                                    types.Part.from_bytes(
+                                        data=base64.b64decode(b64),
+                                        mime_type="image/jpeg"
+                                    )
+                                )
+
+            resp = await client.aio.models.generate_content(
+                model=model,
+                contents=user_parts
             )
             return resp.text if resp.text else ""
 

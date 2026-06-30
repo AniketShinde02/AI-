@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI Workspace - Sunset Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;600;800&amp;family=JetBrains+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#e07a5f",
+                        "on-primary": "#ffffff",
+                        "primary-container": "#3d2b27",
+                        "on-primary-container": "#f4d3cc",
+                        surface: "#121212",
+                        "on-surface": "#f2f2f2",
+                        "surface-container-low": "#1a1a1a",
+                        "surface-container-high": "#242424",
+                        "surface-container-highest": "#2d2d2d",
+                        "on-surface-variant": "#a8a8a8",
+                        outline: "#3d3d3d",
+                        "outline-variant": "#2d2d2d",
+                        error: "#f28482",
+                        success: "#84a59d",
+                        warning: "#f5cac3"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    fontFamily: {
+                        headline: ["Public Sans", "sans-serif"],
+                        display: ["Public Sans", "sans-serif"],
+                        body: ["Public Sans", "sans-serif"],
+                        label: ["Public Sans", "sans-serif"],
+                        mono: ["JetBrains Mono", "monospace"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #121212;
+            color: #f2f2f2;
+            font-family: 'Public Sans', sans-serif;
+            overflow-x: hidden;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #121212;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3d3d3d;
+            border-radius: 10px;
+        }
+        @keyframes pulse-subtle {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .animate-pulse-subtle {
+            animation: pulse-subtle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface">
+<!-- Navigation Drawer (Sidebar) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col border-r border-outline-variant bg-surface-container-low z-50 transition-transform -translate-x-full lg:translate-x-0 w-72 shadow-xl" id="drawer">
+<div class="flex items-center justify-between px-6 py-8">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+<span class="text-lg font-headline font-black text-primary">AI Workspace</span>
+</div>
+<button class="lg:hidden text-on-surface-variant" onclick="toggleDrawer()">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<nav class="flex-1 space-y-1 mt-4">
+<div class="bg-primary-container text-on-primary-container rounded-full mx-2 px-4 py-3 flex items-center gap-3 cursor-pointer">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-body text-body-medium">Dashboard</span>
+</div>
+<div class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-full mx-2 px-4 py-3 flex items-center gap-3 transition-all cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">chat</span>
+<span class="font-body text-body-medium">Agent Chat</span>
+</div>
+<div class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-full mx-2 px-4 py-3 flex items-center gap-3 transition-all cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-body text-body-medium">System Logs</span>
+</div>
+<div class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-full mx-2 px-4 py-3 flex items-center gap-3 transition-all cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">assignment</span>
+<span class="font-body text-body-medium">Task Manager</span>
+</div>
+<div class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-full mx-2 px-4 py-3 flex items-center gap-3 transition-all cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body text-body-medium">Settings</span>
+</div>
+</nav>
+<div class="p-4 border-t border-outline-variant">
+<div class="flex items-center gap-4 px-2 py-3 bg-surface-container-high rounded-xl">
+<img class="w-10 h-10 rounded-full object-cover border border-primary" data-alt="A professional headshot of a system administrator in a dark, tech-focused environment. Warm orange rim lighting highlights the silhouette against a deep charcoal background, conveying a high-end AI control center aesthetic. The lighting is moody yet clear, with modern digital overlays subtly reflecting on glass surfaces." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCwlsUIOBx4S41KDpKgo9oIS-ns_XjrXJYAs2rjvvosNqV790E4JoTU1jgolUD7qy5N7rvZDXZdTwfwM49OEqxWj7qGEB2JnTvKf_c9wJ0YWP4XnXe-FZ6g__Swv7iJuBdg3W45Px9BwlerX5M_bSzw5yj2IU1hP79Wo1zDPJppU2eUq7H29gvg6PUS6wLSfj0gSZmN9kIhhtbF_z1PVHj1tdMy3CqpqzXk-S_vDAO0z3L1EcW5_onnS8OYZ_K8hLqWvdzvF4w-M4Q"/>
+<div class="flex-1 overflow-hidden">
+<p class="text-sm font-bold truncate">System Admin</p>
+<p class="text-xs text-success flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-success"></span>
+                        Online
+                    </p>
+</div>
+<span class="text-[10px] text-on-surface-variant font-mono">v2.4.0</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="lg:ml-72 min-h-screen flex flex-col relative overflow-hidden">
+<!-- Animated Background Decor -->
+<div class="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+<div class="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-primary/10 blur-[120px] rounded-full"></div>
+<div class="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 blur-[100px] rounded-full"></div>
+</div>
+<!-- Top App Bar -->
+<header class="flex items-center justify-between px-6 py-3 w-full border-b border-outline-variant bg-surface sticky top-0 z-40 shadow-sm">
+<div class="flex items-center gap-4">
+<button class="lg:hidden text-on-surface p-1" onclick="toggleDrawer()">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-2xl" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+<h1 class="font-headline text-headline-sm tracking-tight text-xl font-bold text-primary">AI Workspace</h1>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors active:scale-95 transition-transform text-on-surface-variant">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline">
+<img class="w-full h-full object-cover" data-alt="A futuristic avatar icon representing an AI entity. The design features minimalist glowing geometric patterns in sunset orange and deep copper tones against a dark void background, following a high-contrast warm-themed UI style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCiE2Jp-NEKuaZTaXM5IsQTc37kbwQhT1kdcQFNQsO2mgpnXi69UMEgQEiXcENFU4iV5uGr9v4TLlSY2qARxS0XGfyvkSyaiVrWdwRiO6TiJQctCkESqOFQGGfWZ5HcOuo10nQnHPScgtk-nrku9W1-hHZuA3fQgEMuNB_T_O5MBfueAMODkZYkjV_pgSaoJOlipBfdrvlEe_54RL0wFwnY_RaBz9M5Mlm_Gujc3N6xYPVbOPoPxccC2vgoxmBikRcULYoA1HILChU"/>
+</div>
+</div>
+</header>
+<!-- Scrollable Canvas -->
+<div class="flex-1 p-4 md:p-6 space-y-6 overflow-y-auto max-w-7xl mx-auto w-full">
+<!-- Hero Stats / Overview -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="glass-panel p-5 rounded-xl border-l-4 border-primary">
+<p class="text-on-surface-variant text-sm font-medium">Uptime</p>
+<h3 class="text-2xl font-black mt-1">99.9%</h3>
+<div class="mt-4 flex items-center text-xs text-success gap-1">
+<span class="material-symbols-outlined text-xs">trending_up</span>
+<span>Stable connection established</span>
+</div>
+</div>
+<div class="glass-panel p-5 rounded-xl border-l-4 border-primary">
+<p class="text-on-surface-variant text-sm font-medium">Neural Load</p>
+<h3 class="text-2xl font-black mt-1">24.5<span class="text-sm font-normal"> tps</span></h3>
+<div class="w-full bg-outline-variant h-1 rounded-full mt-4 overflow-hidden">
+<div class="bg-primary h-full w-[24%]"></div>
+</div>
+</div>
+<div class="glass-panel p-5 rounded-xl border-l-4 border-primary">
+<p class="text-on-surface-variant text-sm font-medium">Active Agents</p>
+<h3 class="text-2xl font-black mt-1">04</h3>
+<div class="mt-4 flex -space-x-2">
+<div class="w-6 h-6 rounded-full bg-primary border-2 border-surface"></div>
+<div class="w-6 h-6 rounded-full bg-success border-2 border-surface"></div>
+<div class="w-6 h-6 rounded-full bg-warning border-2 border-surface"></div>
+<div class="w-6 h-6 rounded-full bg-outline border-2 border-surface flex items-center justify-center text-[10px]">+1</div>
+</div>
+</div>
+</div>
+<!-- Bento Layout Content -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Chat Interface (Large) -->
+<section class="lg:col-span-8 glass-panel rounded-xl flex flex-col h-[600px] shadow-2xl relative overflow-hidden group">
+<div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="px-6 py-4 border-b border-outline-variant flex items-center justify-between bg-surface-container-low/50">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<div>
+<h2 class="font-bold text-sm">Orion Agent</h2>
+<p class="text-xs text-on-surface-variant">LMM-V4 Cluster • Ready</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer">more_vert</span>
+</div>
+<div class="flex-1 p-6 space-y-6 overflow-y-auto" id="chat-messages">
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest shrink-0 flex items-center justify-center border border-outline">
+<span class="material-symbols-outlined text-xs">face</span>
+</div>
+<div class="bg-surface-container-high p-4 rounded-xl rounded-tl-none max-w-[85%]">
+<p class="text-sm leading-relaxed">Initialize system diagnostic for current workflow. I need to clear the pending tasks by priority.</p>
+</div>
+</div>
+<div class="flex gap-4 flex-row-reverse">
+<div class="w-8 h-8 rounded-lg bg-primary shrink-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-xs" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+</div>
+<div class="bg-primary-container/40 border border-primary/20 p-4 rounded-xl rounded-tr-none max-w-[85%]">
+<p class="text-sm leading-relaxed">System diagnostics initiated. Found 3 tasks in 'Pending' state. I suggest escalating the 'API Gateway Patch' as it blocks other processes. Should I proceed?</p>
+</div>
+</div>
+</div>
+<div class="p-4 border-t border-outline-variant bg-surface-container-low/30">
+<div class="relative flex items-center">
+<input class="w-full bg-surface-container-highest border border-outline rounded-full py-4 pl-6 pr-20 text-sm focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none" placeholder="Type a command or message..." type="text"/>
+<div class="absolute right-2 flex gap-1">
+<button class="p-2 rounded-full text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">mic</span>
+</button>
+<button class="p-2 bg-primary text-on-primary rounded-full hover:shadow-lg hover:shadow-primary/20 transition-all active:scale-90">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Sidebar Content (Small) -->
+<div class="lg:col-span-4 flex flex-col gap-6">
+<!-- Active Tasks Widget -->
+<section class="glass-panel p-6 rounded-xl space-y-4">
+<div class="flex items-center justify-between">
+<h2 class="font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">assignment</span>
+                                Active Tasks
+                            </h2>
+<span class="bg-surface-container-highest text-[10px] px-2 py-1 rounded border border-outline uppercase tracking-wider font-bold">Queue: 12</span>
+</div>
+<div class="space-y-4">
+<!-- Task Item -->
+<div class="space-y-2">
+<div class="flex justify-between items-end">
+<span class="text-sm font-medium">Neural Fine-tuning</span>
+<span class="text-[10px] text-primary flex items-center gap-1">
+<span class="w-1 h-1 rounded-full bg-primary animate-pulse"></span>
+                                        Running
+                                    </span>
+</div>
+<div class="w-full bg-outline-variant h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[68%]" style="transition: width 2s ease-out;"></div>
+</div>
+<div class="flex justify-between text-[10px] text-on-surface-variant">
+<span>Step 4/6</span>
+<span>68%</span>
+</div>
+</div>
+<!-- Task Item -->
+<div class="space-y-2">
+<div class="flex justify-between items-end">
+<span class="text-sm font-medium">Log Compression</span>
+<span class="text-[10px] text-on-surface-variant">Pending</span>
+</div>
+<div class="w-full bg-outline-variant h-1.5 rounded-full overflow-hidden">
+<div class="bg-outline h-full w-[0%]"></div>
+</div>
+<div class="flex justify-between text-[10px] text-on-surface-variant">
+<span>Waiting for CPU</span>
+<span>0%</span>
+</div>
+</div>
+<!-- Task Item -->
+<div class="space-y-2">
+<div class="flex justify-between items-end">
+<span class="text-sm font-medium">DB Optimization</span>
+<span class="text-[10px] text-success">Completed</span>
+</div>
+<div class="w-full bg-outline-variant h-1.5 rounded-full overflow-hidden">
+<div class="bg-success h-full w-[100%]"></div>
+</div>
+</div>
+</div>
+<button class="w-full py-2 border border-outline rounded-lg text-xs font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors mt-2">
+                            VIEW TASK MANAGER
+                        </button>
+</section>
+<!-- System Logs (Terminal) -->
+<section class="glass-panel rounded-xl flex flex-col flex-1 min-h-[250px] overflow-hidden">
+<div class="px-4 py-2 border-b border-outline-variant bg-surface-container-highest flex items-center gap-2">
+<div class="flex gap-1.5">
+<div class="w-2.5 h-2.5 rounded-full bg-error/40"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-warning/40"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-success/40"></div>
+</div>
+<span class="text-[10px] font-mono text-on-surface-variant ml-2 tracking-tight">system_logs --watch</span>
+</div>
+<div class="p-4 font-mono text-xs leading-relaxed overflow-y-auto flex-1 bg-[#0a0a0a]">
+<p class="text-on-surface-variant mb-1">[<span class="text-success">OK</span>] Kernel initialization complete</p>
+<p class="text-on-surface-variant mb-1">[<span class="text-success">OK</span>] Memory check passed (128GB allocated)</p>
+<p class="text-on-surface-variant mb-1">[<span class="text-warning">WARN</span>] High latency detected in Node #4</p>
+<p class="text-on-surface-variant mb-1">[<span class="text-primary">INFO</span>] Spawning Agent 'Orion'...</p>
+<p class="text-primary mb-1 animate-pulse-subtle">&gt; Orchestrating task queue #512</p>
+<p class="text-on-surface-variant mb-1">[<span class="text-success">OK</span>] Connection to LLM cluster stable</p>
+<p class="text-on-surface-variant mb-1">[<span class="text-error">FAIL</span>] Request timed out for external_api_01</p>
+<p class="text-on-surface-variant mb-1">[<span class="text-info text-blue-400">SYNC</span>] Mirroring local state to cloud...</p>
+<p class="text-on-surface-variant mb-1">[<span class="text-success">OK</span>] State synced</p>
+<p class="text-primary mt-2">_</p>
+</div>
+</section>
+</div>
+</div>
+<!-- Bottom Action Grid (Mobile Navigation Alternative) -->
+<div class="md:hidden grid grid-cols-4 gap-2 pb-10">
+<button class="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-container-high border border-outline active:scale-95 transition-all">
+<span class="material-symbols-outlined text-primary mb-1">dashboard</span>
+<span class="text-[10px] font-bold">Main</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-container-low border border-outline-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-on-surface-variant mb-1">chat</span>
+<span class="text-[10px] font-medium text-on-surface-variant">Chat</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-container-low border border-outline-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-on-surface-variant mb-1">terminal</span>
+<span class="text-[10px] font-medium text-on-surface-variant">Logs</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 rounded-xl bg-surface-container-low border border-outline-variant active:scale-95 transition-all">
+<span class="material-symbols-outlined text-on-surface-variant mb-1">more_horiz</span>
+<span class="text-[10px] font-medium text-on-surface-variant">More</span>
+</button>
+</div>
+</div>
+<!-- Floating Action Button -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-90 transition-all z-40 lg:hidden">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">add</span>
+</button>
+</main>
+<!-- Drawer Overlay -->
+<div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 hidden transition-opacity opacity-0" id="overlay" onclick="toggleDrawer()"></div>
+<script>
+        function toggleDrawer() {
+            const drawer = document.getElementById('drawer');
+            const overlay = document.getElementById('overlay');
+            const isOpen = !drawer.classList.contains('-translate-x-full');
+            
+            if (isOpen) {
+                drawer.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+                overlay.classList.remove('opacity-100');
+            } else {
+                drawer.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+                setTimeout(() => overlay.classList.add('opacity-100'), 10);
+            }
+        }
+
+        // Add auto-scroll for chat (simulation)
+        const chatContainer = document.getElementById('chat-messages');
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        // Subtle animation for system status
+        setInterval(() => {
+            const dots = document.querySelectorAll('.bg-success.w-2.h-2');
+            dots.forEach(dot => {
+                dot.style.opacity = (Math.random() * 0.4 + 0.6).toString();
+            });
+        }, 1500);
+    </script>
+</body></html>

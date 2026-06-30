@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from core.browser_agent import browser_agent
 from core.pc_control import pc_controller
-from tools.system import execute_pc_action
+
 
 logger = logging.getLogger("nexus.task_cards")
 
@@ -163,8 +163,12 @@ class TaskCardEngine:
 
                 step_result: Dict[str, Any] = {"success": False, "verified": False}
                 try:
-                    # Run via the system action wrapper (triggers guardrail scanner under the hood)
-                    step_result = await execute_pc_action(f"pc_{action}", params)
+                    from core.planner.executor import get_executor
+                    executor = get_executor(f"pc_{action}")
+                    if executor:
+                        step_result = await executor.run(f"pc_{action}", params, max_retries=1, visual_verification=True)
+                    else:
+                        step_result = {"success": False, "error": f"Unknown capability pc_{action}", "verified": False}
                 except Exception as e:
                     step_result["error"] = str(e)
                     logger.error(f"  Task card step failed: {e}")

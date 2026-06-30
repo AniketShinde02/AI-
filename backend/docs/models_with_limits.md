@@ -120,7 +120,7 @@ Cerebras provides ultra-fast inference using its custom wafer-scale engines.
 *   **Metrics Enforced:** RPS, Tokens Per Minute (TPM), and Tokens Per Month.
 *   **Notes:** Automatically upgrades limits when moving to Scale plan (pay-as-you-go).
 
-### SambaNova Cloud API
+### Mistral Cloud API
 *   **Free Tier:** No payment method linked.
     *   **Tokens Per Day (TPD):** 200,000
 *   **Developer Tier (Requires linked payment method):**

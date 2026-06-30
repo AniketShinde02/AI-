@@ -355,7 +355,7 @@ graph TD
     UserApprove -->|Approve| LoadCard
     
     %% Executor and Planner
-    LoadCard --> Planner[Macro-Planner / Grand Marshal <br/> Mistral Large / SambaNova 405B]:::marshal
+    LoadCard --> Planner[Macro-Planner / Grand Marshal <br/> Mistral Large / Mistral 405B]:::marshal
     Planner -->|Generate Step List| ExecutionLoop[Unified Agent Execution Loop]
     
     %% Observe-Decide-Act-Verify Loop
@@ -364,8 +364,8 @@ graph TD
         Obs -->|PC: Query active Window, Process, PID| Dec
         Obs -->|Optional: Screenshot 1280px JPEG 50%| Dec
         
-        Dec -->|Generals: Cerebras 120B / SambaNova 70B| Act[3. ACT / Execute]:::general
-        Dec -->|Minor Tasks / chndi kaam: SambaNova 3B / Mistral Small| Act:::soldier
+        Dec -->|Generals: Cerebras 120B / Mistral 70B| Act[3. ACT / Execute]:::general
+        Dec -->|Minor Tasks / chndi kaam: Mistral 3B / Mistral Small| Act:::soldier
         
         %% Humanization Layer
         Act -->|High-DPI Coordinate translation| MouseTrack[Bezier Curve Cursor Path]
@@ -380,7 +380,7 @@ graph TD
         
         Ver -->|Compare active URL / Window title| OutcomeCheck{Did Step Verify?}
         OutcomeCheck -->|Yes: Success| NextStep[Proceed to Next Step / Loop]
-        OutcomeCheck -->|No: Fail| Backtrack[Backtrack / Plan Repair <br/> Grand Marshal / SambaNova 405B]:::marshal
+        OutcomeCheck -->|No: Fail| Backtrack[Backtrack / Plan Repair <br/> Grand Marshal / Mistral 405B]:::marshal
     end
     
     %% Loop progression

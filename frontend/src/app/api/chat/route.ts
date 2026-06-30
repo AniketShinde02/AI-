@@ -32,12 +32,12 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     });
 
-    // 2. High-Speed Inference (Groq/SambaNova/Mistral)
+    // 2. High-Speed Inference (Groq/Mistral)
     const reqModel = model || process.env.LLM_MODEL || 'llama-3.3-70b-versatile';
     const isMistral = reqModel.includes('mistral') || reqModel.includes('pixtral');
     
     const aiClient = new OpenAI({
-      apiKey: isMistral ? process.env.MISTRAL_API_KEY : (groqApiKey || process.env.SAMBANOVA_API_KEY || process.env.GEMINI_API_KEY),
+      apiKey: isMistral ? process.env.MISTRAL_API_KEY : (groqApiKey || process.env.GEMINI_API_KEY),
       baseURL: isMistral ? 'https://api.mistral.ai/v1' : (groqApiKey ? 'https://api.groq.com/openai/v1' : undefined),
     });
 

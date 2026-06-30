@@ -57,11 +57,13 @@ export function NexusStreamProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  if (!client) return <>{children}</>;
-
-  return (
-    <StreamVideo client={client}>
-      {children}
-    </StreamVideo>
-  );
+  // FIX: Unconditionally return children to prevent React from completely 
+  // destroying and remounting the entire application tree when the client loads.
+  // The StreamVideo wrapper is only needed for Video UI components, and should 
+  // be placed lower in the tree where those components actually exist.
+  if (client) {
+    // We initialize the client but do not structurally wrap the whole app,
+    // avoiding the 1006 disconnect bug and the initial 5-second freeze.
+  }
+  return <>{children}</>;
 }

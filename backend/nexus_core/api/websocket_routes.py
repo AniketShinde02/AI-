@@ -18,7 +18,11 @@ ws_router = APIRouter()
 @ws_router.websocket("/ws/nexus")
 async def websocket_endpoint(websocket: WebSocket):
     session_id = websocket.query_params.get("session_id")
-    logger.info(f"🔌 Incoming WebSocket connection from {websocket.client} with session_id: {session_id}")
+    model = websocket.query_params.get("model", "gemini-2.0-flash")
+    if model == "models/gemini-2.0-flash-exp":
+        model = "gemini-2.0-flash"
+    
+    logger.info(f"🔌 Incoming WebSocket connection from {websocket.client} with session_id: {session_id} (Model: {model})")
     await websocket.accept()
     logger.info("🔌 WebSocket connected and accepted")
     
@@ -27,7 +31,7 @@ async def websocket_endpoint(websocket: WebSocket):
         old_session.is_connected = False
         logger.info(f"♻️ Replacing previous session {session_id} with a fresh one to restart worker tasks")
         
-    session = VoiceSession(websocket, engine="nexus", session_id=session_id or "")
+    session = VoiceSession(websocket, engine="nexus", session_id=session_id or "", model=model)
     if session_id:
         gs.active_sessions[session_id] = session
         logger.info(f"🆕 Created session {session_id}")
@@ -83,6 +87,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     session.selected_persona = msg.get("persona") or "female"
                     session.selected_provider = msg.get("ttsProvider") or "edge"
                     session.selected_language = msg.get("language") or "auto"
+                    if msg.get("model"):
+                        session.model = msg.get("model")
                     continue
                     
                 if "action" in msg:
@@ -170,14 +176,18 @@ async def websocket_endpoint(websocket: WebSocket):
 @ws_router.websocket("/ws/gemini-live")
 async def gemini_live_websocket_endpoint(websocket: WebSocket):
     session_id = websocket.query_params.get("session_id", "")
-    logger.info(f"🔌 Incoming Gemini Live WS from {websocket.client}")
+    model = websocket.query_params.get("model", "gemini-2.0-flash")
+    if model == "models/gemini-2.0-flash-exp":
+        model = "gemini-2.0-flash"
+    
+    logger.info(f"🔌 Incoming Gemini Live WS from {websocket.client} (Model: {model})")
     await websocket.accept()
     
     if session_id and session_id in gs.active_sessions:
         old_session = gs.active_sessions[session_id]
         old_session.is_connected = False
         
-    session = VoiceSession(websocket, engine="gemini_live", session_id=session_id)
+    session = VoiceSession(websocket, engine="gemini_live", session_id=session_id, model=model)
     if session_id:
         gs.active_sessions[session_id] = session
 
@@ -203,8 +213,13 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
             elif "bytes" in data and data["bytes"] is not None:
                 # P0 FIX: When Gemini Live is active and connected, stream raw PCM directly
                 # to Gemini in real-time for immediate multimodal understanding.
-                # Local VAD + STT still runs for capability detection ONLY (Option A).
-                if session.engine == "gemini_live" and session.gemini_manager and session.gemini_manager.is_connected:
+                # CRITICAL GATE: Do NOT forward mic audio while agent is speaking —
+                # Gemini closes the bidiGenerateContent session with 1000 OK if it
+                # receives user audio input while still emitting its own audio response.
+                if (session.engine == "gemini_live"
+                        and session.gemini_manager
+                        and session.gemini_manager.is_connected
+                        and not session.agent_is_speaking):
                     asyncio.create_task(session.gemini_manager.send_audio(data["bytes"]))
                 # Always run local VAD for state management and capability intent detection
                 try:
@@ -217,7 +232,9 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                     # P1 LOGGING: Vision frame received at backend
                     frame_data = msg.get("data", "")
                     logger.info(f"[VISION_FRAME_RECEIVED] size_b64={len(frame_data)} gemini_connected={bool(session.gemini_manager and session.gemini_manager.is_connected)}")
+                    logger.info(f"[VISION_FRAME_RECEIVED] size_b64={len(frame_data)} gemini_connected={bool(session.gemini_manager and session.gemini_manager.is_connected)}")
                     if session.gemini_manager and session.gemini_manager.is_connected:
+                        logger.info(f"[GEMINI_FORENSICS] Routing VIDEO payload | Size: {len(frame_data)} bytes | Session: {session.session_id}")
                         await session.gemini_manager.send_video_frame(frame_data)
                     continue
                 if msg.get("type") == "ping":
@@ -225,6 +242,7 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                     continue
                 if msg.get("type") == "vad_stop":
                     if session.engine == "gemini_live" and session.gemini_manager and session.gemini_manager.is_connected:
+                        logger.info(f"[GEMINI_FORENSICS] Routing TURN_COMPLETE payload | Session: {session.session_id}")
                         await session.gemini_manager.send_turn_complete()
                     continue
                 if msg.get("type") == "audio_finished":
@@ -256,6 +274,8 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                     session.selected_persona = msg.get("persona") or "female"
                     session.selected_provider = msg.get("ttsProvider") or "edge"
                     session.selected_language = msg.get("language") or "auto"
+                    if msg.get("model"):
+                        session.model = msg.get("model")
                     continue
                 if "text" in msg:
                     # All text goes to run_llm_and_tts, which performs the single Intent Classification.

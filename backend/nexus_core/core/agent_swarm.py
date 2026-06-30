@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Optional
 
 from core.database import db
 from core.model_router import model_router, TaskClass
-from core.execution_hooks import broadcast_workspace_state
+from core.workspace.broadcast import broadcast_workspace_state
 
 logger = logging.getLogger("nexus.agent_swarm")
 
@@ -32,6 +32,18 @@ class AgentSwarmManager:
             )
             return {"success": True, "result": fallback_res, "steps": []}
 
+        # Ensure browser_agentic_task is available in the swarm registry
+        if not any(a["id"] == "browser_agentic_task" for a in all_agents):
+            all_agents.append({
+                "id": "browser_agentic_task",
+                "name": "Browser Agent",
+                "description": "Multi-step browser automation agent. Navigates websites, clicks, types, and extracts page data.",
+                "color": "#ff00ff",
+                "status": "idle",
+                "calls": 0,
+                "runtime": "0.0s"
+            })
+
         # Format agents for planning prompt
         agents_str = "\n".join([
             f"- {a['id']}: {a['description']} (status: {a['status']})"
@@ -52,13 +64,15 @@ User Goal:
 Your output must be a valid JSON array of step objects, containing only "agent_id" and "task" properties. E.g.:
 [
   {{"agent_id": "query_memory", "task": "Search memory for user coding preferences"}},
+  {{"agent_id": "browser_agentic_task", "task": "Open youtube, search for 'Zaalima', and click play"}},
   {{"agent_id": "web_search", "task": "Search DuckDuckGo for the latest Next.js 15 features"}}
 ]
 
 Rules:
 1. Choose only from the available agent_ids listed above. Do NOT invent new agent_ids.
 2. The tasks should be clear, concise, and actionable by the sub-agents.
-3. Output ONLY the raw JSON array. Do not include markdown code block formatting (like ```json) or explanations.
+3. If a goal requires browser navigation, element interaction (clicking, form submission), or page state extraction on specific web applications (like Shopify dashboard or YouTube), you MUST output a step assigning 'browser_agentic_task' as the target sub-agent.
+4. Output ONLY the raw JSON array. Do not include markdown code block formatting (like ```json) or explanations.
 """
         logger.info("📋 Planning steps via parent_delegate...")
         plan_res = await model_router.route_task(
@@ -151,6 +165,7 @@ Rules:
             })
 
         # 4. Synthesis Phase via parent_delegate
+        results_str = "\n\n".join(results_context)
         synthesis_prompt = f"""
 You are parent_delegate, the orchestrator of the Nexus Agent Swarm.
 You have executed a series of sub-agent tasks to address the user's goal.
@@ -159,7 +174,7 @@ User Goal: "{goal}"
 
 Execution History and Results:
 {"="*40}
-{"\n\n".join(results_context)}
+{results_str}
 {"="*40}
 
 Please compile, summarize, and synthesize these findings into a final, user-friendly response.
@@ -179,7 +194,20 @@ Please compile, summarize, and synthesize these findings into a final, user-frie
 
     async def _dispatch_sub_agent(self, agent_id: str, task: str, session_id: str) -> str:
         """Invokes the specific sub-agent handler asynchronously."""
-        if agent_id == "web_search":
+        if agent_id == "browser_agentic_task":
+            from core.browser_agent import browser_agent
+            try:
+                # BrowserAgent uses the isolated session_id profile internally
+                res = await browser_agent.run_agentic_task(task, session_id=session_id)
+                # run_agentic_task returns a dict {"success": bool, "result": str, ...}
+                if isinstance(res, dict):
+                    return str(res.get("result") or res.get("error") or res)
+                return str(res)
+            except Exception as e:
+                logger.error(f"❌ Browser Agent failed on task '{task}': {e}", exc_info=True)
+                return f"Browser Agent Error: {str(e)}"
+
+        elif agent_id == "web_search":
             from tools.third_party_tools import search_web
             res = await search_web(task)
             return res.get("result") or f"Search failed: {res.get('error')}"

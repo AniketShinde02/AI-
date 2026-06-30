@@ -170,7 +170,7 @@ class RAGOracle:
                         "content": f"Context:\n{context_text}\n\nQuestion: {query}"
                     }
                 ],
-                model="llama-3.1-8b-instant"
+                model="gpt-oss-20b"
             )
             
             answer = completion.choices[0].message.content

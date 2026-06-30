@@ -161,6 +161,34 @@ CAPABILITY_DEFINITIONS: List[CapabilityDef] = [
         },
     ),
 
+    CapabilityDef(
+        id="pc_file_explorer",
+        name="File Explorer",
+        description="Open Windows File Explorer at a specific path.",
+        category="applications",
+        permissions_required=False,
+        requires_approval=False,
+        target_param="target_path",
+        confirm_template="Opening Explorer at {target}.",
+        groq_schema={
+            "type": "function",
+            "function": {
+                "name": "pc_file_explorer",
+                "description": "Open Windows File Explorer at a specific path.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "target_path": {
+                            "type": "string",
+                            "description": "The directory path to open."
+                        }
+                    },
+                    "required": ["target_path"]
+                }
+            }
+        },
+    ),
+
     # ── Screenshot ────────────────────────────────────────────
 
     CapabilityDef(
@@ -178,6 +206,34 @@ CAPABILITY_DEFINITIONS: List[CapabilityDef] = [
                 "name": "pc_take_screenshot",
                 "description": "Take a screenshot of the primary display.",
                 "parameters": {"type": "object", "properties": {}, "required": []}
+            }
+        },
+    ),
+
+    CapabilityDef(
+        id="vision_analyze_screen",
+        name="Analyze Screen",
+        description="Capture the primary display and use Gemini Vision to reason about its contents.",
+        category="vision",
+        permissions_required=False,
+        requires_approval=False,
+        target_param="query",
+        confirm_template="Analyzing screen.",
+        groq_schema={
+            "type": "function",
+            "function": {
+                "name": "vision_analyze_screen",
+                "description": "Capture the primary display and answer a specific user query using Vision AI.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The question to ask the vision model about the screen."
+                        }
+                    },
+                    "required": ["query"]
+                }
             }
         },
     ),
@@ -415,6 +471,58 @@ CAPABILITY_DEFINITIONS: List[CapabilityDef] = [
                         "url": {"type": "string", "description": "The full URL to open (e.g. https://google.com)"}
                     },
                     "required": ["url"]
+                }
+            }
+        },
+    ),
+
+    CapabilityDef(
+        id="browser_download",
+        name="Browser Download",
+        description="Download a file from a URL to a local destination.",
+        category="browser",
+        permissions_required=False,
+        requires_approval=False,
+        target_param="url",
+        confirm_template="Downloading {target}.",
+        groq_schema={
+            "type": "function",
+            "function": {
+                "name": "browser_download",
+                "description": "Download a file from a URL to a local destination.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "The URL to download from."},
+                        "dest": {"type": "string", "description": "The local path to save the file."}
+                    },
+                    "required": ["url", "dest"]
+                }
+            }
+        },
+    ),
+
+    CapabilityDef(
+        id="browser_upload",
+        name="Browser Upload",
+        description="Upload a local file to a specific file input element.",
+        category="browser",
+        permissions_required=False,
+        requires_approval=False,
+        target_param="file_path",
+        confirm_template="Uploading {target}.",
+        groq_schema={
+            "type": "function",
+            "function": {
+                "name": "browser_upload",
+                "description": "Upload a local file to a specific file input element on the page.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "selector": {"type": "string", "description": "The CSS or XPath selector of the input[type='file']."},
+                        "file_path": {"type": "string", "description": "The absolute path of the local file to upload."}
+                    },
+                    "required": ["selector", "file_path"]
                 }
             }
         },

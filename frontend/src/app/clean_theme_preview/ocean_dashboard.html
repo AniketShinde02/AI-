@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ocean AI - Workspace</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0D9488", // Teal 600
+                        "primary-container": "#CCFBF1", // Teal 100
+                        "on-primary-container": "#042F2E", // Teal 900
+                        surface: "#F8FAFC", // Slate 50
+                        "surface-container": "#F1F5F9", // Slate 100
+                        "surface-container-low": "#FFFFFF",
+                        "surface-container-lowest": "#FFFFFF",
+                        "on-surface": "#0F172A",
+                        "on-surface-variant": "#64748B",
+                        "surface-variant": "#E2E8F0",
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "headline": ["Public Sans", "sans-serif"],
+                        "display": ["Public Sans", "sans-serif"],
+                        "body": ["Public Sans", "sans-serif"],
+                        "label": ["Public Sans", "sans-serif"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Public Sans', sans-serif;
+            background-color: #F0F9FF; /* Light Ocean Breeze blue */
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .terminal-glow {
+            box-shadow: inset 0 0 20px rgba(13, 148, 136, 0.05);
+        }
+        /* Custom scrollbar for terminal and chat */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94A3B8;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="text-on-surface">
+<!-- TopAppBar (JSON Mapping) -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-md shadow-sm flex items-center justify-between px-6 h-16 w-full">
+<div class="flex items-center gap-4">
+<button class="md:hidden p-2 text-primary active:scale-95 duration-150 rounded-full hover:bg-primary/10">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h1 class="font-headline text-headline-sm tracking-tight text-xl font-bold text-primary">AI Workspace</h1>
+</div>
+<div class="flex items-center gap-3">
+<div class="hidden md:flex items-center gap-1 bg-surface-container px-3 py-1.5 rounded-full">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="text-xs font-medium text-on-surface-variant">System Optimal</span>
+</div>
+<div class="w-9 h-9 rounded-full bg-primary/20 border-2 border-primary/10 flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional studio portrait of a young tech professional with a friendly expression. The lighting is bright and airy with soft blue and teal highlights in the background, matching a clean light-mode ocean-themed design system. The image has a shallow depth of field and high clarity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1IrcR3wzssXrArqhE7Q4dHFxHqJf6uHf3VvKzIvsOnjmX7BTwpOTkcdmUWKunZ699ezMkNRZe2Rlq7cGNiFQYNnvdrzHi_eRWqJPgUxVULmZ8BranypZrf0GRTBV-EQBrIWwGya45m9Im1_5eaznvZwdPSmgnT6HAEpXnqoPtx7-SH6ftsJJ_edHcXg4LqAds7CjNaaUBmMu5JmKeUir-sJzftb0x9EH5kiFXY9hW8J84fJ2zUupFdvq-n-xSz36xCDgldaVnS30"/>
+</div>
+</div>
+</header>
+<!-- NavigationDrawer (JSON Mapping - Desktop Only) -->
+<aside class="fixed left-0 top-0 h-full z-40 hidden md:flex flex-col py-6 h-full w-72 rounded-r-xl bg-surface shadow-xl pt-20">
+<div class="px-6 mb-8">
+<span class="text-2xl font-black text-primary italic">Ocean AI</span>
+</div>
+<nav class="flex-1 px-2">
+<!-- Dashboard (Active) -->
+<a class="bg-primary-container text-on-primary-container rounded-full mx-2 my-1 px-4 py-3 flex items-center gap-3 font-label text-label-large hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span>Dashboard</span>
+</a>
+<!-- Other Tabs (Inactive) -->
+<a class="text-on-surface-variant hover:bg-surface-variant/30 rounded-full mx-2 my-1 px-4 py-3 flex items-center gap-3 font-label text-label-large hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span>Agent Chat</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-variant/30 rounded-full mx-2 my-1 px-4 py-3 flex items-center gap-3 font-label text-label-large hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">terminal</span>
+<span>System Logs</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-variant/30 rounded-full mx-2 my-1 px-4 py-3 flex items-center gap-3 font-label text-label-large hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">list_alt</span>
+<span>Active Tasks</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-variant/30 rounded-full mx-2 my-1 px-4 py-3 flex items-center gap-3 font-label text-label-large hover:translate-x-1 duration-200 mt-auto" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="md:ml-72 pt-20 pb-24 md:pb-8 px-4 md:px-8 min-h-screen">
+<!-- Dashboard Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
+<!-- Hero Greeting & Stats (Asymmetric Bento) -->
+<div class="lg:col-span-8 flex flex-col gap-6">
+<div class="bg-white p-8 rounded-xl shadow-sm border border-primary/5 relative overflow-hidden">
+<div class="relative z-10">
+<h2 class="text-3xl font-extrabold text-on-surface mb-2">Good morning, Commander.</h2>
+<p class="text-on-surface-variant max-w-md">Your autonomous fleet has completed 14 tasks since you last checked in. All systems are operating within peak parameters.</p>
+</div>
+<div class="absolute -right-12 -top-12 opacity-10">
+<span class="material-symbols-outlined text-[12rem] text-primary">waves</span>
+</div>
+</div>
+<!-- Chat Interface -->
+<div class="bg-white rounded-xl shadow-sm border border-primary/5 flex flex-col h-[500px]">
+<div class="p-4 border-b border-surface-variant flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="font-bold text-primary">Agent Nexus</span>
+</div>
+<button class="text-on-surface-variant hover:text-primary p-1">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto p-6 space-y-6">
+<!-- Bot Message -->
+<div class="flex gap-4 max-w-[85%]">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+</div>
+<div class="bg-surface-container rounded-2xl rounded-tl-none p-4 text-on-surface text-sm leading-relaxed">
+                                I've finished scraping the target repositories. Would you like me to begin the architectural analysis or generate the dependency graph first?
+                            </div>
+</div>
+<!-- User Message -->
+<div class="flex gap-4 max-w-[85%] ml-auto flex-row-reverse">
+<div class="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-white text-sm">person</span>
+</div>
+<div class="bg-primary text-white rounded-2xl rounded-tr-none p-4 text-sm leading-relaxed shadow-md shadow-primary/20">
+                                Generate the dependency graph first, then prioritize the security vulnerabilities.
+                            </div>
+</div>
+<!-- Bot Message -->
+<div class="flex gap-4 max-w-[85%]">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+</div>
+<div class="bg-surface-container rounded-2xl rounded-tl-none p-4 text-on-surface text-sm leading-relaxed">
+                                Understood. Initializing GraphViz engine and cross-referencing with the CVE database. ETA: 45 seconds.
+                            </div>
+</div>
+</div>
+<div class="p-4 border-t border-surface-variant">
+<div class="relative flex items-center">
+<input class="w-full pl-4 pr-12 py-3 bg-surface-container border-none rounded-full text-sm focus:ring-2 focus:ring-primary/30" placeholder="Type a command or ask a question..." type="text"/>
+<button class="absolute right-2 p-2 bg-primary text-white rounded-full hover:shadow-lg transition-shadow active:scale-95">
+<span class="material-symbols-outlined text-sm">send</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Sidebar Widgets -->
+<div class="lg:col-span-4 flex flex-col gap-6">
+<!-- Active Tasks Widget -->
+<div class="bg-white p-6 rounded-xl shadow-sm border border-primary/5">
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-bold text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">checklist</span>
+                            Active Tasks
+                        </h3>
+<span class="text-xs font-semibold text-primary bg-primary-container px-2 py-0.5 rounded-full">3 Running</span>
+</div>
+<div class="space-y-4">
+<div class="p-4 bg-surface rounded-lg border border-primary/5 hover:border-primary/20 transition-colors">
+<div class="flex justify-between items-start mb-2">
+<span class="text-sm font-medium text-on-surface">Data Extraction</span>
+<span class="text-[10px] uppercase tracking-wider font-bold text-primary">82%</span>
+</div>
+<div class="w-full bg-surface-variant h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full transition-all duration-1000" style="width: 82%"></div>
+</div>
+</div>
+<div class="p-4 bg-surface rounded-lg border border-primary/5">
+<div class="flex justify-between items-start mb-2">
+<span class="text-sm font-medium text-on-surface">Cloud Deployment</span>
+<span class="text-[10px] uppercase tracking-wider font-bold text-amber-500">Pending</span>
+</div>
+<div class="w-full bg-surface-variant h-1.5 rounded-full">
+<div class="bg-amber-500/30 h-full w-4 animate-ping"></div>
+</div>
+</div>
+<div class="p-4 bg-surface rounded-lg border border-primary/5">
+<div class="flex justify-between items-start mb-2">
+<span class="text-sm font-medium text-on-surface">Vector Indexing</span>
+<span class="text-[10px] uppercase tracking-wider font-bold text-emerald-500 italic">Starting</span>
+</div>
+<div class="w-full bg-surface-variant h-1.5 rounded-full"></div>
+</div>
+</div>
+</div>
+<!-- System Logs (Terminal-style) -->
+<div class="bg-slate-900 rounded-xl shadow-xl overflow-hidden terminal-glow h-full min-h-[300px] flex flex-col">
+<div class="bg-slate-800 px-4 py-2 flex items-center gap-2 border-b border-slate-700">
+<div class="flex gap-1.5">
+<div class="w-2.5 h-2.5 rounded-full bg-rose-500"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-amber-500"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+</div>
+<span class="text-[10px] text-slate-400 font-mono ml-4">root@ocean-ai:~/logs</span>
+</div>
+<div class="p-4 font-mono text-[11px] leading-relaxed overflow-y-auto flex-1 space-y-1">
+<p class="text-emerald-400">[OK] <span class="text-slate-300">Connection established to Neural-Link-04</span></p>
+<p class="text-teal-400">[INFO] <span class="text-slate-400">Memory optimization routine initiated...</span></p>
+<p class="text-emerald-400">[OK] <span class="text-slate-300">Allocated 4.2GB virtual swap</span></p>
+<p class="text-amber-400">[WARN] <span class="text-slate-400">Latency spike detected in Region-East-1 (42ms)</span></p>
+<p class="text-emerald-400">[OK] <span class="text-slate-300">Switched to fallback edge node: Dublin-02</span></p>
+<p class="text-teal-400">[INFO] <span class="text-slate-400">Agent "Nexus" processing prompt...</span></p>
+<p class="text-teal-400">[INFO] <span class="text-slate-400">Querying VectorStore-Prime...</span></p>
+<p class="text-emerald-400">[OK] <span class="text-slate-300">Retrieved 12 relevant context chunks</span></p>
+<div class="flex items-center gap-1 mt-2">
+<span class="text-emerald-500">➜</span>
+<span class="text-slate-400 animate-pulse">_</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (JSON Mapping - Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-2 pb-safe bg-surface/90 backdrop-blur-lg rounded-t-xl z-50 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+<!-- Home (Active) -->
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-xl p-2 active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined font-label text-label-small" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="text-[10px] font-bold">Home</span>
+</a>
+<!-- Other Tabs -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 hover:bg-primary/5 active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined font-label text-label-small">list_alt</span>
+<span class="text-[10px]">Logs</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 hover:bg-primary/5 active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined font-label text-label-small">checklist</span>
+<span class="text-[10px]">Tasks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 hover:bg-primary/5 active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined font-label text-label-small">smart_toy</span>
+<span class="text-[10px]">Chat</span>
+</a>
+</nav>
+<!-- Contextual FAB (Hidden on details per mandate, but fits here for creation) -->
+<button class="fixed bottom-24 right-6 md:bottom-8 md:right-8 w-14 h-14 bg-primary text-white rounded-full shadow-lg shadow-primary/40 flex items-center justify-center active:scale-90 transition-transform z-40">
+<span class="material-symbols-outlined">add</span>
+</button>
+<script>
+        // Simple Interaction logic
+        document.addEventListener('DOMContentLoaded', () => {
+            // Auto-scroll terminal and chat to bottom
+            const terminal = document.querySelector('.terminal-glow .overflow-y-auto');
+            const chat = document.querySelector('.flex-1.overflow-y-auto');
+            
+            if (terminal) terminal.scrollTop = terminal.scrollHeight;
+            if (chat) chat.scrollTop = chat.scrollHeight;
+
+            // Micro-interaction for tasks
+            const progressBars = document.querySelectorAll('.bg-primary.h-full');
+            progressBars.forEach(bar => {
+                let width = parseInt(bar.style.width);
+                setInterval(() => {
+                    if (width < 99) {
+                        width += Math.random() * 0.5;
+                        bar.style.width = width + '%';
+                    }
+                }, 3000);
+            });
+        });
+    </script>
+</body></html>

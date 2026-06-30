@@ -63,7 +63,8 @@ Details:
 
 Rules:
 1. Handle Hinglish naturally (e.g., 'chrome open kro' -> tool: 'pc_open_app', target: 'chrome').
-2. VOICE STT HALLUCINATION RULE: Voice transcribers frequently hallucinate phonetically.
+2. COMPLEX INTENT RULE: If the user asks for a multi-step action or workflow (e.g., "open youtube and play a song", "search for X on google", "go to amazon and buy Y"), you MUST set 'tool' to 'browser_agentic_task' and 'target' to the full user request. Do NOT use 'pc_open_app' for complex tasks. 'pc_open_app' is ONLY for literally launching an app and doing nothing else.
+3. VOICE STT HALLUCINATION RULE: Voice transcribers frequently hallucinate phonetically.
    - Look at the Target App Anchor Dictionary and Target Task Cards Anchor Dictionary. If the transcribed word sounds highly similar to a known app or card in the context of the action, extract the exact word/id.
 3. If the user requests to run/execute/start a pre-configured task card (e.g., 'Run Google Maps Leads card with Austin query', 'start doc_ppt_generation_v1 with notepad app_name'), set 'tool' to 'run_task_card' and 'target' to the matching card ID (e.g. 'google_maps_leads_v1' or 'doc_ppt_generation_v1').
 4. If 'tool' is 'run_task_card', identify and extract any input parameters mentioned in the query (like 'query' or 'app_name') and place them as key-value pairs in the 'runtime_inputs' JSON object.

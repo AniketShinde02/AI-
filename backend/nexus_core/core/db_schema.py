@@ -142,6 +142,16 @@ def init_db_sync(db_path: str = DB_PATH) -> None:
         """)
 
         cursor.execute("""
+            CREATE TABLE IF NOT EXISTS capability_health (
+                capability_id TEXT PRIMARY KEY,
+                total_runs INTEGER DEFAULT 0,
+                successful_runs INTEGER DEFAULT 0,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(capability_id) REFERENCES capabilities(id)
+            )
+        """)
+
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS discovered_apps (
                 app_name TEXT PRIMARY KEY,
                 executable_path TEXT,
@@ -246,6 +256,18 @@ def init_db_sync(db_path: str = DB_PATH) -> None:
             CREATE TABLE IF NOT EXISTS system_identity (
                 key TEXT PRIMARY KEY,
                 value TEXT
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS browser_sessions (
+                session_id TEXT PRIMARY KEY,
+                current_url TEXT,
+                page_title TEXT,
+                last_action TEXT,
+                tab_count INTEGER DEFAULT 1,
+                session_state TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 

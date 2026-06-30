@@ -97,8 +97,11 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-2">
               {[
                 { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B", badge: "GROQ" },
-                { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (Fast)", badge: "GROQ" },
+                { value: "gpt-oss-20b", label: "GPT OSS 20B", badge: "GROQ" },
                 { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash", badge: "GOOGLE" },
+                { value: "models/gemini-2.0-flash-exp", label: "Gemini 2.5 Flash Native", badge: "GOOGLE" },
+                { value: "gemini-3.0-flash-live", label: "Gemini 3 Flash Live", badge: "GOOGLE" },
+                { value: "gemini-3.5-live-translate", label: "Gemini 3.5 Live Translate", badge: "GOOGLE" },
                 { value: "deepseek-chat", label: "DeepSeek Chat", badge: "DEEPSEEK" },
                 { value: "mistral-large-latest", label: "Mistral Large", badge: "MISTRAL" },
                 { value: "pixtral-large-2411", label: "Pixtral Large", badge: "MISTRAL" },

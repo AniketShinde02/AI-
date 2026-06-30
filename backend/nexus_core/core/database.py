@@ -185,17 +185,6 @@ class NexusDatabase:
     # Agents
     # ------------------------------------------------------------------
 
-    async def get_agents(self) -> List[Dict[str, Any]]:
-        async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute(
-                "SELECT id, name, status, description, color, runtime, calls FROM agents ORDER BY name ASC"
-            ) as cursor:
-                rows = await cursor.fetchall()
-                return [{
-                    "id": r[0], "name": r[1], "status": r[2],
-                    "description": r[3], "color": r[4], "runtime": r[5], "calls": r[6]
-                } for r in rows]
-
     async def create_agent(self, agent: Dict[str, Any]):
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("""
@@ -345,18 +334,58 @@ class NexusDatabase:
     async def get_capability(self, cap_id: str) -> Optional[Dict[str, Any]]:
         async with aiosqlite.connect(DB_PATH) as db:
             async with db.execute(
-                "SELECT id, name, description, category, permissions_required, requires_approval, enabled "
-                "FROM capabilities WHERE id=?",
-                (cap_id,)
+                "SELECT * FROM capabilities WHERE id = ?", (cap_id,)
             ) as cursor:
                 row = await cursor.fetchone()
                 if row:
                     return {
-                        "id": row[0], "name": row[1], "description": row[2],
-                        "category": row[3], "permissions_required": bool(row[4]),
-                        "requires_approval": bool(row[5]), "enabled": bool(row[6])
+                        "id": row[0],
+                        "name": row[1],
+                        "description": row[2],
+                        "category": row[3],
+                        "permissions_required": bool(row[4]),
+                        "requires_approval": bool(row[5]),
+                        "enabled": bool(row[6])
                     }
                 return None
+
+    async def log_verification(self, feature: str, status: str, result: str, evidence: str = ""):
+        """Update the verification matrix and capability health."""
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT OR REPLACE INTO verification_matrix (feature, status, last_test, result, evidence)
+                VALUES (?, ?, ?, ?, ?)
+            """, (feature, status, datetime.now(timezone.utc).isoformat(), result, evidence))
+            
+            # Update capability health telemetry
+            await db.execute("""
+                INSERT INTO capability_health (capability_id, total_runs, successful_runs, last_updated)
+                VALUES (?, 1, ?, ?)
+                ON CONFLICT(capability_id) DO UPDATE SET 
+                    total_runs = total_runs + 1,
+                    successful_runs = successful_runs + excluded.successful_runs,
+                    last_updated = excluded.last_updated
+            """, (feature, 1 if status == "PASS" else 0, datetime.now(timezone.utc).isoformat()))
+            await db.commit()
+
+    async def get_capability_health(self) -> List[Dict[str, Any]]:
+        """Retrieve telemetry health of all capabilities."""
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("""
+                SELECT capability_id, total_runs, successful_runs,
+                       ROUND(CAST(successful_runs AS FLOAT) / total_runs * 100, 2) as health_percentage,
+                       last_updated
+                FROM capability_health
+                ORDER BY health_percentage ASC
+            """) as cursor:
+                rows = await cursor.fetchall()
+                return [{
+                    "capability_id": row[0],
+                    "total_runs": row[1],
+                    "successful_runs": row[2],
+                    "health_percentage": row[3],
+                    "last_updated": row[4]
+                } for row in rows]
 
     async def get_user_permission(self, user_id: str, cap_id: str) -> Optional[str]:
         async with aiosqlite.connect(DB_PATH) as db:
@@ -366,6 +395,25 @@ class NexusDatabase:
             ) as cursor:
                 row = await cursor.fetchone()
                 return row[0] if row else None
+
+    async def get_agents(self) -> List[Dict[str, Any]]:
+        """Retrieve all registered agents."""
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute(
+                "SELECT id, name, status, description, color, runtime, calls, created_at, updated_at FROM agents"
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [{
+                    "id": row[0],
+                    "name": row[1],
+                    "status": row[2],
+                    "description": row[3],
+                    "color": row[4],
+                    "runtime": row[5],
+                    "calls": row[6],
+                    "created_at": row[7],
+                    "updated_at": row[8]
+                } for row in rows]
 
     async def set_user_permission(self, user_id: str, cap_id: str, state: str):
         async with aiosqlite.connect(DB_PATH) as db:
@@ -391,17 +439,6 @@ class NexusDatabase:
     # ------------------------------------------------------------------
     # Verification matrix
     # ------------------------------------------------------------------
-
-    async def log_verification(self, feature: str, status: str, result: str, evidence: str):
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("""
-                INSERT INTO verification_matrix (feature, status, last_test, result, evidence)
-                VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)
-                ON CONFLICT(feature) DO UPDATE SET
-                    status=excluded.status, last_test=CURRENT_TIMESTAMP,
-                    result=excluded.result, evidence=excluded.evidence
-            """, (feature, status, result, evidence))
-            await db.commit()
 
     async def get_verification_status(self) -> List[Dict[str, Any]]:
         async with aiosqlite.connect(DB_PATH) as db:
@@ -457,6 +494,45 @@ class NexusDatabase:
                     except Exception:
                         pass
                 return list(set(apps))
+    # ------------------------------------------------------------------
+    # Browser Sessions
+    # ------------------------------------------------------------------
+
+    async def get_browser_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute(
+                "SELECT session_id, current_url, page_title, last_action, tab_count, session_state "
+                "FROM browser_sessions WHERE session_id=?", (session_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    return {
+                        "session_id": row[0],
+                        "current_url": row[1],
+                        "page_title": row[2],
+                        "last_action": row[3],
+                        "tab_count": row[4],
+                        "session_state": row[5]
+                    }
+                return None
+
+    async def upsert_browser_session(
+        self, session_id: str, current_url: str, page_title: str,
+        last_action: str, tab_count: int, session_state: str
+    ):
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT INTO browser_sessions (session_id, current_url, page_title, last_action, tab_count, session_state, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    current_url=excluded.current_url,
+                    page_title=excluded.page_title,
+                    last_action=excluded.last_action,
+                    tab_count=excluded.tab_count,
+                    session_state=excluded.session_state,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (session_id, current_url, page_title, last_action, tab_count, session_state))
+            await db.commit()
 
 
 db = NexusDatabase()

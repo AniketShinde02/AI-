@@ -85,7 +85,8 @@ class BrowserAgent:
             os.makedirs(user_data_dir, exist_ok=True)
             session._context = await session._playwright.chromium.launch_persistent_context(
                 user_data_dir,
-                headless=False,
+                executable_path=r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+                headless=True,
                 args=[
                     "--no-sandbox",
                     "--disable-blink-features=AutomationControlled",
@@ -94,7 +95,7 @@ class BrowserAgent:
                     "--disable-features=IsolateOrigins,site-per-process",
                 ],
                 viewport={"width": 1280, "height": 720},
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
             await session._context.add_init_script(_STEALTH_JS)
 
@@ -102,6 +103,17 @@ class BrowserAgent:
                 session._page = session._context.pages[0]
             else:
                 session._page = await session._context.new_page()
+
+            try:
+                from core.database import db
+                db_session = await db.get_browser_session(session.session_id)
+                if db_session:
+                    session.memory.current_url = db_session["current_url"]
+                    session.memory.page_title = db_session["page_title"]
+                    session.memory.last_action = db_session["last_action"]
+                    session.memory.session_state = db_session["session_state"]
+            except Exception as e:
+                logger.debug(f"DB Hydration failed: {e}")
 
         return session._page
 
@@ -122,6 +134,19 @@ class BrowserAgent:
                     session.memory.current_tab_index = 0
         except Exception as e:
             logger.debug(f"Memory sync failed for session {session_id}: {e}")
+
+        try:
+            from core.database import db
+            asyncio.create_task(db.upsert_browser_session(
+                session_id=session.session_id,
+                current_url=session.memory.current_url,
+                page_title=session.memory.page_title,
+                last_action=session.memory.last_action,
+                tab_count=session.memory.total_tabs,
+                session_state=session.memory.session_state
+            ))
+        except Exception as e:
+            logger.debug(f"DB sync failed: {e}")
 
     def get_workspace_state(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Return browser memory as a workspace state dict."""
@@ -181,11 +206,46 @@ class BrowserAgent:
                 await page.goto(url, wait_until="networkidle", timeout=15000)
             path = os.path.join(os.path.expanduser("~"), f"nexus_screenshot_{session.session_id}.png")
             await page.screenshot(path=path)
+            
+            img_bytes = await page.screenshot(type="jpeg", quality=60)
+            img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+            
+            try:
+                from core.vision_parser import vision_parser
+                analysis = await vision_parser.analyze_screenshot(
+                    img_b64, 
+                    prompt="Describe the current webpage concisely. What UI elements are visible?",
+                    use_som=False
+                )
+            except Exception as e:
+                analysis = f"Vision failed: {e}"
+
             await self._update_memory_from_page(session_id)
-            return {"success": True, "verified": True, "result": f"Screenshot saved to {path}"}
+            return {"success": True, "verified": True, "result": f"Screenshot saved to {path} | Vision: {analysis}"}
         except Exception as e:
             return {"success": False, "verified": False, "error": str(e)}
+    async def download(self, url: str, dest: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        session = self._get_session(session_id)
+        try:
+            page = await self._ensure_page(session_id)
+            async with page.expect_download(timeout=30000) as download_info:
+                await page.goto(url, wait_until="networkidle", timeout=15000)
+            dl = await download_info.value
+            await dl.save_as(dest)
+            return {"success": True, "verified": True, "result": f"Downloaded to {dest}"}
+        except Exception as e:
+            return {"success": False, "verified": False, "error": f"Download failed: {e}"}
 
+    async def upload(self, selector: str, file_path: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        session = self._get_session(session_id)
+        try:
+            page = await self._ensure_page(session_id)
+            if not os.path.exists(file_path):
+                return {"success": False, "verified": False, "error": f"File not found: {file_path}"}
+            await page.set_input_files(selector, file_path, timeout=10000)
+            return {"success": True, "verified": True, "result": f"Uploaded {file_path} to {selector}"}
+        except Exception as e:
+            return {"success": False, "verified": False, "error": f"Upload failed: {e}"}
     # ---------------------------------------------------------------------------
     # Phase 4: Observe-Decide-Execute-Verify helpers
     # ---------------------------------------------------------------------------
@@ -284,7 +344,29 @@ class BrowserAgent:
         try:
             page = await self._ensure_page(session_id)
             url_before = page.url
-            await page.click(selector, timeout=8000)
+            
+            # Selector Recovery / Self-Healing strategy
+            clicked = False
+            fallbacks = [
+                selector,
+                f"text='{selector}'",
+                f"text={selector}",
+                f"xpath=//*[contains(text(), '{selector}')]",
+                f"xpath=//*[@aria-label='{selector}']"
+            ]
+            
+            last_err = None
+            for f in fallbacks:
+                try:
+                    await page.click(f, timeout=3000)
+                    clicked = True
+                    break
+                except Exception as e:
+                    last_err = e
+            
+            if not clicked:
+                raise last_err or Exception("All click strategies failed.")
+                
             await asyncio.sleep(0.5)
             await self._update_memory_from_page(session_id)
             url_changed = page.url != url_before
@@ -320,15 +402,63 @@ class BrowserAgent:
             return {"success": False, "verified": False, "tool": "browser_extract",
                     "target": url, "error": str(e)}
 
+    async def download(self, url: str, dest: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Download a file from a URL to a local destination."""
+        start = time.perf_counter()
+        try:
+            page = await self._ensure_page(session_id)
+            async with page.expect_download() as download_info:
+                await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+            download = await download_info.value
+            await download.save_as(dest)
+            elapsed = f"{time.perf_counter() - start:.2f}s"
+            return {
+                "success": True, "verified": True, "execution_time": elapsed,
+                "tool": "browser_download", "target": dest, "error": None,
+                "result": f"Downloaded to '{dest}'"
+            }
+        except Exception as e:
+            elapsed = f"{time.perf_counter() - start:.2f}s"
+            return {"success": False, "verified": False, "execution_time": elapsed, "tool": "browser_download", "target": dest, "error": str(e)}
+
+    async def upload(self, selector: str, file_path: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Upload a local file to a specific file input element."""
+        start = time.perf_counter()
+        try:
+            import os
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"File '{file_path}' not found.")
+            
+            page = await self._ensure_page(session_id)
+            await page.set_input_files(selector, file_path, timeout=8000)
+            elapsed = f"{time.perf_counter() - start:.2f}s"
+            return {
+                "success": True, "verified": True, "execution_time": elapsed,
+                "tool": "browser_upload", "target": selector, "error": None,
+                "result": f"Uploaded '{file_path}' to '{selector}'"
+            }
+        except Exception as e:
+            elapsed = f"{time.perf_counter() - start:.2f}s"
+            return {"success": False, "verified": False, "execution_time": elapsed, "tool": "browser_upload", "target": selector, "error": str(e)}
+
     async def browser_type(self, selector: str, text: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Type text into a field."""
         session = self._get_session(session_id)
         start = time.perf_counter()
         try:
             page = await self._ensure_page(session_id)
-            await page.click(selector, timeout=5000)
-            await page.click(selector, click_count=3, timeout=5000)
-            await page.type(selector, text, delay=30)
+            
+            # Using fill with force=True is much more robust than click+type
+            # as it ignores elements that might be covering the input (like cookie banners)
+            try:
+                await page.fill(selector, text, force=True, timeout=5000)
+            except Exception as fill_err:
+                logger.warning(f"Fill failed, falling back to click+type for '{selector}': {fill_err}")
+                await page.click(selector, force=True, timeout=5000)
+                await page.keyboard.press("Control+A")
+                await page.keyboard.press("Backspace")
+                await page.type(selector, text, delay=30)
+                
             value = await page.evaluate(
                 f"(sel) => {{ const el = document.querySelector(sel); return el ? (el.value || el.innerText) : ''; }}",
                 selector
@@ -543,47 +673,63 @@ class BrowserAgent:
             # --- OBSERVE phase (before action) ---
             observation = await self.observe(session_id)
 
-            # --- EXECUTE phase ---
+            # --- EXECUTE phase with RETRY LOOP ---
             step_result: Dict[str, Any] = {}
-
-            try:
-                if action == "open_url":
-                    step_result = await self.open_url(target, session_id)
-                elif action == "search":
-                    step_result = await self.search(target, session_id)
-                elif action == "click":
-                    step_result = await self._smart_click(target, session_id)
-                elif action == "type":
-                    step_result = await self.browser_type(target, text, session_id)
-                elif action == "submit":
-                    step_result = await self.browser_submit(target or None, session_id)
-                elif action == "observe":
-                    step_result = {"success": True, "verified": True, "result": observation}
-                elif action == "screenshot":
-                    step_result = await self.screenshot(session_id=session_id)
-                elif action == "wait":
-                    secs = float(target) if target else 1.0
-                    await asyncio.sleep(min(secs, 10.0))
-                    step_result = {"success": True, "verified": True, "result": f"Waited {secs}s"}
-                elif action == "verify_url":
-                    await self._update_memory_from_page(session_id)
-                    found = target.lower() in session.memory.current_url.lower()
-                    step_result = {
-                        "success": found, "verified": found,
-                        "result": f"URL {'contains' if found else 'does not contain'} '{target}'"
-                    }
-                elif action == "verify_text":
-                    found = await self._find_text_on_page(target, session_id)
-                    step_result = {
-                        "success": found, "verified": found,
-                        "result": f"Text '{target}' {'found' if found else 'NOT found'} on page"
-                    }
-                else:
-                    step_result = {"success": False, "verified": False, "error": f"Unknown action: {action}"}
-
-            except Exception as e:
-                step_result = {"success": False, "verified": False, "error": str(e)}
-                logger.error(f"  Step {i+1} failed with exception on session {session_id}: {e}")
+            max_retries = 3
+            
+            for attempt in range(1, max_retries + 1):
+                try:
+                    if action == "open_url":
+                        step_result = await self.open_url(target, session_id)
+                    elif action == "search":
+                        step_result = await self.search(target, session_id)
+                    elif action == "click":
+                        step_result = await self._smart_click(target, session_id)
+                    elif action == "type":
+                        step_result = await self.browser_type(target, text, session_id)
+                    elif action == "submit":
+                        step_result = await self.browser_submit(target or None, session_id)
+                    elif action == "observe":
+                        step_result = {"success": True, "verified": True, "result": observation}
+                    elif action == "screenshot":
+                        step_result = await self.screenshot(session_id=session_id)
+                    elif action == "wait":
+                        secs = float(target) if target else 1.0
+                        await asyncio.sleep(min(secs, 10.0))
+                        step_result = {"success": True, "verified": True, "result": f"Waited {secs}s"}
+                    elif action == "verify_url":
+                        await self._update_memory_from_page(session_id)
+                        found = target.lower() in session.memory.current_url.lower()
+                        step_result = {
+                            "success": found, "verified": found,
+                            "result": f"URL {'contains' if found else 'does not contain'} '{target}'"
+                        }
+                    elif action == "verify_text":
+                        found = await self._find_text_on_page(target, session_id)
+                        step_result = {
+                            "success": found, "verified": found,
+                            "result": f"Text '{target}' {'found' if found else 'NOT found'} on page"
+                        }
+                    else:
+                        step_result = {"success": False, "verified": False, "error": f"Unknown action: {action}"}
+                        break # Don't retry unknown actions
+                        
+                    # If success, break the retry loop
+                    if step_result.get("success"):
+                        break
+                    else:
+                        raise Exception(step_result.get("error", "Action returned success=False"))
+                        
+                except Exception as e:
+                    step_result = {"success": False, "verified": False, "error": str(e)}
+                    if attempt < max_retries:
+                        backoff = attempt * 1.5
+                        logger.warning(f"  ⚠️ Step {i+1} failed (Attempt {attempt}/{max_retries}): {e}. Retrying in {backoff}s...")
+                        await asyncio.sleep(backoff)
+                        # Force observation refresh before retry
+                        observation = await self.observe(session_id)
+                    else:
+                        logger.error(f"  ❌ Step {i+1} critically failed after {max_retries} attempts: {e}")
 
             # --- VERIFY phase ---
             step_result["step"] = i + 1
@@ -840,10 +986,12 @@ IMPORTANT: Output ONLY valid JSON. No backticks, no markdown, no extra text."""
                     system_prompt=self._AGENTIC_SYSTEM_PROMPT,
                     messages=decide_messages,
                 )
-                # Strip possible markdown fences
+                # Extract JSON block using regex to handle extra conversational text
+                import re
                 clean = raw_decision.strip()
-                if clean.startswith("```"):
-                    clean = clean.split("```")[1].lstrip("json").strip()
+                json_match = re.search(r"\{.*\}", clean, re.DOTALL)
+                if json_match:
+                    clean = json_match.group(0)
                 decision = json.loads(clean)
             except json.JSONDecodeError:
                 logger.warning(f"  [AgenticLoop] LLM returned non-JSON: {raw_decision[:200]}")

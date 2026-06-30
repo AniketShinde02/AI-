@@ -86,7 +86,7 @@ export function AgentWorkspace() {
             <span className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1">
               <Monitor size={10} className="text-zinc-600" /> Focus Window
             </span>
-            <span className="text-[10px] font-mono text-zinc-300 font-semibold truncate" title={state.active_window || "None"}>
+            <span className="text-[10px] font-mono text-zinc-300 font-semibold break-words whitespace-normal leading-tight" title={state.active_window || "None"}>
               {state.active_window || "Desktop"}
             </span>
           </div>
@@ -96,7 +96,7 @@ export function AgentWorkspace() {
             <span className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1">
               <Command size={10} className="text-zinc-600" /> Capability
             </span>
-            <span className="text-[10px] font-mono text-zinc-300 font-semibold truncate" title={state.active_capability || "None"}>
+            <span className="text-[10px] font-mono text-zinc-300 font-semibold break-words whitespace-normal leading-tight" title={state.active_capability || "None"}>
               {state.active_capability || "Idle"}
             </span>
           </div>
@@ -111,42 +111,7 @@ export function AgentWorkspace() {
           </div>
         </div>
 
-        {/* Browser Screenshot Section */}
-        <div className="flex-1 flex flex-col min-h-[140px] bg-black/60 border border-white/5 p-2.5 clip-cut-sm relative">
-          <div className="flex items-center justify-between mb-1.5 shrink-0">
-            <span className="text-[8px] font-quantico font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Globe size={11} className="text-[#00FFFF]" /> Playwright Sandbox Frame
-            </span>
-            {state.browser_screenshot && (
-              <span className="text-[7px] font-mono text-emerald-400 flex items-center gap-1 animate-pulse">
-                <Eye size={8} /> LIVE
-              </span>
-            )}
-          </div>
 
-          {/* Frame Container */}
-          <div className="flex-1 bg-black border border-white/10 relative overflow-hidden flex items-center justify-center min-h-0">
-            {state.browser_screenshot ? (
-              <div className="w-full h-full relative group/frame">
-                <img 
-                  src={`data:image/jpeg;base64,${state.browser_screenshot}`} 
-                  alt="Browser Frame" 
-                  className="w-full h-full object-contain"
-                />
-                {/* HUD Scanlines */}
-                <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none opacity-40"></div>
-                {/* Glowing Corner Accents */}
-                <div className="absolute top-0 left-0 w-3.5 h-3.5 border-t border-l border-[#00FFFF]/50 pointer-events-none"></div>
-                <div className="absolute bottom-0 right-0 w-3.5 h-3.5 border-b border-r border-[#00FFFF]/50 pointer-events-none"></div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-1.5 text-zinc-600">
-                <Globe size={20} className="opacity-20" />
-                <span className="text-[8.5px] font-mono uppercase tracking-widest opacity-40">Browser Session Inactive</span>
-              </div>
-            )}
-          </div>
-        </div>
 
       </div>
     </div>
