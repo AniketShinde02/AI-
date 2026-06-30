@@ -137,7 +137,7 @@ def resolve_browser(user_hint: Optional[str] = None) -> Tuple[Optional[str], str
                     return None, "chromium", True
 
                 exe = _find_executable(browser_key)
-                channel = _CHROMIUM_FAMILY[browser_key]["channel"]
+                channel = str(_CHROMIUM_FAMILY[browser_key]["channel"])
                 if exe:
                     logger.info(f"[BrowserLauncher] User requested '{user_hint}' → {exe}")
                     return exe, channel, False
@@ -161,7 +161,7 @@ def resolve_browser(user_hint: Optional[str] = None) -> Tuple[Optional[str], str
 
     if default and default in _CHROMIUM_FAMILY:
         exe = _find_executable(default)
-        channel = _CHROMIUM_FAMILY[default]["channel"]
+        channel = str(_CHROMIUM_FAMILY[default]["channel"])
         if exe:
             logger.info(f"[BrowserLauncher] Using system default: {exe}")
             return exe, channel, False
