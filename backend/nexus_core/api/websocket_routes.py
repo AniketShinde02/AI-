@@ -8,7 +8,8 @@ import logging
 import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import core.global_state as gs
-from core.voice_session import VoiceSession, SessionState
+from core.voice_session import VoiceSession
+from core.session_state import SessionState
 import time
 import asyncio
 
@@ -116,7 +117,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     async def run_swarm_bg():
                         from core.agent_swarm import swarm_manager
                         try:
-                            res = await swarm_manager.execute_swarm_task(goal, session_id)
+                            res = await swarm_manager.execute_swarm_task(goal, session_id or "")
                             result_text = res.get("result", "Swarm finished with no output.")
                             await session.safe_send_json({
                                 "type": "agent_message",

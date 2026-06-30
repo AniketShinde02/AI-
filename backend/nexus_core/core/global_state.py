@@ -114,15 +114,15 @@ async def lifespan(app: FastAPI):
         log_stage("6. Initializing Lance Memory...")
         import core.lance_memory as lance_memory_module
         # Initialize globally so first query isn't slow
-        lance_memory_module.semantic_memory = lance_memory_module.SemanticMemory(
+        lance_memory_module.semantic_memory = lance_memory_module.SemanticMemory( # type: ignore
             gemini_api_key=os.environ.get("GEMINI_API_KEY", "")
         )
         
         log_stage("7. Registering capabilities...")
-        from core.capabilities import registry
-        from core.capability_registry_def import CAPABILITY_REGISTRATION_TUPLES
-        for cap_id, name, desc, cat, req_perm, req_approval in CAPABILITY_REGISTRATION_TUPLES:
-            await registry.register_tool(cap_id, name, desc, cat, req_perm, req_approval, enabled=True)
+        from core.orchestrator.capabilities import registry
+        from core.orchestrator.registry_def import CAPABILITY_DEFINITIONS
+        for cap in CAPABILITY_DEFINITIONS:
+            await registry.register_tool(cap.id, cap.name, cap.description, cap.category, getattr(cap, "requires_permission", False), getattr(cap, "requires_approval", False), enabled=True)
             
         log_stage("8. Running App Discovery...")
         from core.app_discovery import run_discovery

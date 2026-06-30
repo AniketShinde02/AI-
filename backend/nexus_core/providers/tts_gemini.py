@@ -87,19 +87,24 @@ class GeminiTTS(TTS):
 
             audio_bytes = None
             try:
-                if getattr(response, "candidates", None) and response.candidates[0].content and response.candidates[0].content.parts:
-                    for part in response.candidates[0].content.parts:
-                        if getattr(part, "inline_data", None) and getattr(part.inline_data, "data", None):
-                            audio_bytes = part.inline_data.data
-                            break
+                candidates = response.candidates
+                if candidates and len(candidates) > 0:
+                    first_candidate = candidates[0]
+                    if first_candidate and first_candidate.content and first_candidate.content.parts:
+                        for part in first_candidate.content.parts:
+                            inline_data = getattr(part, "inline_data", None)
+                            if inline_data and getattr(inline_data, "data", None):
+                                audio_bytes = inline_data.data
+                                break
             except Exception as e:
                 logger.warning(f"⚠️ GeminiTTS: Failed to parse response candidates: {e}")
             
             if not audio_bytes:
                 error_msg = "GeminiTTS: No audio data returned by API."
                 logger.error(f"❌ {error_msg}")
-                if getattr(response, "candidates", None) and response.candidates[0].content:
-                    parts = getattr(response.candidates[0].content, "parts", []) or []
+                candidates = response.candidates
+                if candidates and len(candidates) > 0 and candidates[0].content:
+                    parts = getattr(candidates[0].content, "parts", []) or []
                     for part in parts:
                         if getattr(part, "text", None):
                             logger.error(f"   Gemini Text Output instead of Audio: {part.text}")

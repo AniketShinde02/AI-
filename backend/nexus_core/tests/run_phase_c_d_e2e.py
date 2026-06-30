@@ -49,8 +49,10 @@ async def main():
     import config
     config.ENABLE_DAG_ORCHESTRATOR = True  # Test the DAG path
     
+    from typing import cast
+    from fastapi import WebSocket
     ws = DummyWebsocket()
-    session = VoiceSession(ws, session_id="test_e2e_session")
+    session = VoiceSession(cast(WebSocket, ws), session_id="test_e2e_session")
     
     results = {}
     

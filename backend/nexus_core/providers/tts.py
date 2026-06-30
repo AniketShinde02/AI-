@@ -15,11 +15,12 @@ class PcmData:
 class TTS:
     def __init__(self, provider_name: str = "Unknown"):
         self.provider_name = provider_name
+        self.status = ProviderStatus.UNINITIALIZED
     
     async def generate(self, text: str):
         pass
 
-    async def stream_audio(self, text: str, *args, **kwargs) -> AsyncIterator[PcmData]:
+    async def stream_audio(self, text: str, *args, **kwargs) -> AsyncIterator[PcmData | dict]:
         yield PcmData(samples=np.array([]))
 
     async def stop_audio(self):
@@ -89,7 +90,7 @@ class TTSProviderRouter(TTS):
         text: str,
         provider: str = "edge",
         **kwargs
-    ) -> AsyncIterator[PcmData]:
+    ) -> AsyncIterator[PcmData | dict]:
         """
         Routes text to Edge TTS. Returns detailed diagnostics.
         """
@@ -115,7 +116,7 @@ class TTSProviderRouter(TTS):
 
                     bytes_generated = 0
                     async for data in p_instance.stream_audio(text, **kwargs):
-                        bytes_generated += len(data.samples) if hasattr(data, 'samples') else 0
+                        bytes_generated += len(data.samples) if isinstance(data, PcmData) else 0
                         yield data
 
                     if bytes_generated == 0:

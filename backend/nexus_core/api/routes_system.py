@@ -133,6 +133,7 @@ async def take_screenshot():
     if not ImageGrab:
         raise HTTPException(status_code=501, detail="Pillow ImageGrab not installed")
     def _grab():
+        assert ImageGrab is not None
         screenshot = ImageGrab.grab()
         screenshot.thumbnail((1280, 720))
         buffer = io.BytesIO()
