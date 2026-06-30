@@ -16,7 +16,7 @@ Responsibilities:
 import time
 import asyncio
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple, Any
 from collections import deque
 
 logger = logging.getLogger("nexus.provider_governor")
@@ -40,6 +40,52 @@ class ProviderGovernor:
             p: deque() for p in PROVIDER_LIMITS.keys()
         }
         self._lock = asyncio.Lock()
+        
+        # Health tracking: Maps provider or "provider:model" to TTL expiry timestamp
+        self._health_registry: Dict[str, float] = {}
+        
+        # Waste tracking
+        self._waste_metrics: Dict[str, Dict[str, Any]] = {
+            p: {"calls": 0, "failures": 0, "fallbacks": 0, "waste_tokens": 0, "total_latency": 0.0}
+            for p in PROVIDER_LIMITS.keys()
+        }
+
+    def mark_unhealthy(self, provider: str, model: str, ttl: int = 300) -> None:
+        """Ban a provider/model combination for a duration."""
+        key = f"{provider}:{model}"
+        expiry = time.time() + ttl
+        self._health_registry[key] = expiry
+        logger.warning(f"🚫 [Governor] Marked {key} UNHEALTHY until {expiry} ({ttl}s TTL)")
+
+    def is_healthy(self, provider: str, model: str) -> bool:
+        """Check if provider/model is banned."""
+        key = f"{provider}:{model}"
+        expiry = self._health_registry.get(key, 0)
+        return time.time() > expiry
+
+    def log_provider_call(self, provider: str, tokens: int, latency: float, success: bool, fallback_triggered: bool = False) -> None:
+        """Log the result of a provider call to measure waste and latency."""
+        if provider not in self._waste_metrics:
+            self._waste_metrics[provider] = {"calls": 0, "failures": 0, "fallbacks": 0, "waste_tokens": 0, "total_latency": 0.0}
+            
+        m = self._waste_metrics[provider]
+        m["calls"] += 1
+        m["total_latency"] += latency
+        
+        if not success:
+            m["failures"] += 1
+            m["waste_tokens"] += tokens
+            if fallback_triggered:
+                m["fallbacks"] += 1
+
+    def generate_audit_report(self) -> str:
+        lines = ["# Governor Provider Token Waste Report", ""]
+        lines.append("| Provider | Calls | Failures | Fallbacks | Waste Tokens | Avg Latency (s) |")
+        lines.append("|----------|-------|----------|-----------|--------------|-----------------|")
+        for p, m in self._waste_metrics.items():
+            avg_lat = m["total_latency"] / m["calls"] if m["calls"] > 0 else 0.0
+            lines.append(f"| {p:8} | {m['calls']:5} | {m['failures']:8} | {m['fallbacks']:9} | {m['waste_tokens']:12} | {avg_lat:.2f} |")
+        return "\n".join(lines)
 
     def _cleanup_old_records(self, provider: str, now: float) -> None:
         """Removes records older than 60 seconds."""

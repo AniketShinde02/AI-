@@ -1,7 +1,5 @@
 import asyncio
 import logging
-from typing import Any
-from unittest.mock import patch
 
 logger = logging.getLogger("nexus.tests.failure_injector")
 
@@ -19,7 +17,7 @@ class FailureInjector:
         
         original_route = None
         try:
-            from core.model_router import model_router
+            from core.provider.router import model_router
             original_route = model_router.route_task
             
             async def fake_route_task(*args, **kwargs):
@@ -31,7 +29,7 @@ class FailureInjector:
             
         finally:
             if original_route:
-                from core.model_router import model_router
+                from core.provider.router import model_router
                 model_router.route_task = original_route
                 logger.info("💉 [Injector] Removed Fake 429 Injection.")
 
@@ -42,7 +40,7 @@ class FailureInjector:
         """
         logger.warning(f"💉 [Injector] Crashing Browser for session {session_id}...")
         try:
-            from core.browser_agent import BrowserAgent
+            from core.browser.facade import BrowserAgent
             agent = BrowserAgent()
             session = agent._get_session(session_id)
             if session._page and not session._page.is_closed():

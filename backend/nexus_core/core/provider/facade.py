@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from core.provider.router import model_router, ModelRouter, TaskClass, AgentTier
+from core.provider.router import model_router, ModelRouter, TaskClass
 from core.provider.governor import governor, ProviderGovernor
 
 logger = logging.getLogger("nexus.provider.facade")

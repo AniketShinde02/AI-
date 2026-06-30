@@ -13,27 +13,23 @@ import io
 import wave
 import re
 from collections import deque
-from typing import Optional, List, Dict, Any, Deque
+from typing import Optional, Any, Deque
 
 import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
 from speech_cleaner import cleaner as speech_cleaner
 import core.global_state as gs
-from core.gemini_live_manager import GeminiLiveSessionManager
+from core.voice.live_manager import GeminiLiveSessionManager
 from core.database import db
-from core.output_processor import output_processor
-from core.action_router import action_router
+from core.planner.processor import output_processor
+from core.planner.action_router import action_router
 
 from core.orchestrator.registry_def import CAPABILITY_DEFINITIONS
 from core.workspace.broadcast import broadcast_workspace_state
-from tools.memory_tools import update_preferences, get_user_memory, delete_user_preference
-from tools.file_tools import read_file, write_file, read_directory
-from tools.third_party_tools import get_weather
-import core.rag_oracle as rag_oracle_module
+from tools.memory_tools import update_preferences
 
 # Split-out mixins
-from core.session_state import SessionState, SessionStateMixin
+from core.workspace.state import SessionState, SessionStateMixin
 from core.voice.tts_worker import SessionTTSMixin
 
 from silero_vad import VADIterator  # type: ignore
@@ -128,22 +124,57 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
         self.gemini_manager = None
         if self.engine == "gemini_live":
             from prompts import get_gemini_live_system_instruction
+            from core.orchestrator.registry_def import CAPABILITY_DEFINITIONS
+            
+            gemini_funcs = []
+            for cap in CAPABILITY_DEFINITIONS:
+                if "function" in cap.groq_schema:
+                    f = cap.groq_schema["function"]
+                    props = f.get("parameters", {}).get("properties", {})
+                    req = f.get("parameters", {}).get("required", [])
+                    gemini_funcs.append({
+                        "name": f["name"],
+                        "description": f["description"],
+                        "parameters": {"type": "OBJECT", "properties": props, "required": req} if props else None
+                    })
+                    
+            from google.genai import types
             self.gemini_manager = GeminiLiveSessionManager(
                 websocket=self.websocket,
                 system_instruction=get_gemini_live_system_instruction(),
                 session_id=self.session_id,
-                model=self.model
+                model=self.model,
+                tools=[types.Tool(function_declarations=gemini_funcs)] if gemini_funcs else None
             )
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
+    async def load_history(self):
+        try:
+            history = await db.get_session_history(self.session_id, limit=10)
+            self.conversation_history.clear()
+            for msg in history:
+                self.conversation_history.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+            logger.info(f"📚 Loaded {len(history)} past messages from DB into memory")
+        except Exception as e:
+            logger.error(f"❌ Failed to load DB history: {e}")
+
     async def connect_gemini(self):
         if self.gemini_manager:
             from prompts import get_gemini_live_system_instruction
             identity = await db.get_system_identity()
-            self.gemini_manager.system_instruction = get_gemini_live_system_instruction(identity)
+            base_instruction = get_gemini_live_system_instruction(identity)
+            
+            history_context = ""
+            if self.conversation_history:
+                history_context = "\n\n--- RECENT CONVERSATION HISTORY ---\n"
+                for msg in self.conversation_history:
+                    role_name = "User" if msg["role"] == "user" else "Agent"
+                    history_context += f"{role_name}: {msg['content']}\n"
+                    
+            self.gemini_manager.system_instruction = base_instruction + history_context
 
             async def on_agent_message(text):
                 clean, trace_val = output_processor.filter_reasoning(text)
@@ -177,15 +208,16 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 self.engine = "nexus"
                 await self.safe_send_json({"type": "engine_mode", "mode": "groq"})
 
-            await self.gemini_manager.connect(on_agent_message, on_disconnect)
+            await self.gemini_manager.connect(on_agent_message, on_disconnect, on_tool_call)
 
     async def execute_action(self, action_intent: dict, turn_id: int):
-        from core.capabilities import registry as cap_registry
+        from core.orchestrator.capabilities import registry as cap_registry
         from core.trace_emitter import emit_trace
         action = action_intent["tool"]
         params = {"target": action_intent.get("target", "")}
 
         await emit_trace(self.websocket, "tool_selected", f"Selected tool: {action}", "🛠️", params)
+        await self.update_workspace_state(status="running", active_capability=action)
         perm = await cap_registry.check_permission("default_user", action)
         res = {"success": False, "error": "Unknown action"}
 
@@ -225,7 +257,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                         "verified": True
                     }
             elif action == "run_task_card":
-                from core.task_cards import task_card_engine
+                from core.workspace.ux_cards import task_card_engine
                 runtime_inputs = action_intent.get("runtime_inputs") or {}
                 card_id = params.get("target", "")
                 res = await task_card_engine.execute_card(
@@ -292,7 +324,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
         
         # Clean up browser session and profiles
         try:
-            from core.browser_agent import browser_agent
+            from core.browser.facade import browser_agent
             if self.session_id:
                 # Wrap in try/except or non-blocking call
                 await browser_agent.close(self.session_id)
@@ -328,7 +360,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
     async def extract_and_save_memory(self, user_msg: str, ai_msg: str, turn_id: int = 0):
         """Background task to extract and persist user preferences."""
         try:
-            import core.lance_memory as lance_memory_module
+            import core.memory.vector_store as lance_memory_module
             mem = await lance_memory_module.get_memory()
             if mem is not None:
                 await mem.add_memory(
@@ -336,7 +368,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                     metadata={"type": "conversation_turn", "turn_id": turn_id, "timestamp": time.time()}
                 )
 
-            from core.model_router import model_router, TaskClass
+            from core.provider.router import model_router
             from tools.memory_tools import MEMORY_TOOLS
             
             # Use Shadow Soldiers tier (cheap/fast) for memory extraction
@@ -345,7 +377,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 "a rule for how you should behave, a fact about themselves, or a request to "
                 "remember something, call the update_preferences tool. If not, output 'NO_PREF'."
             )
-            extraction_input = f"User: {user_msg}\nAssistant: {ai_msg}"
+            extraction_input = f"{extraction_prompt}\nUser: {user_msg}\nAssistant: {ai_msg}"
             
             # Try tool-calling path via execute_tool_call (uses Groq for reliability)
             result = await model_router.execute_tool_call(
@@ -422,7 +454,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 raise RuntimeError("STT provider not initialized — startup lifecycle may have failed")
 
             try:
-                from core.provider_governor import governor
+                from core.provider.governor import governor
                 await governor.wait_if_needed("groq", estimated_tokens=0)  # Audio, negligible text tokens
 
                 transcription = await gs.stt_provider.client.audio.transcriptions.create(
@@ -435,7 +467,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                 logger.warning(f"⚠️ [STT] Groq failed: {e}. Falling back to Gemini.")
                 from google import genai
                 from google.genai import types
-                from core.provider_governor import governor
+                from core.provider.governor import governor
                 await governor.wait_if_needed("gemini", estimated_tokens=0)
                 
                 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -475,7 +507,8 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             )
             if segments:
                 def get_val(s, key):
-                    if isinstance(s, dict): return s.get(key, 0)
+                    if isinstance(s, dict): 
+                        return s.get(key, 0)
                     return getattr(s, key, 0)
 
                 total_no_speech = sum(float(get_val(s, "no_speech_prob") or 0) for s in segments)
@@ -568,14 +601,13 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             from core.trace_emitter import emit_trace
             await emit_trace(self.websocket, "user_command", f"Command: {transcript}", "🗣️")
 
-            from core.capability_registry_def import CAPABILITY_DEFINITIONS
-            from core.capabilities import registry as cap_registry
-            from core.registry import tool_registry
-            from core.model_router import model_router, TaskClass
+            from core.orchestrator.registry_def import CAPABILITY_DEFINITIONS
+            from core.orchestrator.capabilities import registry as cap_registry
+            from core.provider.router import model_router
 
             ALL_TOOLS = [cap.groq_schema for cap in CAPABILITY_DEFINITIONS]
 
-            await emit_trace(self.websocket, "model_selected", f"Routing via Shadow Army tier system", "🎖️")
+            await emit_trace(self.websocket, "model_selected", "Routing via Shadow Army tier system", "🎖️")
 
             # --- FORCED TOOL ROUTING (action_router fast-path) ---
             from core.workspace.broadcast import broadcast_workspace_state
@@ -583,7 +615,7 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
             await broadcast_workspace_state(status="queued", current_task=transcript[:80])
             # PLANNING → routing intent
             await broadcast_workspace_state(status="planning", current_task=transcript[:80])
-            action_intent = await action_router.route_intent(transcript)
+            action_intent = await action_router.route_intent(transcript, session_id=self.session_id)
 
             if action_intent:
                 logger.info(f"🎯 [ACTION ROUTER] Intercepted intent: '{transcript[:50]}'")
@@ -592,14 +624,75 @@ class VoiceSession(SessionStateMixin, SessionTTSMixin):
                     active_capability=action_intent.get("tool"),
                     status="executing",
                     current_task=transcript[:80],
-                    tool_target=action_intent.get("target","")
+                    tool_target=action_intent.get("target", "")
                 )
                 await self.execute_action(action_intent, turn_id=turn_id)
                 return
 
-            # Delegate Gemini Live CHAT to Gemini manager
+            # ================================================================
+            # KEYWORD FALLBACK SAFETY NET — BUG #3 / #7 FIX
+            # If action_router returned None (e.g., tool was null), but the
+            # transcript clearly contains an action keyword, we MUST NOT send
+            # it to Gemini Live as chat. Force-route to browser_agentic_task.
+            # This prevents "open YouTube" with confidence=80 from becoming chat.
+            # ================================================================
+            transcript_lower = transcript.lower().strip()
+            _BROWSER_KEYWORDS = (
+                "open ", "launch ", "play ", "search ", "go to ", "navigate to ",
+                "download ", "upload ", "scroll ", "click ", "find ", "look up ",
+                "watch ", "browse ", "visit ", "show me ", "get me ", "buy ",
+                "order ", "book ", "check ", "read ", "opem ", "oper ",  # STT typos
+            )
+            _DOMAIN_HINTS = (".com", ".in", ".org", ".net", "youtube", "google",
+                             "amazon", "github", "netflix", "spotify", "twitter",
+                             "instagram", "linkedin", "reddit", "wikipedia")
+
+            from core.browser.session.pool import session_pool
+            browser_active = session_pool.has_active_session(self.session_id)
+            
+            # When browser is active, these single words anywhere in the transcript are browser commands.
+            # This handles garbled STT like "skip thha ad in playright sandox famr b"
+            _ACTIVE_BROWSER_ANYWHERE = (
+                "skip", "pause", "resume", "next", "stop", "mute", "unmute",
+                "volume", "fullscreen", "rewind", "forward", "replay", "refresh",
+                "back", "close tab", "new tab", "scroll down", "scroll up",
+                "skip ad", "click", "download", "upload",
+            )
+
+            is_browser_command = (
+                any(transcript_lower.startswith(kw) for kw in _BROWSER_KEYWORDS)
+                or any(hint in transcript_lower for hint in _DOMAIN_HINTS)
+                or (browser_active and any(
+                    transcript_lower.startswith(kw) or kw in transcript_lower
+                    for kw in _ACTIVE_BROWSER_ANYWHERE
+                ))
+            )
+
+            if is_browser_command:
+                logger.info(
+                    f"🌐 [SESSION] Keyword-based browser fallback triggered for '{transcript[:50]}' "
+                    f"— forcing browser_agentic_task"
+                )
+                browser_intent = {
+                    "intent": "ACTION",
+                    "tool": "browser_agentic_task",
+                    "target": transcript,
+                    "confidence": 75,
+                    "runtime_inputs": None
+                }
+                await broadcast_workspace_state(
+                    active_capability="browser_agentic_task",
+                    status="executing",
+                    current_task=transcript[:80],
+                    tool_target=transcript[:80]
+                )
+                await self.execute_action(browser_intent, turn_id=turn_id)
+                return
+
+            # Delegate genuine CHAT to Gemini Live
             if self.engine == "gemini_live" and self.gemini_manager and self.gemini_manager.is_connected:
-                logger.info("🧠 [Gemini Live] Delegating CHAT intent to Gemini Live.")
+                logger.info("🧠 [Gemini Live] Delegating genuine CHAT intent to Gemini Live.")
+                await broadcast_workspace_state(status="idle", current_task="")
                 await self.gemini_manager.send_text(transcript, turn_complete=True)
                 return
 

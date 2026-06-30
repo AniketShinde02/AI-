@@ -1,27 +1,24 @@
 import os
 import asyncio
 import logging
-import json
-import base64
 import time
-import wave
-import io
-import re
-from enum import Enum
-from typing import Optional, Deque
+import pickle
+from typing import Optional
 from contextlib import asynccontextmanager
-from collections import deque
-import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-import psutil
-import platform
-import random
-from speech_cleaner import cleaner as speech_cleaner
-from pydantic import BaseModel
-from fastapi import HTTPException
-from core.database import db
+from fastapi import FastAPI
+from dotenv import load_dotenv, find_dotenv
+import config
+
+from providers.stt import GroqSTT
+from providers.llm import GroqLLM
+from providers.tts import TTSProviderRouter
+from silero_vad import load_silero_vad # type: ignore
+
+from core.memory.rag_engine import RAGOracle
+import core.memory.rag_engine as rag_oracle_module
+
+# Automatically find .env in parent directories
+load_dotenv(find_dotenv(usecwd=True))
 
 try:
     import pyautogui
@@ -34,39 +31,15 @@ except ImportError:
     ImageGrab = None
 
 
-# Re-use existing provider logic
-from providers.stt import GroqSTT
-from providers.llm import GroqLLM
-from providers.tts import TTSProviderRouter, ProviderStatus
-import torch # type: ignore
-from silero_vad import load_silero_vad, VADIterator # type: ignore
-
-
-from core.rag_oracle import RAGOracle
-import core.rag_oracle as rag_oracle_module
-
 # Setup logging
-import subprocess
-import signal
-from collections import deque
-from core.gemini_live_manager import GeminiLiveSessionManager
 
 logger = logging.getLogger("nexus_ws")
-
-from dotenv import find_dotenv
-# Automatically find .env in parent directories
-load_dotenv(find_dotenv(usecwd=True))
-
-# Import config
-import config
 
 # Initialize Providers as None, will be set in lifespan startup
 stt_provider: Optional[GroqSTT] = None
 llm_provider: Optional[GroqLLM] = None
 tts_router: Optional[TTSProviderRouter] = None
 vad_model = None
-
-import pickle
 
 # Global state for greeting cache
 cached_greeting_pcm: list = []
@@ -83,7 +56,6 @@ if os.path.exists(CACHE_FILE):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global stt_provider, llm_provider, tts_router, vad_model
-    import time
     
     start_time = time.time()
     def log_stage(msg):
@@ -112,9 +84,9 @@ async def lifespan(app: FastAPI):
         )
         
         log_stage("6. Initializing Lance Memory...")
-        import core.lance_memory as lance_memory_module
+        import core.memory.vector_store as memory_module
         # Initialize globally so first query isn't slow
-        lance_memory_module.semantic_memory = lance_memory_module.SemanticMemory( # type: ignore
+        memory_module.semantic_memory = memory_module.SemanticMemory( # type: ignore
             gemini_api_key=os.environ.get("GEMINI_API_KEY", "")
         )
         
@@ -125,7 +97,7 @@ async def lifespan(app: FastAPI):
             await registry.register_tool(cap.id, cap.name, cap.description, cap.category, getattr(cap, "requires_permission", False), getattr(cap, "requires_approval", False), enabled=True)
             
         log_stage("8. Running App Discovery...")
-        from core.app_discovery import run_discovery
+        from core.desktop.discovery import run_discovery
         asyncio.create_task(run_discovery())
         
         log_stage("[SUCCESS] Providers initialized successfully!")

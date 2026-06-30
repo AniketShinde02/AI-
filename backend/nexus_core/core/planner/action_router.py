@@ -1,8 +1,6 @@
 import json
-import os
 import logging
 from typing import Dict, Any, Optional, List
-import config
 
 logger = logging.getLogger("nexus.action_router")
 
@@ -32,10 +30,10 @@ class ActionRouter:
         except Exception as e:
             logger.error(f"Failed to load ActionRouter app cache: {e}")
 
-    def _generate_system_prompt(self) -> str:
+    def _generate_system_prompt(self, session_id: Optional[str] = None) -> str:
         apps_list_str = ", ".join([f"'{app}'" for app in self.known_apps])
         
-        from core.capability_registry_def import ACTION_ROUTER_TOOL_NAMES
+        from core.orchestrator.registry_def import ACTION_ROUTER_TOOL_NAMES
         tools_block = "\n".join(
             f"- {cap_id}" for cap_id in ACTION_ROUTER_TOOL_NAMES
         )
@@ -47,8 +45,13 @@ class ActionRouter:
             f"- {card['card_id']} (inputs: {card['inputs']})" for card in cards
         )
         
+        from core.browser.session.pool import session_pool
+        browser_active = session_pool.has_active_session(session_id)
+        
         return f"""You are a fast semantic intent router for a PC automation system.
 Analyze the user's input and determine if it maps to a computer control command or a pre-configured task card workflow.
+
+Active Browser Context: {"ACTIVE - User currently has a browser window open. Bias ambiguous commands (like 'skip', 'pause', 'next', 'scroll') to 'browser_agentic_task'." if browser_active else "INACTIVE"}
 
 Supported Tools:
 {tools_block}
@@ -82,7 +85,7 @@ Strict Output JSON Schema:
   "runtime_inputs": {{ ... }} // Optional key-value object of runtime parameter overrides if tool is 'run_task_card', otherwise null
 }}"""
 
-    async def route_intent(self, text: str) -> Optional[Dict[str, Any]]:
+    async def route_intent(self, text: str, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         # Ensure dynamic vocabulary anchor is loaded
         await self._load_cache()
 
@@ -93,7 +96,7 @@ Strict Output JSON Schema:
             # Returns a JSON string which we parse below
             raw_content = await model_router.route_task(
                 task_class=TaskClass.FAST_ROUTING,
-                system_prompt=self._generate_system_prompt(),
+                system_prompt=self._generate_system_prompt(session_id),
                 messages=[{"role": "user", "content": f'Input: "{text}"'}],
             )
             result = json.loads(raw_content)
@@ -104,12 +107,16 @@ Strict Output JSON Schema:
             except (ValueError, TypeError):
                 confidence = 0
 
-            if confidence < 85:
-                logger.info(f"🎯 [ACTION ROUTER] Confidence {confidence} < 85 threshold for '{text}' — treating as conversation")
-                return None
-            
+            # ================================================================
+            # CAPABILITY-FIRST ROUTING — BUG #1 / #6 FIX
+            # The routing decision is now: does a valid tool exist?
+            # Confidence is NO LONGER the primary gate.
+            # If LLM identified a real tool → execute it.
+            # Only drop to conversation if tool is null AND confidence is low.
+            # ================================================================
+
             # Standardize string representations of null states
-            if tool and tool not in ("null", "None"):
+            if tool and tool not in ("null", "None", ""):
                 # P2 STT SAFETY: Block destructive/keyboard actions when input is predominantly
                 # Devanagari (Hindi/Marathi). "शिफ्ट हो रहा है" ≠ press Shift key.
                 DESTRUCTIVE_TOOLS = {"pc_press_shortcut", "pc_type_text", "pc_close_app"}
@@ -119,10 +126,15 @@ Strict Output JSON Schema:
                     devanagari_ratio = devanagari_chars / total_alpha
                     if devanagari_ratio > 0.30:
                         logger.warning(
-                             f"🛡️ [STT Safety] Rejected '{tool}' for high-Devanagari input "
+                            f"🛡️ [STT Safety] Rejected '{tool}' for high-Devanagari input "
                             f"({devanagari_ratio:.0%} Devanagari): '{text[:60]}'"
                         )
                         return None  # Requires explicit English confirmation to execute
+
+                logger.info(
+                    f"🎯 [ACTION ROUTER] Capability matched: tool='{tool}' "
+                    f"target='{target}' confidence={confidence} for '{text[:50]}'"
+                )
                 return {
                     "intent": "ACTION",
                     "tool": tool,
@@ -130,8 +142,22 @@ Strict Output JSON Schema:
                     "confidence": confidence,
                     "runtime_inputs": result.get("runtime_inputs")
                 }
+
+            # Tool is null — only drop if confidence is very low (noise/gibberish)
+            if confidence < 40:
+                logger.info(
+                    f"🗣️ [ACTION ROUTER] No capability match + low confidence ({confidence}) "
+                    f"for '{text[:50]}' — treating as conversation"
+                )
+                return None
+
+            # Tool is null but confidence is medium (40-84) — treat as conversational
+            logger.info(
+                f"🗣️ [ACTION ROUTER] No capability matched (confidence={confidence}) "
+                f"for '{text[:50]}' — routing to conversation"
+            )
             return None
-            
+
         except json.JSONDecodeError:
             logger.error("Failed to parse returned JSON schema from router LLM.")
             return None

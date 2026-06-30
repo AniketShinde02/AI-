@@ -2,8 +2,7 @@ import os
 import json
 import logging
 from typing import Dict, Any, List, Optional
-from core.browser_agent import browser_agent
-from core.pc_control import pc_controller
+from core.browser.facade import browser_agent
 
 
 logger = logging.getLogger("nexus.task_cards")

@@ -10,7 +10,7 @@ full iframe and shadow DOM penetration.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("nexus.browser.resiliency.locator")
 

@@ -16,7 +16,6 @@ Priority:
 """
 import os
 import logging
-import subprocess
 from typing import Optional, Tuple
 
 logger = logging.getLogger("nexus.browser_launcher")
@@ -29,6 +28,7 @@ _CHROMIUM_FAMILY = {
             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
         ],
         "channel": "chrome",
+        "user_data_dir": os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data"),
     },
     "brave": {
         "paths": [
@@ -36,6 +36,7 @@ _CHROMIUM_FAMILY = {
             r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
         ],
         "channel": "chromium",  # Playwright uses chromium channel for Brave
+        "user_data_dir": os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data"),
     },
     "msedge": {
         "paths": [
@@ -43,10 +44,12 @@ _CHROMIUM_FAMILY = {
             r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
         ],
         "channel": "msedge",
+        "user_data_dir": os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\User Data"),
     },
     "chromium": {
         "paths": [],  # bundled — no executable_path needed
         "channel": "chromium",
+        "user_data_dir": None,
     },
 }
 
@@ -111,7 +114,7 @@ def _find_executable(browser_key: str) -> Optional[str]:
     return None
 
 
-def resolve_browser(user_hint: Optional[str] = None) -> Tuple[Optional[str], str, bool]:
+def resolve_browser(user_hint: Optional[str] = None) -> Tuple[Optional[str], str, bool, Optional[str]]:
     """
     Resolve which browser to launch.
 
@@ -119,10 +122,11 @@ def resolve_browser(user_hint: Optional[str] = None) -> Tuple[Optional[str], str
         user_hint: Optional string from user command e.g. "brave", "chrome", "edge"
 
     Returns:
-        (executable_path, playwright_channel, is_fallback)
+        (executable_path, playwright_channel, is_fallback, user_data_dir)
         - executable_path: None means use Playwright's bundled browser
         - playwright_channel: 'chromium', 'chrome', or 'msedge'
         - is_fallback: True if we had to fall back from user's preference
+        - user_data_dir: Path to the user's actual browser profile directory
     """
     # 1. User explicitly requested a browser
     if user_hint:
@@ -134,19 +138,20 @@ def resolve_browser(user_hint: Optional[str] = None) -> Tuple[Optional[str], str
                         f"[BrowserLauncher] '{user_hint}' cannot be automated by Playwright. "
                         f"Falling back to bundled Chromium."
                     )
-                    return None, "chromium", True
+                    return None, "chromium", True, None
 
                 exe = _find_executable(browser_key)
                 channel = str(_CHROMIUM_FAMILY[browser_key]["channel"])
+                user_data = _CHROMIUM_FAMILY[browser_key].get("user_data_dir")
                 if exe:
                     logger.info(f"[BrowserLauncher] User requested '{user_hint}' → {exe}")
-                    return exe, channel, False
+                    return exe, channel, False, user_data
                 else:
                     logger.warning(
                         f"[BrowserLauncher] '{user_hint}' not found at expected paths. "
                         f"Falling back to bundled Chromium."
                     )
-                    return None, "chromium", True
+                    return None, "chromium", True, None
 
     # 2. System default browser
     default = _get_windows_default_browser()
@@ -157,15 +162,16 @@ def resolve_browser(user_hint: Optional[str] = None) -> Tuple[Optional[str], str
             f"[BrowserLauncher] Default browser '{default}' cannot be automated. "
             f"Using bundled Chromium."
         )
-        return None, "chromium", True
+        return None, "chromium", True, None
 
     if default and default in _CHROMIUM_FAMILY:
         exe = _find_executable(default)
         channel = str(_CHROMIUM_FAMILY[default]["channel"])
+        user_data = _CHROMIUM_FAMILY[default].get("user_data_dir")
         if exe:
             logger.info(f"[BrowserLauncher] Using system default: {exe}")
-            return exe, channel, False
+            return exe, channel, False, user_data
 
     # 3. Final fallback: bundled Chromium
     logger.info("[BrowserLauncher] Using Playwright bundled Chromium")
-    return None, "chromium", False
+    return None, "chromium", False, None

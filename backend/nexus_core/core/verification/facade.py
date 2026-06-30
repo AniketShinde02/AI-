@@ -9,7 +9,7 @@ Orchestrates guardrails and visual/matrix outcome verifications.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Tuple, List
+from typing import Any, Dict, Tuple
 
 from core.verification.matrix import verification_engine, VerificationEngine, verify_feature, get_all_verifications, verify_feature_sync
 from core.verification.guardrails import guardrails, GuardrailPolicyEngine

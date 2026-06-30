@@ -46,7 +46,7 @@ class RuntimeOutputProcessor:
         
         # 3. Strip conversational friction, internal reasoning, and AI disclaimers
         prefixes_to_strip = [
-            r'^(?:I am|I\'m|I will|I\'ll|Let me|I need to)\s+(?:think|analyze|check|search|execute|look|find|run|open|close).*?[\.\:]\s*',
+            r'^(?:I am|I\'m|I will|I\'ll|Let me|I need to)\s+(?:think|analyze|check|search|execute|look|find|run|open|close|now|focus).*?[\.\:]\s*',
             r'^Here is the (?:information|result|answer).*?\:\s*',
             r'^Based on the (?:context|search|information).*?\:\s*',
             r'^The user wants me to.*?\.\s*',
@@ -54,7 +54,9 @@ class RuntimeOutputProcessor:
             r'^Sure[\.\,\!]\s*',
             r'^Okay[\.\,\!]\s*',
             r'^As an AI(?: language model)?.*?\s*',
-            r'^I have (?:executed|run|opened|closed|completed).*?[\.\:]\s*'
+            r'^I have (?:executed|run|opened|closed|completed).*?[\.\:]\s*',
+            r'^(?:challenge with|my interpretation is|i think i(?:(?:ha)?ve)?|my plan is|i interpreted).*?[\.\:]\s*',
+            r'^(?:i am|i\'m) (?:now|going to|focusing on) .*?[\.\:]\s*'
         ]
         
         for pattern in prefixes_to_strip:

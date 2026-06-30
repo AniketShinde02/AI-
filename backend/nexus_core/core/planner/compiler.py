@@ -3,7 +3,7 @@ from typing import Optional
 
 import re
 from pydantic import ValidationError
-from core.model_router import model_router, TaskClass
+from core.provider.router import model_router, TaskClass
 from core.planner.graph import TaskGraph
 
 logger = logging.getLogger("nexus.planner.compiler")

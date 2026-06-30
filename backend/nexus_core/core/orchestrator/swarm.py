@@ -3,10 +3,10 @@ import time
 import logging
 import asyncio
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from core.database import db
-from core.model_router import model_router, TaskClass
+from core.provider.router import model_router, TaskClass
 from core.workspace.broadcast import broadcast_workspace_state
 
 logger = logging.getLogger("nexus.agent_swarm")
@@ -195,7 +195,7 @@ Please compile, summarize, and synthesize these findings into a final, user-frie
     async def _dispatch_sub_agent(self, agent_id: str, task: str, session_id: str) -> str:
         """Invokes the specific sub-agent handler asynchronously."""
         if agent_id == "browser_agentic_task":
-            from core.browser_agent import browser_agent
+            from core.browser.facade import browser_agent
             try:
                 # BrowserAgent uses the isolated session_id profile internally
                 res = await browser_agent.run_agentic_task(task, session_id=session_id)
@@ -213,7 +213,7 @@ Please compile, summarize, and synthesize these findings into a final, user-frie
             return res.get("result") or f"Search failed: {res.get('error')}"
 
         elif agent_id == "query_memory":
-            from core.lance_memory import get_memory
+            from core.memory.vector_store import get_memory
             mem = await get_memory()
             results = await mem.search_memory(task, limit=3)
             history = await db.get_session_history(session_id, limit=5)
@@ -236,7 +236,7 @@ Please compile, summarize, and synthesize these findings into a final, user-frie
             )
             command = command.strip().strip("`").strip()
             
-            from core.guardrails import guardrails
+            from core.verification.guardrails import guardrails
             classification, reason = guardrails.scan_command(command)
             if classification == "BLOCKED":
                 return f"Blocked: {reason}"
@@ -258,7 +258,7 @@ Please compile, summarize, and synthesize these findings into a final, user-frie
                 return f"Error executing command: {str(e)}"
 
         elif agent_id == "rag_oracle":
-            import core.rag_oracle as rag_oracle_module
+            import core.memory.rag_engine as rag_oracle_module
             if rag_oracle_module.oracle_instance:
                 res = await rag_oracle_module.oracle_instance.consult_oracle(task)
                 return res.get("answer") or f"RAG consult failed: {res.get('error')}"

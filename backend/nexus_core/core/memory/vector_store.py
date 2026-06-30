@@ -5,11 +5,11 @@ import httpx
 import hashlib
 import time
 
+import asyncio
+
 logger = logging.getLogger("nexus.lance_memory")
 
 LANCE_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "lancedb")
-
-import asyncio
 
 class SemanticMemory:
     """
@@ -26,7 +26,8 @@ class SemanticMemory:
 
     async def _ensure_initialized(self):
         """Asynchronously initialize the LanceDB connection on demand."""
-        if self._initialized: return
+        if self._initialized: 
+            return
         
         import lancedb
         self.db = await lancedb.connect_async(LANCE_DB_PATH)

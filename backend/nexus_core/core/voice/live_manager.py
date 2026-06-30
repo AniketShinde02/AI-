@@ -5,11 +5,14 @@
 # full voice test suite. Changes here can silently break voice.
 # ==========================================
 import os
-import json
 import base64
 import asyncio
 import logging
 import time
+from typing import Any, Optional
+from google import genai
+from google.genai import types
+
 raw_logger = logging.getLogger('DEBUG_GEMINI_RAW')
 raw_logger.setLevel(logging.INFO)
 if not raw_logger.handlers:
@@ -24,11 +27,37 @@ if not session_logger.handlers:
     fh.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
     session_logger.addHandler(fh)
 
-from typing import Any
-from google import genai
-from google.genai import types
-
 logger = logging.getLogger("gemini_live_manager")
+
+# Prefixes that indicate Gemini internal reasoning/planning — never shown to user
+_PLANNING_PREFIXES = (
+    "i'll ", "i will ", "i'm going to ", "i'm now ", "i am going to ",
+    "my priority", "i recognize", "i need to", "i should", "let me",
+    "planning:", "step 1", "first,", "alright,", "okay, so", "alright, so",
+    "i've zeroed", "i've identified", "i've noted", "i understand that",
+    "i am carrying", "i am now", "i can see", "i notice",
+    "i am ready to", "i'm currently", "i am checking", "i'm cross-referencing",
+    "i think i've", "based on the", "i'm focusing", "going to see what",
+    "i'm aiming for", "i am able to", "i am checking", "i'm focusing on",
+    "i think", "my plan", "i interpreted", "i refined", "i will", "my next step",
+    "let's", "i'm going", "i am", "i'm", "here is", "ok,", "understood.",
+)
+
+def _filter_planning_text(text: str) -> str:
+    """Strip Gemini internal planning/reasoning from UI-visible text.
+    Only allows clean action confirmations through.
+    """
+    if not text:
+        return text
+    lines = text.splitlines()
+    clean_lines = []
+    for line in lines:
+        stripped = line.strip().lower()
+        is_planning = any(stripped.startswith(p) for p in _PLANNING_PREFIXES)
+        if not is_planning:
+            clean_lines.append(line)
+    return "\n".join(clean_lines).strip()
+
 
 class GeminiLiveSessionManager:
     """
@@ -66,10 +95,11 @@ class GeminiLiveSessionManager:
     # Fallback Live model if primary is unavailable (also verified working).
     LIVE_MODEL_FALLBACK = "models/gemini-3.1-flash-live-preview"
 
-    def __init__(self, websocket, system_instruction: str, session_id: str = "", model: str = "models/gemini-2.5-flash-native-audio-latest"):
+    def __init__(self, websocket, system_instruction: str, session_id: str = "", model: str = "models/gemini-2.5-flash-native-audio-latest", tools: Optional[list] = None):
         self.session_id = session_id
         self.websocket = websocket
         self.system_instruction = system_instruction
+        self.tools = tools
         # Always override with the verified LIVE_MODEL.
         # The caller's model param is intentionally ignored here because
         # 95% of callers pass text-model names (e.g. gemini-2.0-flash)
@@ -92,16 +122,21 @@ class GeminiLiveSessionManager:
         self.receive_task = None
         self.on_agent_message_callback = None
         self.on_disconnect_callback = None
+        self.on_tool_call_callback = None
         self.session_ready = asyncio.Event()
         self._send_lock = asyncio.Lock()
+        # Track clean 1000 OK closes to apply minimum reconnect delay.
+        # This prevents the reconnect storm visible in logs.
+        self._last_clean_close_time: float = 0.0
 
-    async def connect(self, on_agent_message, on_disconnect):
+    async def connect(self, on_agent_message, on_disconnect, on_tool_call=None):
         if not self.client:
             logger.error("❌ GEMINI_API_KEY missing for Live Session")
             raise ValueError("GEMINI_API_KEY missing")
 
         self.on_agent_message_callback = on_agent_message
         self.on_disconnect_callback = on_disconnect
+        self.on_tool_call_callback = on_tool_call
         self.session_ready.clear()
 
         session_logger.info(f"[LIFECYCLE] [Session: {self.session_id}] 🔗 Attempting to connect to Gemini Live...")
@@ -114,44 +149,46 @@ class GeminiLiveSessionManager:
             logger.debug("[STATUS] ✅ Gemini Live Session Established")
             logger.info("✅ Gemini Live Session Established")
         except asyncio.TimeoutError:
-            self.is_connected = False
-            session_logger.error(f"[LIFECYCLE] [Session: {self.session_id}] ❌ Gemini Live Connection Timeout")
-            logger.error("❌ Gemini Live Connection Timeout")
-            raise ValueError("Gemini Live Connection Timeout")
+            session_logger.error(f"[LIFECYCLE] [Session: {self.session_id}] ❌ Gemini Live connection timed out")
+            logger.error("❌ Gemini Live connection timed out")
+            raise
 
-    async def send_audio(self, pcm_data: bytes):
-        # CRITICAL: Do NOT send user mic audio to Gemini while it is mid-response.
-        # Gemini Live API (bidiGenerateContent) terminates the session cleanly (1000 OK)
-        # if it receives new audio input while still streaming its own audio response.
-        # This is the root cause of the persistent 1000 OK disconnect bug.
+    async def _handle_disconnect(self):
+        self.is_connected = False
+        self.session = None
+        if self.on_disconnect_callback:
+            if asyncio.iscoroutinefunction(self.on_disconnect_callback):
+                await self.on_disconnect_callback()
+            else:
+                self.on_disconnect_callback()
+
+    async def send_audio(self, audio_data: bytes):
         if not self.is_connected or not self.session:
             return
+            
         if self.agent_is_responding:
-            # Silently drop mic frames during Gemini's response window — do not log at ERROR
-            raw_logger.debug(f"[AUDIO_GATED] Dropped mic frame during agent response | Session: {self.session_id}")
+            # Drop incoming user audio if agent is currently speaking.
+            # This is critical to prevent the 1000 OK session close bug.
             return
+            
         try:
             async with self._send_lock:
-                raw_logger.debug(f"[OUTBOUND AUDIO] [Session: {self.session_id}] [Func: send_audio] Size: {len(pcm_data)} bytes")
                 await self.session.send_realtime_input(
                     audio=types.Blob(
-                        data=pcm_data,
+                        data=audio_data,
                         mime_type="audio/pcm;rate=16000"
                     )
                 )
         except Exception as e:
             err_str = str(e)
             # 1000 OK is Gemini cleanly closing its turn — not a fatal error.
-            # Log as warning, mark not connected, let the reconnect loop handle it.
-            if "1000" in err_str or "sent 1000" in err_str:
-                session_logger.warning(f"[TURN_CLOSE] [Session: {self.session_id}] Gemini closed turn cleanly (1000 OK)")
-                logger.warning(f"⚠️ Gemini turn closed (1000 OK) — reconnect will be attempted.")
+            # Log as debug, let the reconnect loop handle it cleanly.
+            if "1000" in err_str:
+                session_logger.debug(f"[TURN_CLOSE] [Session: {self.session_id}] Gemini closed turn cleanly (1000 OK) during send_audio")
             else:
-                session_logger.error(f"[ERROR] [Session: {self.session_id}] [Func: send_audio] Error: {e}")
                 logger.error(f"❌ Gemini Live Audio Send Error: {e}")
-            # In both cases, mark disconnected so the route loop triggers reconnect
-            self.is_connected = False
-            self.session = None
+                session_logger.error(f"[ERROR] [Session: {self.session_id}] [Func: send_audio] Error: {e}")
+                await self._handle_disconnect()
 
     async def send_video_frame(self, frame_b64: str):
         if not self.is_connected or not self.session:
@@ -163,7 +200,7 @@ class GeminiLiveSessionManager:
             frame_bytes = base64.b64decode(frame_b64)
             async with self._send_lock:
                 raw_logger.debug(f"[OUTBOUND VIDEO] [Session: {self.session_id}] [Func: send_video_frame] Size: {len(frame_bytes)} bytes")
-                logger.info(f"[VISION_FRAME_FORWARDED] size={len(frame_bytes)}B session={self.session_id}")
+                logger.debug(f"[VISION_FRAME_FORWARDED] size={len(frame_bytes)}B session={self.session_id}")
                 await self.session.send_realtime_input(
                     video=types.Blob(
                         data=frame_bytes,
@@ -171,10 +208,14 @@ class GeminiLiveSessionManager:
                     )
                 )
         except Exception as e:
-            logger.error(f"❌ Gemini Live Video Send Error: {e}")
-            await self._handle_disconnect()
+            err_str = str(e)
+            if "1000" in err_str:
+                session_logger.debug(f"[TURN_CLOSE] Gemini closed turn cleanly (1000 OK) during send_video_frame")
+            else:
+                logger.error(f"❌ Gemini Live Video Send Error: {e}")
+                await self._handle_disconnect()
 
-    async def send_text(self, text: str, turn_complete: bool = False):
+    async def send_text(self, text: str, turn_complete: bool = True):
         if not self.is_connected or not self.session:
             return
         try:
@@ -188,10 +229,14 @@ class GeminiLiveSessionManager:
                     turn_complete=turn_complete
                 )
         except Exception as e:
-            logger.debug(f"[OUTBOUND ERROR TEXT] {e}")
-            session_logger.error(f"[ERROR] [Session: {self.session_id}] [Func: send_text] Error: {e}")
-            logger.error(f"❌ Gemini Live Text Send Error: {e}")
-            await self._handle_disconnect()
+            err_str = str(e)
+            if "1000" in err_str:
+                session_logger.debug(f"[TURN_CLOSE] Gemini closed turn cleanly (1000 OK) during send_text")
+            else:
+                logger.debug(f"[OUTBOUND ERROR TEXT] {e}")
+                session_logger.error(f"[ERROR] [Session: {self.session_id}] [Func: send_text] Error: {e}")
+                logger.error(f"❌ Gemini Live Text Send Error: {e}")
+                await self._handle_disconnect()
 
     async def send_turn_complete(self):
         """Signals Gemini that the user has finished speaking."""
@@ -202,8 +247,12 @@ class GeminiLiveSessionManager:
                 raw_logger.info(f"[OUTBOUND TURN_COMPLETE] [Session: {self.session_id}]")
                 await self.session.send_client_content(turn_complete=True)
         except Exception as e:
-            session_logger.error(f"[ERROR] [Session: {self.session_id}] [Func: send_turn_complete] Error: {e}")
-            logger.error(f"❌ Gemini Live Turn Complete Send Error: {e}")
+            err_str = str(e)
+            if "1000" in err_str:
+                session_logger.debug(f"[TURN_CLOSE] Gemini closed turn cleanly (1000 OK) during send_turn_complete")
+            else:
+                session_logger.error(f"[ERROR] [Session: {self.session_id}] [Func: send_turn_complete] Error: {e}")
+                logger.error(f"❌ Gemini Live Turn Complete Send Error: {e}")
 
     async def interrupt(self):
         """Signals Gemini to stop speaking immediately (Barge-in)"""
@@ -221,7 +270,8 @@ class GeminiLiveSessionManager:
             
         config = types.LiveConnectConfig(
             response_modalities=[types.Modality.AUDIO],
-            system_instruction=types.Content(role="system", parts=[types.Part.from_text(text=self.system_instruction)])
+            system_instruction=types.Content(role="system", parts=[types.Part.from_text(text=self.system_instruction)]),
+            tools=self.tools
         )
         attempt = 0
         while True:
@@ -247,13 +297,26 @@ class GeminiLiveSessionManager:
                                     self.agent_is_responding = False
                                 model_turn = getattr(server_content, "model_turn", None)
                                 if model_turn and getattr(model_turn, "parts", None):
-                                    # Gemini has started streaming a response — gate incoming audio
-                                    self.agent_is_responding = True
+                                    # Gemini has started streaming a response
+                                    if not self.agent_is_responding:
+                                        self.agent_is_responding = True
+                                        try:
+                                            await self.websocket.send_json({
+                                                "type": "user_transcript",
+                                                "text": "🎤 Audio processed..."
+                                            })
+                                        except Exception:
+                                            pass
+                                            
                                     for part in model_turn.parts:
                                         # 1. Text transcript of what Gemini is saying
                                         if getattr(part, "text", None):
                                             if self.on_agent_message_callback:
-                                                await self.on_agent_message_callback(part.text)
+                                                # BUG #2 FIX: Filter internal planning text before
+                                                # sending to UI. Gemini must never expose reasoning.
+                                                clean_text = _filter_planning_text(part.text)
+                                                if clean_text:
+                                                    await self.on_agent_message_callback(clean_text)
                                         
                                         # 2. Audio PCM data
                                         if getattr(part, "inline_data", None) and getattr(part.inline_data, "data", None):
@@ -261,7 +324,7 @@ class GeminiLiveSessionManager:
                                             out_b64 = base64.b64encode(pcm_data).decode('utf-8')
                                             
                                             import core.global_state as gs
-                                            from core.session_state import SessionState
+                                            from core.workspace.state import SessionState
                                             session = gs.active_sessions.get(self.session_id)
                                             if session:
                                                 session.agent_is_speaking = True
@@ -275,6 +338,17 @@ class GeminiLiveSessionManager:
                                                 })
                                             except Exception as ws_err:
                                                 logger.error(f"❌ WS failed to send Gemini audio chunk: {ws_err}")
+
+                                        # 3. Function Calls (Tool execution from Gemini Live)
+                                        if getattr(part, "function_call", None):
+                                            if self.on_tool_call_callback:
+                                                func_call = part.function_call
+                                                logger.info(f"🎯 [GEMINI LIVE] Function call received: {getattr(func_call, 'name', 'unknown')}")
+                                                
+                                                if asyncio.iscoroutinefunction(self.on_tool_call_callback):
+                                                    asyncio.create_task(self.on_tool_call_callback(func_call))
+                                                else:
+                                                    self.on_tool_call_callback(func_call)
                         except asyncio.CancelledError:
                             raise
                         except Exception as chunk_err:
@@ -287,6 +361,25 @@ class GeminiLiveSessionManager:
                 self.is_connected = False
                 self.session = None
                 self.session_ready.clear()
+                err_str = str(e)
+                is_clean_close = "1000" in err_str or "sent 1000" in err_str
+
+                if is_clean_close:
+                    # BUG #11 FIX: 1000 OK is EXPECTED — Gemini closes per-turn.
+                    # Apply a minimum 0.5s delay between clean reconnects to prevent
+                    # reconnect storms when there is rapid back-to-back activity.
+                    now = time.time()
+                    since_last = now - self._last_clean_close_time
+                    if since_last < 0.5:
+                        await asyncio.sleep(0.5 - since_last)
+                    self._last_clean_close_time = time.time()
+                    session_logger.debug(
+                        f"[LIFECYCLE] [Session: {self.session_id}] "
+                        f"Turn closed cleanly (1000 OK). Reconnecting for next turn."
+                    )
+                    attempt = 0  # Clean close is not an error — reset retry counter
+                    continue
+
                 attempt += 1
                 if attempt > 5:
                     logger.error(f"❌ Gemini Live Receive Stream Broken (Max Retries Reached): {e}")

@@ -11,7 +11,6 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import os
 
 from core.global_state import lifespan
 from api.rest_routes import rest_router, BACKGROUNDS_DIR
@@ -37,4 +36,4 @@ app.include_router(ws_router)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001, ws="wsproto", loop="asyncio", log_level="info", ws_ping_interval=20.0, ws_ping_timeout=20.0)
+    uvicorn.run("ws_main:app", host="0.0.0.0", port=8001, ws="wsproto", loop="asyncio", log_level="info", ws_ping_interval=20.0, ws_ping_timeout=20.0, reload=True, reload_excludes=["data/*", "*.db", "*.db-journal", "logs/*", "*.log"])

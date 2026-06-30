@@ -44,6 +44,7 @@ class BrowserStateEnum(str, Enum):
     """Deterministic state machine states for BrowserAgent."""
     IDLE = "idle"
     INITIALIZING = "initializing"
+    PLANNING = "planning"
     NAVIGATING = "navigating"
     VERIFYING = "verifying"
     EXECUTING = "executing"
@@ -52,6 +53,36 @@ class BrowserStateEnum(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+
+# ---------------------------------------------------------------------------
+# Execution Engine Plan Models
+# ---------------------------------------------------------------------------
+
+@dataclass
+class BrowserStep:
+    """A single deterministic step in a browser execution plan."""
+    action: str
+    target: str = ""
+    value: str = ""
+    alt_targets: List[str] = field(default_factory=list)
+    optional: bool = False
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {k: v for k, v in self.__dict__.items()}
+
+@dataclass
+class BrowserPlan:
+    """A complete sequence of deterministic browser steps to achieve a goal."""
+    goal: str
+    steps: List[BrowserStep]
+    skill_used: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "goal": self.goal,
+            "skill_used": self.skill_used,
+            "steps": [s.to_dict() for s in self.steps]
+        }
 
 # ---------------------------------------------------------------------------
 # Browser Memory

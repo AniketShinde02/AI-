@@ -1,6 +1,5 @@
 import logging
 import asyncio
-from typing import AsyncIterator
 from .tts import ProviderStatus, PcmData, TTS
 
 logger = logging.getLogger("nexus.tts.edge")
@@ -90,7 +89,6 @@ class EdgeTTS(TTS):
                 "-ar", "24000", "-ac", "1", pcm_temp
             ]
             
-            import subprocess
             def run_ffmpeg():
                 subprocess.run(
                     cmd, 

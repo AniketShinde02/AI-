@@ -2,10 +2,8 @@ import os
 import json
 import base64
 import asyncio
-import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from google import genai
-from google.genai import types
 import logging
 
 logger = logging.getLogger("gemini_live")

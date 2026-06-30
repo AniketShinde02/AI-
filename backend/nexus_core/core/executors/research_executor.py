@@ -1,6 +1,6 @@
 from typing import Dict, Any, List
 from core.executors.base import BaseExecutor
-from core.scrapper_os import scrapper_os
+from core.vision.scraper_bridge import scrapper_os
 import json
 
 class ResearchExecutor(BaseExecutor):

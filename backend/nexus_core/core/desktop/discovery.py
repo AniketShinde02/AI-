@@ -16,7 +16,6 @@ async def run_discovery():
     TTL: Only re-scans if no apps exist in DB OR last discovery was >24 hours ago.
     This prevents the expensive PowerShell + .lnk scan on every server restart.
     """
-    import time
 
     # ── TTL Cache Check ──────────────────────────────────────────────────────
     REDISCOVERY_TTL_SECONDS = 86400  # 24 hours
@@ -175,7 +174,7 @@ async def get_all_apps_dict() -> dict:
                             aliases = json.loads(aliases_json)
                             for alias in aliases:
                                 result[alias.lower()] = executable_path
-                        except:
+                        except Exception:
                             result[app_name.lower()] = executable_path
                     else:
                         result[app_name.lower()] = executable_path

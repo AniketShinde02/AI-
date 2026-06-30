@@ -1,6 +1,6 @@
 from typing import Dict, Any, List
 from core.executors.base import BaseExecutor
-from core.browser_agent import browser_agent
+from core.browser.facade import browser_agent
 
 class BrowserExecutor(BaseExecutor):
     def get_capabilities(self) -> List[str]:

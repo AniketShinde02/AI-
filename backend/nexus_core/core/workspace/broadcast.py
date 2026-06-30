@@ -47,3 +47,16 @@ async def broadcast_workspace_state(
             await session.safe_send_json(payload)
     except Exception as e:
         logger.error(f"❌ Failed to broadcast workspace state: {e}", exc_info=True)
+
+async def broadcast_screencast_frame(session_id: str, frame_b64: str) -> None:
+    """Broadcast a screencast frame to the frontend."""
+    try:
+        import core.global_state as gs
+        session = gs.active_sessions.get(session_id)
+        if session and session.is_connected:
+            await session.safe_send_json({
+                "type": "screencast_frame",
+                "data": frame_b64
+            })
+    except Exception as e:
+        logger.error(f"❌ Failed to broadcast screencast frame: {e}")

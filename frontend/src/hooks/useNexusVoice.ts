@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { traceStore } from '@/lib/traceStore';
+import { logStore } from '@/lib/logStore';
 
 // Simple logger to prevent Next.js error overlays in development
 const logger = {
@@ -387,6 +388,7 @@ export function useNexusVoice({ onTranscript, onAgentMessage, persona, ttsProvid
             }
             logger.info(`[Shadow Army] 🎖️ Tier activated: ${tier.tier} via ${tier.provider}/${tier.model}`);
           } else if (msg.type === 'log') {
+            logStore.addLog(msg.level as any || 'info', msg.message);
             if (logger[msg.level as keyof typeof logger]) {
               (logger as any)[msg.level](`[Backend] ${msg.message}`);
             } else {

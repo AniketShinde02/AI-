@@ -8,8 +8,8 @@ import logging
 import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import core.global_state as gs
-from core.voice_session import VoiceSession
-from core.session_state import SessionState
+from core.voice.session import VoiceSession
+from core.workspace.state import SessionState
 import time
 import asyncio
 
@@ -36,6 +36,7 @@ async def websocket_endpoint(websocket: WebSocket):
     if session_id:
         gs.active_sessions[session_id] = session
         logger.info(f"🆕 Created session {session_id}")
+        await session.load_history()
 
     try:
         # 5. Startup Greeting
@@ -77,7 +78,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     if session.state == SessionState.SPEAKING:
                         session._change_state(SessionState.IDLE)
                         session.post_tts_guard_until = time.time() + 1.2
-                        logger.info(f"✅ [Session] audio_finished received. Armed post-TTS guard for 1.2s.")
+                        logger.info("✅ [Session] audio_finished received. Armed post-TTS guard for 1.2s.")
                     else:
                         logger.info(f"ℹ️ [Session] audio_finished received in state: {session.state.value}. Cleared speaking flag.")
                     asyncio.create_task(session.update_workspace_state(status="idle"))
@@ -106,7 +107,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         session.vad_iterator.reset_states()
                     elif action == "authorize_admin":
                         approved = msg.get("status") == "approved"
-                        from core.guardrails import guardrails
+                        from core.verification.guardrails import guardrails
                         guardrails.authorize_action(session.session_id, approved)
                         continue
                         
@@ -115,7 +116,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     session_id = session.session_id
                     logger.info(f"🕸️ WebSocket trigger swarm task: '{goal}'")
                     async def run_swarm_bg():
-                        from core.agent_swarm import swarm_manager
+                        from core.orchestrator.swarm import swarm_manager
                         try:
                             res = await swarm_manager.execute_swarm_task(goal, session_id or "")
                             result_text = res.get("result", "Swarm finished with no output.")
@@ -149,7 +150,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     tool_id = msg.get("tool_id")
                     decision = msg.get("decision")  # "Allow Once", "Always Allow", "Deny"
                     logger.info(f"🛡️ Received capability decision: {tool_id} -> {decision}")
-                    from core.capabilities import registry as cap_registry
+                    from core.orchestrator.capabilities import registry as cap_registry
                     from core.database import db
                     
                     if decision == "Allow Once":
@@ -191,6 +192,7 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
     session = VoiceSession(websocket, engine="gemini_live", session_id=session_id, model=model)
     if session_id:
         gs.active_sessions[session_id] = session
+        await session.load_history()
 
     try:
         try:
@@ -217,6 +219,9 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                 # CRITICAL GATE: Do NOT forward mic audio while agent is speaking —
                 # Gemini closes the bidiGenerateContent session with 1000 OK if it
                 # receives user audio input while still emitting its own audio response.
+                if session.is_muted:
+                    continue
+                    
                 if (session.engine == "gemini_live"
                         and session.gemini_manager
                         and session.gemini_manager.is_connected
@@ -232,10 +237,9 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                 if msg.get("type") == "vision_frame":
                     # P1 LOGGING: Vision frame received at backend
                     frame_data = msg.get("data", "")
-                    logger.info(f"[VISION_FRAME_RECEIVED] size_b64={len(frame_data)} gemini_connected={bool(session.gemini_manager and session.gemini_manager.is_connected)}")
-                    logger.info(f"[VISION_FRAME_RECEIVED] size_b64={len(frame_data)} gemini_connected={bool(session.gemini_manager and session.gemini_manager.is_connected)}")
+                    logger.debug(f"[VISION_FRAME_RECEIVED] size_b64={len(frame_data)} gemini_connected={bool(session.gemini_manager and session.gemini_manager.is_connected)}")
                     if session.gemini_manager and session.gemini_manager.is_connected:
-                        logger.info(f"[GEMINI_FORENSICS] Routing VIDEO payload | Size: {len(frame_data)} bytes | Session: {session.session_id}")
+                        logger.debug(f"[GEMINI_FORENSICS] Routing VIDEO payload | Size: {len(frame_data)} bytes | Session: {session.session_id}")
                         await session.gemini_manager.send_video_frame(frame_data)
                     continue
                 if msg.get("type") == "ping":
@@ -258,7 +262,7 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                     logger.debug(f"📩 Received action: {action}")
                     if action == "authorize_admin":
                         approved = msg.get("status") == "approved"
-                        from core.guardrails import guardrails
+                        from core.verification.guardrails import guardrails
                         guardrails.authorize_action(session.session_id, approved)
                         continue
                     elif action == "mute":
@@ -271,6 +275,38 @@ async def gemini_live_websocket_endpoint(websocket: WebSocket):
                     elif action == "unmute":
                         session.is_muted = False
                         session.vad_iterator.reset_states()
+                    elif action == "start_screencast":
+                        from core.browser.facade import BrowserAgent
+                        from core.workspace.broadcast import broadcast_screencast_frame
+                        agent = BrowserAgent()
+                        async def on_frame(b64: str):
+                            await broadcast_screencast_frame(session.session_id, b64)
+                        asyncio.create_task(agent.start_screencast(on_frame, session.session_id))
+                    elif action == "stop_screencast":
+                        from core.browser.facade import BrowserAgent
+                        agent = BrowserAgent()
+                        asyncio.create_task(agent.stop_screencast())
+                        
+                elif msg.get("type") == "mouse_click":
+                    from core.browser.facade import BrowserAgent
+                    agent = BrowserAgent()
+                    asyncio.create_task(agent.cdp_mouse_click(msg.get("x", 0), msg.get("y", 0), msg.get("button", "left"), session.session_id))
+                    continue
+                elif msg.get("type") == "mouse_move":
+                    from core.browser.facade import BrowserAgent
+                    agent = BrowserAgent()
+                    asyncio.create_task(agent.cdp_mouse_move(msg.get("x", 0), msg.get("y", 0), session.session_id))
+                    continue
+                elif msg.get("type") == "keyboard_type":
+                    from core.browser.facade import BrowserAgent
+                    agent = BrowserAgent()
+                    asyncio.create_task(agent.cdp_keyboard_type(msg.get("text", ""), session.session_id))
+                    continue
+                elif msg.get("type") == "keyboard_press":
+                    from core.browser.facade import BrowserAgent
+                    agent = BrowserAgent()
+                    asyncio.create_task(agent.cdp_keyboard_press(msg.get("key", ""), session.session_id))
+                    continue
                 if msg.get("type") == "settings":
                     session.selected_persona = msg.get("persona") or "female"
                     session.selected_provider = msg.get("ttsProvider") or "edge"

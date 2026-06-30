@@ -36,6 +36,22 @@ _SEARCH_SHORTCUTS: Dict[str, str] = {
 class ActionEngine:
     """Stateless action executor. Receives a page and session context per call."""
 
+    async def _emit_hud_trace(self, session: Any, event_type: str, text: str, icon: str, **kwargs) -> None:
+        try:
+            import core.global_state as gs
+            from core.trace_emitter import emit_trace
+            voice_session = gs.active_sessions.get(session.session_id)
+            if voice_session and voice_session.is_connected:
+                await emit_trace(
+                    websocket=voice_session.websocket,
+                    event_type=event_type,
+                    text=text,
+                    icon=icon,
+                    **kwargs
+                )
+        except Exception as e:
+            logger.debug(f"Failed to emit HUD trace: {e}")
+
     # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
@@ -43,6 +59,7 @@ class ActionEngine:
     async def open_url(self, page: Any, session: Any, url: str) -> Dict[str, Any]:
         start = time.perf_counter()
         await session.state_machine.transition_to(BrowserStateEnum.NAVIGATING, {"url": url})
+        await self._emit_hud_trace(session, "browser_action", f"Navigating to {url}", "🌐", selector=url)
         await asyncio.sleep(random.uniform(1.0, 2.5))  # Anti-fingerprint jitter
 
         try:
@@ -50,10 +67,17 @@ class ActionEngine:
 
             if response and response.status == 429:
                 logger.warning(f"⚠️ 429 on {url} — backing off")
+                await self._emit_hud_trace(session, "browser_retry", f"429 Too Many Requests. Backing off...", "⚠️", retries=1)
                 await session.state_machine.transition_to(BrowserStateEnum.RECOVERING)
                 await asyncio.sleep(random.uniform(5.0, 10.0))
                 await session.state_machine.transition_to(BrowserStateEnum.NAVIGATING)
                 response = await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+
+            # BUG #13 FIX: Wait for network idle to ensure SPA has finished rendering
+            try:
+                await page.wait_for_load_state("networkidle", timeout=3000)
+            except Exception:
+                pass  # networkidle is best-effort; domcontentloaded is the hard requirement
 
             await session.state_machine.transition_to(BrowserStateEnum.VERIFYING)
             from core.browser.verification import nav_verifier
@@ -64,24 +88,29 @@ class ActionEngine:
                 page_title=await page.title(),
             )
             elapsed = f"{time.perf_counter() - start:.2f}s"
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
 
             if verified:
                 await session.state_machine.transition_to(BrowserStateEnum.COMPLETED)
                 title = await page.title()
                 session.memory.record_step("open_url", url, f"Navigated to {title}", True)
+                await self._emit_hud_trace(session, "browser_success", f"Loaded {title}", "✅", elapsed_ms=elapsed_ms)
                 return {"success": True, "verified": True, "execution_time": elapsed,
                         "tool": "browser_open_url", "target": url,
                         "result": f"Opened '{title}' ({page.url})"}
             else:
                 await session.state_machine.transition_to(BrowserStateEnum.FAILED)
                 session.memory.record_step("open_url", url, "Verification failed", False)
+                await self._emit_hud_trace(session, "browser_error", f"Verification failed", "❌", elapsed_ms=elapsed_ms)
                 return {"success": False, "verified": False, "execution_time": elapsed,
                         "tool": "browser_open_url", "target": url,
                         "error": "Navigation verification failed"}
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
             await session.state_machine.transition_to(BrowserStateEnum.FAILED)
             session.memory.record_step("open_url", url, str(e), False)
+            await self._emit_hud_trace(session, "browser_error", f"Navigation failed: {e}", "❌", elapsed_ms=elapsed_ms)
             return {"success": False, "verified": False, "execution_time": elapsed,
                     "tool": "browser_open_url", "target": url, "error": str(e)}
 
@@ -103,38 +132,76 @@ class ActionEngine:
 
     async def click(self, page: Any, session: Any, target: str) -> Dict[str, Any]:
         start = time.perf_counter()
-        url_before = page.url
+        await self._emit_hud_trace(session, "browser_action", f"Clicking element: {target}", "🖱️", selector=target)
         try:
+            # BUG #13 FIX: Scroll element into view before clicking
+            # to avoid clicking off-screen or obscured elements.
+            try:
+                el = page.locator(target).first
+                await el.scroll_into_view_if_needed(timeout=2000)
+            except Exception:
+                pass  # Scroll is best-effort
+
             clicked = await locator_engine.click_element(page, target)
             if not clicked:
                 raise LocatorNotFoundError(f"Cannot find: {target!r}")
-            await asyncio.sleep(0.5)
+
+            # BUG #13 FIX: Wait for network idle after click (SPA navigation)
+            await asyncio.sleep(0.3)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=2000)
+            except Exception:
+                await asyncio.sleep(0.5)  # Fallback wait
+
             title = await page.title()
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
             elapsed = f"{time.perf_counter() - start:.2f}s"
             session.memory.record_step("click", target, "Clicked", True)
+            await self._emit_hud_trace(session, "browser_success", f"Clicked '{target}'", "✅", elapsed_ms=elapsed_ms, selector=target)
             return {"success": True, "verified": True, "execution_time": elapsed,
                     "tool": "browser_click", "target": target,
                     "result": f"Clicked '{target}'. Now: {title}"}
         except Exception as e:
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
             elapsed = f"{time.perf_counter() - start:.2f}s"
             session.memory.record_step("click", target, str(e), False)
+            await self._emit_hud_trace(session, "browser_error", f"Click failed: {e}", "❌", elapsed_ms=elapsed_ms, selector=target)
             return {"success": False, "verified": False, "execution_time": elapsed,
                     "tool": "browser_click", "target": target, "error": str(e)}
 
     async def type_text(self, page: Any, session: Any, selector: str, text: str) -> Dict[str, Any]:
         start = time.perf_counter()
+        await self._emit_hud_trace(session, "browser_action", f"Typing into {selector}", "⌨️", selector=selector)
         try:
             filled = await locator_engine.fill_element(page, selector, text)
             if not filled:
                 raise LocatorNotFoundError(f"Cannot fill: {selector!r}")
+
+            # BUG #13 FIX: Press Enter as keyboard submit fallback for search inputs.
+            # Many SPAs (YouTube, Google, Amazon) handle Enter natively on the input.
+            selector_lower = selector.lower()
+            is_search_input = any(k in selector_lower for k in
+                                  ["search", "query", "q=", "input[type", "[name='q']"]) \
+                              or "search" in text.lower()
+            if is_search_input:
+                try:
+                    await page.keyboard.press("Enter")
+                    await asyncio.sleep(0.5)
+                except Exception:
+                    pass  # Enter press is best-effort
+
             elapsed = f"{time.perf_counter() - start:.2f}s"
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
             session.memory.record_step("type", selector, f"Typed {len(text)} chars", True)
+            await self._emit_hud_trace(session, "browser_success", f"Typed {len(text)} chars into '{selector}'", "✅", elapsed_ms=elapsed_ms, selector=selector)
             return {"success": True, "verified": True, "execution_time": elapsed,
                     "tool": "browser_type", "target": selector,
                     "result": f"Typed {len(text)} chars into '{selector}'"}
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
             session.memory.record_step("type", selector, str(e), False)
+            await self._emit_hud_trace(session, "browser_error", f"Type failed: {e}", "❌", elapsed_ms=elapsed_ms, selector=selector)
             return {"success": False, "verified": False, "execution_time": elapsed,
                     "tool": "browser_type", "target": selector, "error": str(e)}
 
@@ -166,13 +233,17 @@ class ActionEngine:
             url_changed = page.url != url_before
             verified = submitted and (url_changed or bool(title))
             elapsed = f"{time.perf_counter() - start:.2f}s"
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
             session.memory.record_step("submit", selector or "active_element", f"Submitted. URL changed: {url_changed}", verified)
+            await self._emit_hud_trace(session, "browser_success", f"Submitted. URL changed: {url_changed}", "✅", elapsed_ms=elapsed_ms, selector=selector)
             return {"success": submitted, "verified": verified, "execution_time": elapsed,
                     "tool": "browser_submit", "target": selector or "active_element",
                     "result": f"Submitted. Now: {title}"}
         except Exception as e:
             elapsed = f"{time.perf_counter() - start:.2f}s"
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
             session.memory.record_step("submit", selector or "active_element", str(e), False)
+            await self._emit_hud_trace(session, "browser_error", f"Submit failed: {e}", "❌", elapsed_ms=elapsed_ms, selector=selector)
             return {"success": False, "verified": False, "execution_time": elapsed,
                     "tool": "browser_submit", "target": selector or "active_element", "error": str(e)}
 

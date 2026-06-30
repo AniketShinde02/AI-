@@ -84,5 +84,15 @@ class NavigationVerifier:
             logger.error(f"[NavVerifier] Failed: {e}")
             return False
 
+    async def verify_media_playing(self, page: Any) -> bool:
+        """Checks if any HTML5 video or audio element is currently playing."""
+        try:
+            return await page.evaluate('''() => {
+                const media = Array.from(document.querySelectorAll('video, audio'));
+                return media.some(m => m.readyState > 2 && !m.paused && !m.ended);
+            }''')
+        except Exception as e:
+            logger.error(f"[NavVerifier] Media check failed: {e}")
+            return False
 
 nav_verifier = NavigationVerifier()

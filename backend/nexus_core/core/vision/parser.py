@@ -1,6 +1,6 @@
 import logging
 
-from core.model_router import model_router, TaskClass
+from core.provider.router import model_router, TaskClass
 
 logger = logging.getLogger("nexus.vision_parser")
 

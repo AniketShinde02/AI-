@@ -4,7 +4,16 @@ from typing import Optional, Dict, Any
 
 logger = logging.getLogger("nexus.trace")
 
-async def emit_trace(websocket, event_type: str, text: str, icon: str = "⚡", metadata: Optional[Dict[str, Any]] = None):
+async def emit_trace(
+    websocket,
+    event_type: str,
+    text: str,
+    icon: str = "⚡",
+    metadata: Optional[Dict[str, Any]] = None,
+    elapsed_ms: Optional[int] = None,
+    selector: Optional[str] = None,
+    retries: Optional[int] = None,
+):
     """
     Emit a trace event over the WebSocket to the frontend.
     This fulfills Rule 9: Trace Must Become Reality.
@@ -13,7 +22,7 @@ async def emit_trace(websocket, event_type: str, text: str, icon: str = "⚡", m
         logger.debug(f"[Trace Mute] {event_type}: {text}")
         return
 
-    from core.output_processor import output_processor
+    from core.planner.processor import output_processor
     clean_text, _ = output_processor.filter_reasoning(text)
     if not clean_text:
         return
@@ -28,6 +37,12 @@ async def emit_trace(websocket, event_type: str, text: str, icon: str = "⚡", m
     
     if metadata:
         payload["metadata"] = metadata
+    if elapsed_ms is not None:
+        payload["elapsed_ms"] = elapsed_ms
+    if selector is not None:
+        payload["selector"] = selector
+    if retries is not None:
+        payload["retries"] = retries
 
     try:
         from starlette.websockets import WebSocketState

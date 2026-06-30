@@ -3,8 +3,8 @@ import time
 import logging
 from typing import Dict, Any
 
-from core.voice_session import VoiceSession
-from core.action_router import action_router
+from core.voice.session import VoiceSession
+from core.planner.action_router import action_router
 
 logger = logging.getLogger("nexus.e2e_tester")
 logging.basicConfig(level=logging.INFO)

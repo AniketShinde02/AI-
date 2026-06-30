@@ -42,9 +42,6 @@ class VerificationEngine:
         Uses VisionParser to take a screenshot and visually verify if the tool action succeeded.
         """
         try:
-            from core.desktop.control import pc_controller
-            import uuid
-            import os
             import base64
             from io import BytesIO
             from PIL import ImageGrab

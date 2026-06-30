@@ -13,10 +13,7 @@ from typing import Any, Dict, Optional, List
 
 from core.desktop.control import pc_controller, PCControl
 from core.desktop.discovery import (
-    run_discovery, 
-    get_app_path, 
-    get_all_apps_dict, 
-    resolve_system_role
+    run_discovery
 )
 
 logger = logging.getLogger("nexus.desktop.facade")

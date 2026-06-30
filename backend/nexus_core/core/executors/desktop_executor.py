@@ -1,6 +1,6 @@
 from typing import Dict, Any, List
 from core.executors.base import BaseExecutor
-from core.pc_control import pc_controller
+from core.desktop.control import pc_controller
 
 class DesktopExecutor(BaseExecutor):
     def get_capabilities(self) -> List[str]:

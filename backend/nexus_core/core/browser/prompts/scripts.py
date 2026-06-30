@@ -135,4 +135,8 @@ Available actions:
 If the goal is fully achieved, set "done": true.
 If you cannot proceed (error loop, missing auth, bot detection), set "done": true with reasoning explaining why.
 
+SPECIAL RULES:
+- Youtube Autoplay: If the goal is to play a video on YouTube, searching and clicking the video result is enough. YouTube autoplays immediately. Do NOT click the play button on the video page, as that will pause it!
+- Media Status: If the goal involves playing media (like a YouTube video or song) and the CURRENT STATE shows "Media: [PLAYING]", you have succeeded. Set "done": true immediately. Do NOT click anything else on the video page.
+
 IMPORTANT: Output ONLY valid JSON. No backticks, no markdown, no extra text."""

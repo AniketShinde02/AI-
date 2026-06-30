@@ -1,0 +1,6 @@
+PHASE 9 - Performance Report
+==============================
+Average Browser Action Latency: 0.00s
+Peak Browser Action Latency: 0.00s
+Average Browser Startup Time: 0.66s
+Planner Compile Time: 0.00s

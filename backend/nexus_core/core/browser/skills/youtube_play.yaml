@@ -1,0 +1,28 @@
+name: "youtube_play"
+description: "Searches YouTube and plays the first video result"
+triggers:
+  - "play on youtube"
+  - "youtube"
+  - "search youtube"
+  - "play song"
+  - "play music"
+steps:
+  - action: "open_url"
+    target: "https://www.youtube.com"
+  - action: "wait"
+    target: "networkidle"
+  - action: "type"
+    target: "input#search"
+    value: "{goal_extracted_term}"
+    optional: true # If we can't type, we might just be on a video page already
+  - action: "click"
+    target: "button#search-icon-legacy"
+    optional: true
+  - action: "wait"
+    target: "networkidle"
+  - action: "click"
+    target: "ytd-video-renderer a#thumbnail"
+    alt_targets:
+      - "a#video-title"
+      - "ytd-compact-video-renderer a#thumbnail"
+  - action: "verify_media"

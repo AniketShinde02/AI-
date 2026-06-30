@@ -1,6 +1,6 @@
 import os
 import httpx
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class ScrapperOSBridge:
                 res = await client.get(f"{self.base_url}/api/scrapers", timeout=5.0)
                 t = f"{time.perf_counter() - start:.2f}s"
                 if res.status_code == 200:
-                    return {"success": True, "tool": "list_scrapers", "target": "ScrapperOS", "verification": f"Found scrapers", "execution_time": t, "scrapers": res.json()}
+                    return {"success": True, "tool": "list_scrapers", "target": "ScrapperOS", "verification": "Found scrapers", "execution_time": t, "scrapers": res.json()}
                 return {"success": False, "tool": "list_scrapers", "target": "ScrapperOS", "verification": f"HTTP {res.status_code}", "execution_time": t}
         except Exception as e:
             t = f"{time.perf_counter() - start:.2f}s"

@@ -11,11 +11,10 @@ import time
 import asyncio
 import logging
 from enum import Enum
-from collections import deque
 from typing import Optional, Deque, Any
 
 import numpy as np
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 
 logger = logging.getLogger("nexus_ws")
 

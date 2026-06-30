@@ -33,7 +33,7 @@ class BrowserContext:
 
     async def collect(self, session_id: Optional[str] = None) -> BrowserState:
         try:
-            from core.browser_agent import browser_agent
+            from core.browser.facade import browser_agent
             session = browser_agent._get_session(session_id)
             mem = session.memory
 

@@ -1,3 +1,27 @@
+## [2026-06-30] — Voice Session Resilience, Memory, & Auto-Reload Fixes
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **Universal Session Memory (Amnesia Fix)**: Implemented `load_history()` in `VoiceSession` to fetch the last 10 messages from SQLite upon WebSocket connection.
+  - Injected directly into Gemini Live's `system_instruction`.
+  - Injected into standard `conversation_history` array for Groq and fallback models.
+
+### Changed
+- **Uvicorn Auto-Reload**: Enabled `reload=True` in `ws_main.py` to facilitate rapid development without manual restarts.
+- **StartBackend Script**: Fixed misleading output in `StartBackend.ps1` that claimed the server was starting on port 8000 (which confused developers since the frontend strictly expects port 8001).
+
+### Fixed
+- **Terminal Spam**: Downgraded extreme log spam (`VISION_FRAME_RECEIVED`, `VISION_FRAME_FORWARDED`, `GEMINI_FORENSICS`) from `INFO` to `DEBUG` across `websocket_routes.py` and `live_manager.py`.
+- **Gemini Tool Execution Drop**: Repaired tool registration for the new `google-genai` SDK by correctly wrapping function declarations in the `types.Tool` Pydantic class in `session.py`, restoring Gemini's ability to execute tools instead of just outputting reasoning text.
+- **Uvicorn Crash Loop**: Added `reload_excludes=["data/*", "*.db", "*.db-journal", "logs/*", "*.log"]` to `ws_main.py` so `watchfiles` no longer infinitely reboots the server when App Discovery writes to the SQLite database.
+- **Action Router Crash**: Fixed an orchestrator crash for fallback models by correcting the `current_task=` kwarg to `active_capability=` in `session.py` when executing tool intents.
+
+### Performance
+- Eliminated severe terminal I/O bottleneck caused by rapid `INFO` logging of base64 video frame sizes (3-4 times per second).
+
 ## [2026-06-30] — Vision Domain Architecture Refactor (Phase 3)
 
 ### Author

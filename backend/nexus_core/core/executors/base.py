@@ -140,7 +140,7 @@ class BaseExecutor(ABC):
         # Visual Verification
         if visual_verification and contract.get("success") and not contract.get("verified"):
             try:
-                from core.verification_matrix import verification_engine
+                from core.verification.matrix import verification_engine
                 logger.info(f"📸 [Executor] Running Visual Verification for '{capability}'...")
                 vision_result = await verification_engine.verify_action(capability, target, contract)
                 if vision_result.get("verified"):

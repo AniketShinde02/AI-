@@ -1,10 +1,7 @@
 import logging
 import asyncio
-from typing import AsyncIterator, Optional, Dict
-import os
+from typing import AsyncIterator, Dict
 import numpy as np
-from scipy.signal import resample
-import re
 from enum import Enum
 from dataclasses import dataclass
 

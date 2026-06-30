@@ -1,6 +1,5 @@
 from typing import Dict, Any, List
 from core.executors.base import BaseExecutor
-from core.database import db
 
 class MemoryExecutor(BaseExecutor):
     def get_capabilities(self) -> List[str]:
@@ -19,7 +18,7 @@ class MemoryExecutor(BaseExecutor):
             return {"success": True, "verified": True, "result": f"Note '{title}' created.", "error": None}
             
         elif capability == "run_task_card":
-            from core.task_cards import task_card_engine
+            from core.workspace.ux_cards import task_card_engine
             return await task_card_engine.execute_card(
                 card_id=params.get("target", ""),
                 runtime_inputs=params,

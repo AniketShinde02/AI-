@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import time
-from typing import Dict, Any
 
 logger = logging.getLogger("nexus.tests.stress")
 
@@ -14,7 +12,6 @@ class StressTestEngine:
         Rapidly perform desktop actions to check for memory leaks or locks.
         """
         logger.info(f"🔥 [StressTest] Starting Desktop Chaos ({iterations} iterations)")
-        from core.pc_control import pc_controller
         from core.executors.desktop_executor import DesktopExecutor
         executor = DesktopExecutor()
         
@@ -43,7 +40,6 @@ class StressTestEngine:
         Rapidly spawn browser contexts, navigate, click, and evaluate memory growth.
         """
         logger.info(f"🔥 [StressTest] Starting Browser Abuse ({iterations} iterations)")
-        from core.browser_agent import BrowserAgent
         from core.executors.browser_executor import BrowserExecutor
         executor = BrowserExecutor()
         

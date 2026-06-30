@@ -22,10 +22,9 @@ All existing callers of standard_chat() and execute_tool_call() are preserved.
 import logging
 import json
 import asyncio
-import time
 from enum import Enum
-from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, Callable, Awaitable
+from dataclasses import dataclass
+from typing import Dict, Any, List, Optional
 
 import config
 
@@ -84,15 +83,15 @@ TIER_ROUTING_TABLE: Dict[TaskClass, List[TierConfig]] = {
         TierConfig(AgentTier.INFANTRY,       "openrouter", "meta-llama/llama-3.3-70b-instruct:free",       max_tokens=1024, temperature=0.5, theme_primary="#18181b", theme_accent="#a1a1aa"),
     ],
     TaskClass.PLANNING: [
-        TierConfig(AgentTier.GRAND_MARSHAL,  "mistral",    "mistral-large-latest",                         max_tokens=2048, temperature=0.3, theme_primary="#0b091a", theme_accent="#8a2be2"),
+        TierConfig(AgentTier.GRAND_MARSHAL,  "mistral",    "mistral-large-2407",                         max_tokens=2048, temperature=0.3, theme_primary="#0b091a", theme_accent="#8a2be2"),
         TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=2048, temperature=0.3, theme_primary="#1f1115", theme_accent="#ff3b30"),
     ],
     TaskClass.BROWSER: [
-        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.1-70b",                                 max_tokens=2048, temperature=0.2, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "gpt-oss-120b",                                 max_tokens=2048, temperature=0.2, theme_primary="#0e1626", theme_accent="#00f0ff"),
         TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=2048, temperature=0.2, theme_primary="#1f1115", theme_accent="#ff3b30"),
     ],
     TaskClass.PC_CONTROL: [
-        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.1-70b",                                 max_tokens=1024, temperature=0.1, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "gpt-oss-120b",                                 max_tokens=1024, temperature=0.1, theme_primary="#0e1626", theme_accent="#00f0ff"),
         TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=1024, temperature=0.1, theme_primary="#1f1115", theme_accent="#ff3b30"),
     ],
     TaskClass.VISION: [
@@ -100,16 +99,16 @@ TIER_ROUTING_TABLE: Dict[TaskClass, List[TierConfig]] = {
         TierConfig(AgentTier.EYES,           "gemini",     "gemini-2.0-flash",                             max_tokens=1024, temperature=0.3, theme_primary="#060f14", theme_accent="#00ff66"),
     ],
     TaskClass.LONG_CONTEXT: [
-        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.1-70b",                                 max_tokens=4096, temperature=0.3, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "gpt-oss-120b",                                 max_tokens=4096, temperature=0.3, theme_primary="#0e1626", theme_accent="#00f0ff"),
         TierConfig(AgentTier.EYES,           "gemini",     "gemini-1.5-flash",                             max_tokens=4096, temperature=0.3, theme_primary="#060f14", theme_accent="#00ff66"),
     ],
     TaskClass.CODE: [
-        TierConfig(AgentTier.GRAND_MARSHAL,  "mistral",    "codestral-latest",                             max_tokens=2048, temperature=0.2, theme_primary="#0b091a", theme_accent="#8a2be2"),
+        TierConfig(AgentTier.GRAND_MARSHAL,  "mistral",    "codestral-2508",                             max_tokens=2048, temperature=0.2, theme_primary="#0b091a", theme_accent="#8a2be2"),
         TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                      max_tokens=2048, temperature=0.2, theme_primary="#1f1115", theme_accent="#ff3b30"),
     ],
     TaskClass.RESEARCH: [
-        TierConfig(AgentTier.GENERALS,       "cerebras",   "llama3.3-70b",                                 max_tokens=4096, temperature=0.4, theme_primary="#0e1626", theme_accent="#00f0ff"),
-        TierConfig(AgentTier.KNIGHTS,        "groq",       "mixtral-8x7b-32768",                           max_tokens=4096, temperature=0.4, theme_primary="#1f1115", theme_accent="#ff3b30"),
+        TierConfig(AgentTier.GENERALS,       "cerebras",   "gpt-oss-120b",                                 max_tokens=4096, temperature=0.4, theme_primary="#0e1626", theme_accent="#00f0ff"),
+        TierConfig(AgentTier.KNIGHTS,        "groq",       "llama-3.3-70b-versatile",                           max_tokens=4096, temperature=0.4, theme_primary="#1f1115", theme_accent="#ff3b30"),
     ],
     TaskClass.CHEAP_TASK: [
         TierConfig(AgentTier.SHADOW_SOLDIERS,"mistral",    "mistral-small-latest",                         max_tokens=512,  temperature=0.5, theme_primary="#150d1a", theme_accent="#a855f7"),
@@ -154,7 +153,7 @@ class ModelRouter:
         # Groq
         if config.GROQ_API_KEY:
             try:
-                from groq import AsyncGroq
+                from groq import AsyncGroq # type: ignore
                 self._groq_client = AsyncGroq(api_key=config.GROQ_API_KEY)
                 logger.info("✅ [ModelRouter] Groq client initialized (Knights)")
             except ImportError:
@@ -163,7 +162,7 @@ class ModelRouter:
         # Cerebras (OpenAI-compatible endpoint)
         if config.CEREBRAS_API_KEY:
             try:
-                from openai import AsyncOpenAI
+                from openai import AsyncOpenAI # type: ignore
                 self._cerebras_client = AsyncOpenAI(
                     api_key=config.CEREBRAS_API_KEY,
                     base_url="https://api.cerebras.ai/v1",
@@ -187,7 +186,7 @@ class ModelRouter:
         # Gemini (google-genai)
         if config.GEMINI_API_KEY:
             try:
-                from google import genai
+                from google import genai # type: ignore
                 self._gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
                 logger.info("✅ [ModelRouter] Gemini client initialized (Eyes)")
             except ImportError:
@@ -196,7 +195,7 @@ class ModelRouter:
         # OpenRouter (OpenAI-compatible endpoint — Infantry fallback)
         if config.OPENROUTER_API_KEY:
             try:
-                from openai import AsyncOpenAI
+                from openai import AsyncOpenAI # type: ignore
                 self._openrouter_client = AsyncOpenAI(
                     api_key=config.OPENROUTER_API_KEY,
                     base_url="https://openrouter.ai/api/v1",
@@ -225,7 +224,6 @@ class ModelRouter:
         Non-blocking — never raises.
         """
         try:
-            from core.workspace.broadcast import broadcast_workspace_state
             import core.global_state as gs
             if not gs.active_sessions:
                 return
@@ -275,7 +273,7 @@ class ModelRouter:
         if force_model == "gpt-oss-20b":
             force_model = "llama-3.1-8b-instant"
         elif force_model == "gpt-oss-120b":
-            force_model = "llama3.1-70b"
+            force_model = "gpt-oss-120b"
         elif force_model == "models/gemini-2.0-flash-exp" or force_model == "gemini-2.5-flash-native-audio-dialog":
             force_model = "gemini-2.0-flash"
 
@@ -289,11 +287,20 @@ class ModelRouter:
                 continue
 
             model = force_model or tier_cfg.model
+            
+            from core.provider.governor import governor
+            if not governor.is_healthy(tier_cfg.provider, model):
+                logger.debug(f"[ModelRouter] Skipping {tier_cfg.provider}/{model} — currently marked UNHEALTHY.")
+                continue
+                
             logger.info(
                 f"🎯 [ModelRouter] {task_class.value} → [{tier_cfg.tier.value}] "
                 f"{tier_cfg.provider}/{model}"
             )
 
+            import time
+            start_time = time.perf_counter()
+            estimated_tokens = 0
             try:
                 # ── Provider Governor Integration ──
                 from core.provider.governor import governor
@@ -321,12 +328,22 @@ class ModelRouter:
                     max_tokens=tier_cfg.max_tokens,
                     temperature=tier_cfg.temperature,
                 )
+                
+                latency = time.perf_counter() - start_time
+                governor.log_provider_call(tier_cfg.provider, estimated_tokens, latency, success=True)
+                
                 # Fire-and-forget theme emission
                 asyncio.create_task(self._emit_theme(tier_cfg))
                 return result
 
             except Exception as e:
+                latency = time.perf_counter() - start_time
                 err_str = str(e).lower()
+                
+                # Log waste
+                is_fallback = (tier_cfg != tier_chain[-1])
+                governor.log_provider_call(tier_cfg.provider, estimated_tokens, latency, success=False, fallback_triggered=is_fallback)
+                
                 if "429" in err_str or "too many requests" in err_str:
                     logger.warning(
                         f"🔥 [ModelRouter] 429 Rate Limit hit on {tier_cfg.provider}/{model}. "
@@ -337,6 +354,9 @@ class ModelRouter:
                         status="rate_limit_cooldown",
                         last_result=f"429 hit on {tier_cfg.provider}. Failing over to fallback tier..."
                     ))
+                elif any(err in err_str for err in ["401", "403", "404", "model not found", "does not exist"]):
+                    logger.warning(f"🚫 [ModelRouter] {tier_cfg.provider}/{model} returned auth/not-found error. Marking unhealthy for 5 mins.")
+                    governor.mark_unhealthy(tier_cfg.provider, model, ttl=300)
                 else:
                     logger.warning(
                         f"⚠️  [ModelRouter] {tier_cfg.provider}/{model} failed: {e}. "
@@ -405,7 +425,7 @@ class ModelRouter:
                             elif item.get("type") == "image_url":
                                 b64 = item["image_url"]["url"].split(",")[-1]
                                 import base64
-                                from google.genai import types
+                                from google.genai import types # type: ignore
                                 user_parts.append(
                                     types.Part.from_bytes(
                                         data=base64.b64decode(b64),

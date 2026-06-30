@@ -3,8 +3,6 @@ import asyncio
 import os
 import numpy as np
 from typing import AsyncIterator
-from scipy.signal import resample_poly
-from math import gcd
 
 from .tts import ProviderStatus, PcmData, TTS
 

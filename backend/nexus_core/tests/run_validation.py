@@ -18,7 +18,7 @@ async def run_failure_injections():
     session_id = "test_failure_session"
     
     # 1. API Rate Limit Injection
-    from core.model_router import model_router
+    from core.provider.router import model_router
     # We will trigger the route_task wrapped by the injector
     injector_task = asyncio.create_task(FailureInjector.sabotage_api_rate_limit(duration_seconds=2.0))
     
@@ -28,7 +28,7 @@ async def run_failure_injections():
     try:
         logger.info("Attempting Model Router Call (should hit 429 and fail or wait)...")
         # Just a dummy call to trigger it
-        from core.model_router import TaskClass
+        from core.provider.router import TaskClass
         await model_router.route_task(
             task_class=TaskClass.FAST_ROUTING,
             system_prompt="system",
@@ -40,7 +40,7 @@ async def run_failure_injections():
     await injector_task
     
     # 2. Browser Crash Injection
-    from core.browser_agent import BrowserAgent
+    from core.browser.facade import BrowserAgent
     agent = BrowserAgent()
     # Open page first
     await agent.open_url("https://example.com", session_id)

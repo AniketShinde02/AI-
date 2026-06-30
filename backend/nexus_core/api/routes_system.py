@@ -7,14 +7,11 @@ Extracted from rest_routes.py to isolate system-automation concerns.
 import asyncio
 import base64
 import io
-import json
 import logging
-from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-import core.rag_oracle as rag_oracle_module
 from core.planner.executor import get_executor
 
 try:
@@ -24,6 +21,7 @@ except ImportError:
 
 try:
     import pyautogui
+    pyautogui.FAILSAFE = False
 except ImportError:
     pyautogui = None
 

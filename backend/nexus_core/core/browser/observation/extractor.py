@@ -12,10 +12,10 @@ import base64
 import logging
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger("nexus.browser.observation")
-
 # Injected JS comes from the prompts subpackage (pure data, no logic)
 from core.browser.prompts.scripts import DOM_SNAPSHOT_JS, A11Y_TREE_JS
+
+logger = logging.getLogger("nexus.browser.observation")
 
 
 class PageExtractor:
@@ -65,6 +65,22 @@ class PageExtractor:
             ))
         except Exception:
             return False
+
+    async def check_media_status(self, page: Any) -> Dict[str, Any]:
+        """Return status of playing audio/video on the page."""
+        try:
+            return await page.evaluate('''() => {
+                const media = Array.from(document.querySelectorAll('video, audio'));
+                const playing = media.filter(m => !m.paused && !m.ended && m.readyState > 2);
+                return {
+                    has_media: media.length > 0,
+                    is_playing: playing.length > 0,
+                    media_types: media.map(m => m.tagName.toLowerCase())
+                };
+            }''')
+        except Exception as e:
+            logger.debug(f"Media status check failed: {e}")
+            return {"has_media": False, "is_playing": False, "media_types": []}
 
 
 # Module-level singleton

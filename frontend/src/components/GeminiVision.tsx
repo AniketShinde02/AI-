@@ -12,6 +12,7 @@ interface GeminiVisionProps {
 export function GeminiVision({ source }: GeminiVisionProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isRequestingMediaRef = useRef<boolean>(false);
   
   const { voiceEngine, activeEngine } = useNexus();
   // P1 FIX: Use WS-confirmed activeEngine for frame dispatch, not the localStorage-sourced
@@ -26,6 +27,8 @@ export function GeminiVision({ source }: GeminiVisionProps) {
     let currentStream: MediaStream | null = null;
 
     const startStream = async () => {
+      if (isRequestingMediaRef.current) return;
+      isRequestingMediaRef.current = true;
       try {
         if (source === 'camera') {
           currentStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
@@ -53,6 +56,8 @@ export function GeminiVision({ source }: GeminiVisionProps) {
           dispatchStatus(`Media error: ${source}`);
         }
         window.dispatchEvent(new CustomEvent("nexus_vision_stopped"));
+      } finally {
+        isRequestingMediaRef.current = false;
       }
     };
 

@@ -17,7 +17,7 @@ from typing import Optional, Dict, Any, List
 from core.database import db
 from core.theme_generator import generate_theme_from_image
 import core.global_state as gs
-import core.rag_oracle as rag_oracle_module
+import core.memory.rag_engine as rag_oracle_module
 
 from api.routes_system import system_router
 
@@ -145,7 +145,7 @@ class SwarmRunRequest(BaseModel):
 
 @rest_router.post("/api/agents/run")
 async def run_agent_swarm(req: SwarmRunRequest):
-    from core.agent_swarm import swarm_manager
+    from core.orchestrator.swarm import swarm_manager
     res = await swarm_manager.execute_swarm_task(req.goal, req.session_id or "default_session")
     return res
 
@@ -214,7 +214,7 @@ async def rag_query(req: RAGQueryRequest):
 # Scrapper OS bridge
 # ------------------------------------------------------------------
 
-from core.scrapper_os import scrapper_os
+from core.vision.scraper_bridge import scrapper_os
 
 class RunScraperRequest(BaseModel):
     scraper_id: str

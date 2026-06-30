@@ -89,7 +89,7 @@ class PCControl:
     async def open_app(self, app_name: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         import asyncio
         from core.desktop.discovery import get_app_path, get_all_apps_dict, resolve_system_role
-        from core.guardrails import guardrails
+        from core.verification.guardrails import guardrails
         
         start_time = time.perf_counter()
         logger.info(f"PC Control: Opening '{app_name}' (session: {session_id})")
@@ -594,7 +594,7 @@ class PCControl:
             
             # Send to Vision pipeline
             try:
-                from core.vision_parser import vision_parser
+                from core.vision.parser import vision_parser
                 analysis = await vision_parser.analyze_screenshot(
                     img_str, 
                     prompt="Describe the screen concisely. What applications are open? What is currently visible?",
@@ -633,7 +633,7 @@ class PCControl:
             
             # Send to Vision pipeline with dynamic query
             try:
-                from core.vision_parser import vision_parser
+                from core.vision.parser import vision_parser
                 analysis = await vision_parser.analyze_screenshot(img_str, prompt=query, use_som=False)
             except Exception as e:
                 analysis = f"Vision failed: {e}"

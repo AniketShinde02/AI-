@@ -1,9 +1,7 @@
 import os
-import json
 import logging
 import httpx
 import numpy as np
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger("nexus.rag")
@@ -93,7 +91,9 @@ class RAGOracle:
         chunks_added = 0
         for file_path, file_hash in files_to_process:
             try:
-                if os.path.getsize(file_path) > 100_000: # Skip huge files
+                # Skip huge files (>100KB, except markdown files which can be up to 1MB)
+                max_size = 1_000_000 if file_path.endswith('.md') else 100_000
+                if os.path.getsize(file_path) > max_size:
                     continue
                     
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -103,7 +103,8 @@ class RAGOracle:
                 chunks = [content[i:i+chunk_size] for i in range(0, len(content), chunk_size)]
                 
                 for idx, chunk in enumerate(chunks):
-                    if len(chunk.strip()) < 20: continue
+                    if len(chunk.strip()) < 20: 
+                        continue
                     
                     text_for_embed = f"File: {os.path.basename(file_path)}\n\n{chunk}"
                     
@@ -148,7 +149,7 @@ class RAGOracle:
             try:
                 import ast
                 meta = ast.literal_eval(meta_str)
-            except:
+            except Exception:
                 meta = {}
             fpath = meta.get("file_path", "Unknown File")
             scanned_files.append(fpath)

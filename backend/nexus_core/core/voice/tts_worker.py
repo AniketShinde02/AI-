@@ -14,13 +14,11 @@ import platform
 import random
 import re
 import time
-from typing import Optional
 
 import psutil
 from fastapi import WebSocketDisconnect
 
 import core.global_state as gs
-from core.output_processor import output_processor
 from providers.tts import ProviderStatus
 
 logger = logging.getLogger("nexus_ws")
@@ -111,7 +109,6 @@ class SessionTTSMixin:
 
                 text       = item.get("text", "")
                 turn_id    = item.get("turn_id", 0)
-                chunk_index = item.get("index", 0)
 
                 if turn_id != self.current_turn_id:  # type: ignore[attr-defined]
                     logger.info(f"🗑 [Worker] Skipping stale chunk from Turn {turn_id}")
@@ -166,7 +163,7 @@ class SessionTTSMixin:
                             audio_buffer += pcm_data.samples.tobytes()
 
                             if len(audio_buffer) >= BUFFER_SIZE:
-                                from core.session_state import SessionState
+                                from core.workspace.state import SessionState
                                 if self.state != SessionState.SPEAKING:  # type: ignore[attr-defined]
                                     tts_latency = time.perf_counter() - tts_start_time
                                     total_latency = time.perf_counter() - self.turn_start_time  # type: ignore[attr-defined]
@@ -299,7 +296,8 @@ class SessionTTSMixin:
                 if gs.cached_greeting_pcm:
                     logger.info("👋 Sending cached greeting PCM")
                     for i, chunk in enumerate(gs.cached_greeting_pcm):
-                        if not self.is_connected: break  # type: ignore[attr-defined]
+                        if not self.is_connected: 
+                            break  # type: ignore[attr-defined]
                         await self.safe_send_json({
                             "type": "audio_chunk",
                             "data": base64.b64encode(chunk).decode("utf-8"),
@@ -331,7 +329,8 @@ class SessionTTSMixin:
                         BUFFER_SIZE = 9600  # 200ms @ 24kHz s16
 
                         async for pcm_data in audio_gen:
-                            if not self.is_connected: break  # type: ignore[attr-defined]
+                            if not self.is_connected: 
+                                break  # type: ignore[attr-defined]
                             if isinstance(pcm_data, dict):
                                 logger.info(f"🔄 [TTS Greet] Routing metadata: {pcm_data}")
                                 continue

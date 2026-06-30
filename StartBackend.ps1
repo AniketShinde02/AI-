@@ -58,7 +58,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 5. Start Server
-Write-Host "`n[Nexus] [Server] Starting Agent Server on http://0.0.0.0:8000" -ForegroundColor Green
+Write-Host "`n[Nexus] [Server] Starting Voice/Agent Server on http://0.0.0.0:8001" -ForegroundColor Green
 
 # Use the new Voice Agent runner
 Set-Location $BACKEND_ROOT

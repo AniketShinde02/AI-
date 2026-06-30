@@ -5,17 +5,15 @@ import { InputArea } from "@/components/InputArea";
 import { useNexus } from "@/contexts/NexusContext";
 import { MessageList } from "@/components/MessageList";
 import { SystemLogs } from "@/components/SystemLogs";
-import { SystemTrace } from "@/components/SystemTrace";
+import { CoreSubsystemsWidget } from "@/components/CoreSubsystemsWidget";
 import {
-  ScanEye, Mic, MicOff, Cpu, Globe, Command,
+  ScanEye, Mic, MicOff, Globe,
   Play, VolumeX, Volume2,
-  RefreshCw, ExternalLink, Brain,
+  RefreshCw, ExternalLink,
   History, MessageSquarePlus,
-  Plus, Check, Trash2, StickyNote, CheckSquare, ArrowUp, ArrowDown,
-  LayoutDashboard, TerminalSquare, Activity, Database, Settings, ShieldAlert, GitBranch
+  ArrowUp, ArrowDown, ShieldAlert
 } from "lucide-react";
 import { ThreeOrb, OrbConfig } from "@/components/ThreeOrb";
-import { NexusStatus } from "@/components/NexusStatus";
 import { SystemTelemetry } from "@/components/SystemTelemetry";
 import { logger } from "@/lib/logger";
 import { useEffect } from "react";
@@ -23,37 +21,18 @@ import { GeminiVision, VisionSource } from "@/components/GeminiVision";
 import { AgentWorkspace } from "@/components/AgentWorkspace";
 import { ShadowArmyBadge } from "@/components/ShadowArmyBadge";
 
-const getGreeting = () => {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good Morning";
-  if (hour < 18) return "Good Afternoon";
-  return "Good Evening";
-};
 
-/* ─── Types ─────────────────────────────────────────── */
-interface Task {
-  id: string;
-  text: string;
-  done: boolean;
-}
-interface Note {
-  id: string;
-  text: string;
-}
-
-/* ─── Tiny helpers ───────────────────────────────────── */
-const uid = () => Math.random().toString(36).slice(2, 9);
 
 export default function Home() {
   const { 
     isListening, isMuted, volume, 
     toggleListening, toggleMute, 
     isSending, isChecking,
-    voiceState, uiMode, setUiMode,
+    uiMode, setUiMode,
     pendingPermission, authorizeAdminPermission,
     activeAgentTier, workspaceState
   } = useNexus();
-  const [activeTab, setActiveTab] = useState<'chat' | 'trace' | 'tasks' | 'memory'>('chat');
+
   const [visionSource, setVisionSource] = useState<VisionSource>("off");
 
   useEffect(() => {
@@ -66,34 +45,6 @@ export default function Home() {
     window.addEventListener("nexus_vision_stopped", handleStopped);
     return () => window.removeEventListener("nexus_vision_stopped", handleStopped);
   }, []);
-
-  /* Tasks state */
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [taskInput, setTaskInput] = useState("");
-  const addTask = () => {
-    const t = taskInput.trim();
-    if (!t) return;
-    setTasks(prev => [...prev, { id: uid(), text: t, done: false }]);
-    setTaskInput("");
-  };
-  const toggleTask = (id: string) =>
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
-  const deleteTask = (id: string) =>
-    setTasks(prev => prev.filter(t => t.id !== id));
-
-  /* Notes state */
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [noteInput, setNoteInput] = useState("");
-  const addNote = () => {
-    const n = noteInput.trim();
-    if (!n) return;
-    setNotes(prev => [...prev, { id: uid(), text: n }]);
-    setNoteInput("");
-  };
-  const deleteNote = (id: string) =>
-    setNotes(prev => prev.filter(n => n.id !== id));
-
-  const greeting = getGreeting();
 
   const getOrbConfig = (): OrbConfig => {
     return { 
@@ -108,7 +59,7 @@ export default function Home() {
       <aside className="flex flex-col gap-3 overflow-y-auto scroll-hide h-full py-2 pr-1">
         
         {/* Gemini Live Vision Feed (Top of Left Column) */}
-        <div className="shrink-0 h-[220px] relative overflow-hidden bg-[#06060c] border border-[#00FFFF]/30 shadow-[0_0_20px_rgba(0,0,0,0.8)] z-10 flex flex-col clip-cut-sm relative">
+        <div className="shrink-0 h-[180px] relative overflow-hidden bg-[#06060c] border border-[#00FFFF]/30 shadow-[0_0_20px_rgba(0,0,0,0.8)] z-10 flex flex-col clip-cut-sm relative">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,255,0.05)_0%,transparent_100%)]"></div>
           
           <div className="h-8 bg-black flex items-center justify-between px-3 border-b border-[#00FFFF]/20 relative z-10 shrink-0">
@@ -168,6 +119,11 @@ export default function Home() {
         <div className="shrink-0 relative overflow-hidden flex flex-col">
           <div className="absolute -inset-1 bg-gradient-to-b from-[#6137FF]/20 to-transparent blur-md"></div>
           <SystemTelemetry />
+        </div>
+
+        {/* Core Subsystems Widget */}
+        <div className="flex-1 flex flex-col min-h-[160px]">
+          <CoreSubsystemsWidget />
         </div>
 
       </aside>

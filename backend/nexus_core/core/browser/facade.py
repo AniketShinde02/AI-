@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable, Awaitable
 
 from core.browser.session.pool import session_pool
 from core.browser.observation.extractor import page_extractor
 from core.browser.execution.actions import action_engine
-from core.browser.execution.agentic_loop import agentic_loop
+from core.browser.execution.planner import planner
+from core.browser.execution.engine import execution_engine
 
 logger = logging.getLogger("nexus.browser.facade")
 
@@ -98,7 +99,7 @@ class BrowserAgent:
         return await page_extractor.screenshot_b64(session._page)
 
     async def screenshot(self, url: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
-        import os, base64
+        import os
         session = self._get_session(session_id)
         try:
             page = await self._ensure_page(session_id)
@@ -109,7 +110,7 @@ class BrowserAgent:
             img_b64 = await page_extractor.screenshot_b64(page, quality=60)
             analysis = "(vision unavailable)"
             try:
-                from core.vision_parser import vision_parser
+                from core.vision.parser import vision_parser
                 analysis = await vision_parser.analyze_screenshot(
                     img_b64 or "", prompt="Describe the current webpage. What UI elements are visible?", use_som=False
                 )
@@ -131,6 +132,63 @@ class BrowserAgent:
             "dom": dom.get("result", {}),
             "memory": session.memory.to_dict(),
         }
+
+    # ------------------------------------------------------------------
+    # Screencast
+    # ------------------------------------------------------------------
+
+    async def start_screencast(self, on_frame: Callable[[str], Awaitable[None]], session_id: Optional[str] = None) -> None:
+        from core.browser.session.streaming import streamer
+        page = await self._ensure_page(session_id)
+        await streamer.start_screencast(page, on_frame)
+
+    async def stop_screencast(self) -> None:
+        from core.browser.session.streaming import streamer
+        await streamer.stop_screencast()
+
+    # ------------------------------------------------------------------
+    # Input Passthrough (Screencast / Interactive)
+    # ------------------------------------------------------------------
+
+    async def cdp_mouse_click(self, x: int, y: int, button: str = "left", session_id: Optional[str] = None) -> None:
+        from core.browser.session.streaming import streamer
+        if streamer.cdp_session:
+            await streamer.cdp_session.send("Input.dispatchMouseEvent", {
+                "type": "mousePressed",
+                "x": x,
+                "y": y,
+                "button": button,
+                "clickCount": 1
+            })
+            await streamer.cdp_session.send("Input.dispatchMouseEvent", {
+                "type": "mouseReleased",
+                "x": x,
+                "y": y,
+                "button": button,
+                "clickCount": 1
+            })
+
+    async def cdp_mouse_move(self, x: int, y: int, session_id: Optional[str] = None) -> None:
+        from core.browser.session.streaming import streamer
+        if streamer.cdp_session:
+            await streamer.cdp_session.send("Input.dispatchMouseEvent", {
+                "type": "mouseMoved",
+                "x": x,
+                "y": y
+            })
+
+    async def cdp_keyboard_type(self, text: str, session_id: Optional[str] = None) -> None:
+        from core.browser.session.streaming import streamer
+        if streamer.cdp_session:
+            for char in text:
+                await streamer.cdp_session.send("Input.dispatchKeyEvent", {
+                    "type": "char",
+                    "text": char
+                })
+
+    async def cdp_keyboard_press(self, key: str, session_id: Optional[str] = None) -> None:
+        page = await self._ensure_page(session_id)
+        await page.keyboard.press(key)
 
     # ------------------------------------------------------------------
     # Actions — fully delegated to ActionEngine
@@ -235,13 +293,20 @@ class BrowserAgent:
             step_result: Dict[str, Any] = {}
             for attempt in range(1, 4):
                 try:
-                    if action == "open_url":        step_result = await self.open_url(target, session_id)
-                    elif action == "search":        step_result = await self.search(target, session_id)
-                    elif action == "click":         step_result = await self._smart_click(target, session_id)
-                    elif action == "type":          step_result = await self.browser_type(target, text, session_id)
-                    elif action == "submit":        step_result = await self.browser_submit(target or None, session_id)
-                    elif action == "observe":       step_result = {"success": True, "verified": True, "result": observation}
-                    elif action == "screenshot":    step_result = await self.screenshot(session_id=session_id)
+                    if action == "open_url":        
+                        step_result = await self.open_url(target, session_id)
+                    elif action == "search":        
+                        step_result = await self.search(target, session_id)
+                    elif action == "click":         
+                        step_result = await self._smart_click(target, session_id)
+                    elif action == "type":          
+                        step_result = await self.browser_type(target, text, session_id)
+                    elif action == "submit":        
+                        step_result = await self.browser_submit(target or None, session_id)
+                    elif action == "observe":       
+                        step_result = {"success": True, "verified": True, "result": observation}
+                    elif action == "screenshot":    
+                        step_result = await self.screenshot(session_id=session_id)
                     elif action == "wait":
                         secs = float(target) if target else 1.0
                         await asyncio.sleep(min(secs, 10.0))
@@ -295,14 +360,22 @@ class BrowserAgent:
         max_iterations: int = 12,
         on_step_complete: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        """LLM-driven autonomous goal completion."""
+        """NEXUS V3: Deterministic Planner and Execution Engine."""
         session = self._get_session(session_id)
         page = await self._ensure_page(session_id)
-        return await agentic_loop.run(
-            goal=goal, session=session, page=page,
-            action_engine=action_engine, extractor=page_extractor,
+        
+        # 1. Generate Deterministic Plan
+        plan = await planner.plan(goal=goal, page=page, extractor=page_extractor)
+        
+        # 2. Execute Plan Sequentially
+        return await execution_engine.run(
+            plan=plan, 
+            session=session, 
+            page=page,
+            action_engine=action_engine, 
+            extractor=page_extractor,
             update_memory_fn=lambda: self._update_memory_from_page(session_id),
-            max_iterations=max_iterations, on_step_complete=on_step_complete,
+            on_step_complete=on_step_complete,
         )
 
     # ------------------------------------------------------------------
@@ -311,3 +384,4 @@ class BrowserAgent:
 
     async def close(self, session_id: Optional[str] = None) -> None:
         await session_pool.close(session_id)
+browser_agent = BrowserAgent()

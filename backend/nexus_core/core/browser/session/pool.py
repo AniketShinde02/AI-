@@ -31,6 +31,14 @@ class SessionPool:
             self._sessions[s_id] = SessionContext(s_id)
         return self._sessions[s_id]
 
+    def has_active_session(self, session_id: Optional[str] = None) -> bool:
+        """Return True if the session exists and has an active page."""
+        s_id = session_id or "default"
+        session = self._sessions.get(s_id)
+        if not session:
+            return False
+        return session._page is not None and not session._page.is_closed()
+
     async def ensure_page(self, session_id: Optional[str] = None):
         """Return the active Playwright Page, launching the context if needed."""
         session = self.get_or_create(session_id)

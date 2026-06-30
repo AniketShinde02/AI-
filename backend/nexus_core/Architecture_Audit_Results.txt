@@ -1,0 +1,25 @@
+==================================================
+PHASE 1 - Static Architecture Audit Report
+==================================================
+Total Lines of Code (Python): 4278555
+
+Largest Files (LOC):
+ - 22176 lines : venv\Lib\site-packages\torch\testing\_internal\common_methods_invocations.py
+ - 21924 lines : venv\Lib\site-packages\getstream\models\__init__.py
+ - 19313 lines : venv\Lib\site-packages\playwright\sync_api\_generated.py
+ - 19135 lines : venv\Lib\site-packages\playwright\async_api\_generated.py
+ - 16888 lines : venv\Lib\site-packages\idna\uts46data.py
+ - 16758 lines : venv\Lib\site-packages\google\genai\types.py
+ - 13262 lines : venv\Lib\site-packages\lance_namespace_urllib3_client\api\table_api.py
+ - 11620 lines : venv\Lib\site-packages\lance_namespace_urllib3_client\api\metadata_api.py
+ - 11303 lines : venv\Lib\site-packages\torch\_torch_docs.py
+ - 9495 lines : venv\Lib\site-packages\huggingface_hub\hf_api.py
+
+Duplicate/Dead Code Assessment:
+ - Run through Ruff and Pyright: 0 critical errors, 0 broken imports, 0 unused imports after fix.
+
+Architecture rules verified:
+ ✓ No duplicate browser implementations (all shims removed)
+ ✓ Browser package is the single source of truth
+ ✓ No wildcard imports (checked via pyright)
+ ✓ No circular imports detected in core dependencies

@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
 from core.database import db
 
 logger = logging.getLogger("nexus.capabilities")
