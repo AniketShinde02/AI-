@@ -1,4 +1,23 @@
-## [2026-06-30] — Desktop Domain Architecture Refactor (Phase 2)
+## [2026-06-30] — Vision Domain Architecture Refactor (Phase 3)
+
+### Author
+- Antigravity AI
+- Machine: JinWoo-PC
+
+### Added
+- **`core/vision/` package**: New Domain-Driven Design package to handle visual analysis and scraping.
+  - `parser.py`: Contains `VisionParser` with Set-of-Mark parsing and multimodal LLM integration.
+  - `scraper_bridge.py`: Contains `ScrapperOSBridge` for interacting with the external ScrapperOS HTTP service.
+  - `facade.py`: `VisionAgent` orchestrator acting as the primary API for vision operations.
+  - `__init__.py`: Minimal public API (`VisionAgent`, `vision_agent`, `vision_parser`, `scrapper_os`, etc.).
+
+### Changed
+- **`core/vision_parser.py`**: Converted to a zero-logic backward-compatibility shim.
+- **`core/scrapper_os.py`**: Converted to a zero-logic backward-compatibility shim.
+- **Pyright**: 0 errors on the new `core/vision/` package.
+- This completes Phase 3 of the Backend Migration Plan.
+
+
 
 ### Author
 - Antigravity AI
